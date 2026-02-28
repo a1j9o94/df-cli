@@ -1,14 +1,51 @@
-# df — Dark Factory CLI
+# dark — Dark Factory CLI
 
 <!-- token-count --><!-- /token-count -->
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-339933?logo=nodedotjs&logoColor=white)
+![Bun](https://img.shields.io/badge/Bun-000000?logo=bun&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-powered-CC785C?logo=anthropic&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A build orchestration system that decomposes software specifications into independently buildable modules, runs parallel LLM-powered builders in isolated worktrees, validates outputs against holdout scenarios, and merges results. Designed for AI agents that build software — not for humans writing code by hand.
+
+## Install
+
+Requires [Bun](https://bun.sh) and [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code).
+
+```bash
+git clone https://github.com/a1j9o94/df-cli.git
+cd df-cli
+bun install
+
+# Link globally (pick one):
+mkdir -p ~/.local/bin
+ln -sf $(pwd)/bin/dark ~/.local/bin/dark   # add ~/.local/bin to your PATH
+# — or —
+alias dark="bun run $(pwd)/src/index.ts"   # shell alias
+```
+
+Verify: `dark --version` should print `0.1.0`.
+
+## Quick Start
+
+```bash
+# Initialize a Dark Factory project
+dark init --name my-project
+
+# Create a specification (what to build)
+dark spec create "Add user authentication with JWT"
+
+# Edit the spec with your requirements and holdout scenarios
+$EDITOR .df/specs/spec_01ABC123.md
+
+# Run the full pipeline
+dark build spec_01ABC123
+
+# Watch progress
+dark status
+```
 
 ## How It Works
 
@@ -16,13 +53,22 @@ A build orchestration system that decomposes software specifications into indepe
 Human → Orchestrator → Architect → Builders (parallel) → Integration → Evaluation → Merge
 ```
 
-1. **Human** sets goals, reviews specs, approves plans
-2. **Orchestrator** manages the pipeline, translates goals into specs, makes routing decisions
-3. **Architect** reads the codebase, decomposes specs into modules with interface contracts and dependency DAGs
-4. **Builders** implement modules in isolated git worktrees following TDD cycles, bound by contracts
-5. **Integration-Tester** composes parallel builder outputs and validates they work together
-6. **Evaluator** runs holdout scenarios (functional + changeability) against integrated code
-7. **Merger** integrates into the target branch with post-merge validation
+The pipeline has 8 phases:
+
+```
+scout → architect → plan-review → build → integrate → evaluate-functional → evaluate-change → merge
+```
+
+1. **Scout** — index the codebase so agents understand the project
+2. **Architect** — decompose the spec into modules with interface contracts and a dependency DAG
+3. **Plan Review** — auto-approve small plans (≤4 modules), present large ones for human review
+4. **Build** — spawn parallel builders, each in its own git worktree, bound by contracts
+5. **Integrate** — merge worktrees, run checkpoint tests to verify modules compose correctly
+6. **Evaluate (functional)** — run holdout scenarios the builders never saw
+7. **Evaluate (change)** — test changeability: can a fresh builder make modifications easily?
+8. **Merge** — integrate into the target branch with post-merge validation
+
+If evaluation fails, the pipeline iterates (retries from the build phase) up to `max_iterations` times.
 
 ## Agent Roles
 
@@ -31,19 +77,22 @@ Human → Orchestrator → Architect → Builders (parallel) → Integration →
 | Orchestrator | Session-persistent | None | No | Yes |
 | Architect | 5-10 min | Read-only | Contracts only | No |
 | Builder | 10-45 min | Read-write (worktree) | Yes | No |
+| Integration-Tester | 5-10 min | Read-write | No | No |
 | Evaluator | 5-20 min | Read-only | No | No |
 | Merger | 1-5 min | Read-write (target) | No | No |
+
+Each agent is a Claude Code CLI process spawned via `Bun.spawn`. They communicate through a SQLite-backed mail system — not direct process communication — making messages durable, inspectable, and debuggable.
 
 ## Core Concepts
 
 ### Specs
-Markdown documents in `.df/specs/` that describe what to build. The Orchestrator produces these from human goals.
+Markdown documents in `.df/specs/` with YAML frontmatter. Describe what to build: goals, requirements, and holdout scenarios. The single source of truth for every pipeline run.
 
 ### Buildplans
-JSON artifacts produced by the Architect. Define modules, interface contracts, dependency ordering, and integration test strategies. The Orchestrator uses these to spawn and coordinate builders.
+JSON artifacts produced by the Architect. Define modules (units of work), interface contracts (typed boundaries), dependency DAGs (build ordering), and integration test strategies.
 
 ### Interface Contracts
-Type-level definitions (TypeScript interfaces, Python Protocols, etc.) that define boundaries between modules. Precise enough to type-check against. Builders implement to these contracts without needing to coordinate with each other.
+Type-level definitions (TypeScript interfaces, Python Protocols, etc.) that define boundaries between modules. Precise enough to type-check against. Builders implement to these contracts without coordinating with each other. If a builder needs a contract changed, they mail the architect.
 
 ### Holdout Scenarios
 Test scenarios the Evaluator uses to validate builds. Builders never see these — they test what the human actually wants, not what the builder thought they wanted.
@@ -51,83 +100,73 @@ Test scenarios the Evaluator uses to validate builds. Builders never see these �
 ### Worktree Isolation
 Each builder operates in its own git worktree. No shared mutable state between parallel builders. Integration happens after builds complete.
 
-## CLI Overview
+## CLI Reference
 
 ```bash
 # Pipeline
-df build <spec-id> [--mode quick|thorough] [--parallel <n>] [--budget-usd <amount>]
-df status [--run-id <id>] [--json]
-df run list [--spec <id>]
+dark init [--name <name>]
+dark build <spec-id> [--mode quick|thorough] [--parallel <n>] [--budget-usd <amount>]
+dark build <spec-id> --skip-architect           # single-module, no decomposition
+dark status [--run-id <id>] [--json]
+dark run list [--spec <id>] [--json]
 
 # Specs
-df spec create <title> [--from-template <name>]
-df spec show <spec-id>
-df spec list
+dark spec create <title>
+dark spec show <spec-id> [--json]
+dark spec list [--status <status>] [--json]
 
 # Architecture
-df architect analyze <spec-id>
-df architect get-plan <spec-id>
-df architect revise <spec-id> --feedback "<feedback>"
+dark architect analyze <spec-id>                # spawn architect agent
+dark architect submit-plan <agent-id> --plan <json>
+dark architect get-plan <spec-id> [--json]
+dark architect revise <spec-id> --feedback "<feedback>"
 
 # Contracts
-df contract list [--spec <spec-id>]
-df contract show <contract-id>
-df contract update <contract-id> --content <content> --reason "<reason>"
-df contract check <contract-id> --agent <agent-id>
+dark contract list [--run-id <id>] [--json]
+dark contract show <contract-id> [--json]
+dark contract update <id> --content <content> --reason "<reason>" --agent <agent-id>
+dark contract acknowledge <id> --agent <agent-id>
+dark contract check <id> --agent <agent-id>
 
 # Integration
-df integrate <run-id> [--phase <n>]
-df integrate status
+dark integrate run <run-id> [--phase <n>] [--json]
+dark integrate status [--run-id <id>] [--json]
 
 # Agents
-df agent list [--run-id <id>]
-df agent heartbeat <agent-id>
-df agent complete <agent-id>
-df agent fail <agent-id> --error "<description>"
+dark agent list [--run-id <id>] [--role <role>] [--json]
+dark agent heartbeat <agent-id>
+dark agent complete <agent-id>
+dark agent fail <agent-id> --error "<description>"
 
 # Communication
-df mail send --to <agent-id|@role|@contract:id> --body "<message>"
-df mail check [--agent <agent-id>]
+dark mail send --from <id> --to <agent-id|@role|@contract:id> --body "<msg>" --run-id <id>
+dark mail check --agent <agent-id> [--unread] [--mark-read] [--json]
 
 # Resources
-df resource status [--json]
-df resource set <resource-id> --capacity <n>
+dark resource status
+dark resource set <name> --capacity <n>
 
 # Expertise
-df expertise prime [--paths <paths>]
-df expertise show
+dark expertise prime [--paths <paths>]
+dark expertise show [--json]
 ```
+
+Run `dark <command> --help` for detailed help with examples on any command.
 
 ## Project Structure
 
 ```
 .df/
-├── config.yaml          # Project configuration
-├── state.db             # SQLite state (runs, agents, builds, contracts)
-├── specs/               # Spec documents
-├── expertise/           # Cached codebase knowledge
-├── scenarios/           # Holdout test scenarios
-├── worktrees/           # Isolated builder worktrees
+├── config.yaml          # Project configuration (build mode, parallelism, budget, thresholds)
+├── pipeline.yaml        # Pipeline phase definitions (gates, timeouts, skip conditions)
+├── state.db             # SQLite state (runs, agents, builds, contracts, events, messages)
+├── specs/               # Specification documents (markdown + YAML frontmatter)
+├── expertise/           # Cached codebase index (file tree, line counts by extension)
+├── scenarios/           # Holdout test scenarios (builders never see these)
+├── worktrees/           # Isolated builder worktrees (gitignored)
 ├── buildplans/          # Architect buildplan artifacts
 ├── contracts/           # Interface contract definitions
-├── logs/                # Agent logs and heartbeats
-└── pipeline.yaml        # Pipeline phase definitions
-```
-
-## Getting Started
-
-```bash
-# Initialize a project
-df init
-
-# Create a spec from a goal
-df spec create "Add user authentication with JWT"
-
-# Run the full pipeline
-df build <spec-id>
-
-# Check status
-df status
+└── logs/                # Agent logs (gitignored)
 ```
 
 ## Design Principles
@@ -140,13 +179,36 @@ df status
 
 ## Tech Stack
 
-- **Language:** TypeScript (Node.js)
-- **State:** SQLite via better-sqlite3
+- **Runtime:** [Bun](https://bun.sh)
+- **Language:** TypeScript (ES2022, strict)
+- **State:** SQLite via `bun:sqlite` (WAL mode, foreign keys, 10 tables + 1 view)
 - **CLI Framework:** Commander.js
-- **Agent Runtime:** Claude Code subprocesses (tmux-managed)
+- **Agent Runtime:** Claude Code CLI child processes via `Bun.spawn`
 - **Isolation:** Git worktrees
-- **IDs:** ULIDs
+- **IDs:** ULIDs (prefixed: `run_`, `agt_`, `spec_`, `plan_`, `ctr_`, `msg_`, `evt_`)
+- **Linter:** Biome
 
-## Status
+## Architecture
 
-Under active development. See [ARCHITECT.md](./ARCHITECT.md) and [df-spec-addendum-architect.md](./df-spec-addendum-architect.md) for the full system design.
+```
+src/
+├── types/           10 files — all data shapes (no logic)
+├── utils/            5 files — IDs, config loading, logger, formatting, frontmatter
+├── db/              10 files — SQLite schema, singleton, 8 query modules
+├── runtime/          4 files — AgentRuntime interface, ClaudeCodeRuntime, process mgmt, worktrees
+├── pipeline/         7 files — engine, phases, scheduler (Kahn's), budget, validation, integration, evaluation
+├── agents/           6 files — role definitions, 5 system prompt templates
+├── commands/        37 files — Commander.js command tree (12 groups, 25+ subcommands)
+└── index.ts              — entry point
+
+tests/
+├── unit/db/          9 files — schema + 8 query module tests
+└── unit/pipeline/    4 files — scheduler, phases, budget, validation tests
+```
+
+100 tests, 235 assertions.
+
+## Further Reading
+
+- [ARCHITECT.md](./ARCHITECT.md) — full system design and agent coordination model
+- [df-spec-addendum-architect.md](./df-spec-addendum-architect.md) — architect phase specification
