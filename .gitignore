@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+dist/
+build/
+
+# Dark Factory state (local, not committed)
+.df/state.db
+.df/worktrees/
+.df/logs/
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Letta (local sync)
+.letta/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Original zip
+files.zip
