@@ -1,5 +1,7 @@
 # df — Dark Factory CLI
 
+<!-- token-count --><!-- /token-count -->
+
 A build orchestration system that decomposes software specifications into independently buildable modules, runs parallel LLM-powered builders in isolated worktrees, validates outputs against holdout scenarios, and merges results. Designed for AI agents that build software — not for humans writing code by hand.
 
 ## How It Works
