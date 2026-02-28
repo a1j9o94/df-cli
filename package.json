@@ -1,0 +1,28 @@
+{
+  "name": "df-cli",
+  "version": "0.1.0",
+  "description": "Dark Factory CLI — AI agent orchestration pipeline",
+  "type": "module",
+  "bin": {
+    "df": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "chalk": "^5.4.0",
+    "commander": "^12.1.0",
+    "ulid": "^2.3.0",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  }
+}
