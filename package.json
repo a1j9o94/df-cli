@@ -4,7 +4,7 @@
   "description": "Dark Factory CLI — AI agent orchestration pipeline",
   "type": "module",
   "bin": {
-    "df": "./dist/index.js"
+    "dark": "./dist/index.js"
   },
   "scripts": {
     "dev": "bun run src/index.ts",
