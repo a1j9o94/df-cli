@@ -13,6 +13,7 @@ import { createMessage } from "../db/queries/messages.js";
 import { listContracts, createBinding, createDependency, satisfyDependency } from "../db/queries/contracts.js";
 import { getNextPhase, shouldSkipPhase, PHASE_ORDER } from "./phases.js";
 import type { PhaseName } from "./phases.js";
+import type { ResumeOptions } from "./resume.js";
 import { getReadyModules } from "./scheduler.js";
 import { checkBudget } from "./budget.js";
 import { log } from "../utils/logger.js";
@@ -654,6 +655,24 @@ export class PipelineEngine {
         throw new Error("Agent process exited without completing");
       }
     }
+  }
+
+  /**
+   * Resume a failed or stale pipeline run from the last completed phase.
+   * Stub: real implementation provided by mod-engine-resume.
+   * Contract: engine.resume — returns run ID, emits run-resumed event,
+   * resets status to running, walks PHASE_ORDER from resume point.
+   */
+  async resume(options: ResumeOptions): Promise<string> {
+    const { runId, fromPhase, budgetUsd } = options;
+    const run = getRun(this.db, runId);
+    if (!run) throw new Error(`Run not found: ${runId}`);
+    if (run.status !== "failed" && run.status !== "running") {
+      throw new Error(`Run ${runId} is not resumable (status: ${run.status})`);
+    }
+
+    // Stub — will be replaced by mod-engine-resume with full phase walking logic
+    throw new Error("resume() not yet implemented — awaiting mod-engine-resume");
   }
 
   async advancePhase(runId: string): Promise<void> {
