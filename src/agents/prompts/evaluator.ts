@@ -24,15 +24,39 @@ ${context.scenarioIds.length > 0 ? `- Scenarios: ${context.scenarioIds.join(", "
 ## Task
 ${modeDesc}
 
+## Workflow (follow these steps in order)
+1. Check your mail for instructions: dark mail check --agent ${context.agentId}
+2. List scenarios: dark scenario list --json
+3. Read each scenario file from .df/scenarios/functional/ and .df/scenarios/change/
+4. Execute each scenario against the code
+5. Score each scenario: pass (1.0) or fail (0.0)
+6. If you discover edge cases or failure patterns, create new scenarios to catch them in future iterations:
+   dark scenario create ${context.agentId} --name "<name>" --type functional --content "<test steps>"
+7. Report your results: dark agent report-result ${context.agentId} --passed <true|false> --score <0.0-1.0>
+8. Mark yourself complete: dark agent complete ${context.agentId}
+
+IMPORTANT: You MUST call report-result before calling complete. The complete command will reject if no results have been reported.
+
+## Creating New Scenarios
+When you discover failure patterns, edge cases, or gaps in coverage during evaluation, create new scenarios to strengthen future iterations:
+
+  dark scenario create ${context.agentId} --name "<descriptive-name>" --type functional --content "<detailed test steps, inputs, expected outputs>"
+
+This makes the system learn — each iteration gets harder to fool.
+
 ## Scoring
 - For each scenario: pass (1.0) or fail (0.0), with optional partial scores
 - Overall score = average of scenario scores
 - Report the score — the pipeline compares against the configured threshold
 
 ## Communication
-- Heartbeat: df agent heartbeat ${context.agentId}
-- Complete: df agent complete ${context.agentId}
-- Fail: df agent fail ${context.agentId} --error "<description>"
+- Check messages: dark mail check --agent ${context.agentId}
+- List scenarios: dark scenario list [--type functional|change] [--json]
+- Create scenario: dark scenario create ${context.agentId} --name "<name>" --type <functional|change> --content "<content>"
+- Heartbeat: dark agent heartbeat ${context.agentId}
+- Report results: dark agent report-result ${context.agentId} --passed <true|false> --score <0.0-1.0>
+- Complete: dark agent complete ${context.agentId}
+- Fail: dark agent fail ${context.agentId} --error "<description>"
 
 ## Constraints
 - Read-only access to the codebase

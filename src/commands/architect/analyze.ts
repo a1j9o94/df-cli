@@ -42,20 +42,26 @@ export const architectAnalyzeCommand = new Command("analyze")
     const codebasePaths = options.codebasePaths?.split(",");
 
     const agent = createAgent(db, {
+      agent_id: "",
       run_id: runId,
       role: "architect",
       name: `architect-${Date.now()}`,
       system_prompt: getArchitectPrompt({ specId, runId, agentId: "pending", codebasePaths }),
     });
 
+    // Update prompt with actual agent ID
+    const prompt = getArchitectPrompt({ specId, runId, agentId: agent.id, codebasePaths });
+    db.prepare("UPDATE agents SET system_prompt = ? WHERE id = ?").run(prompt, agent.id);
+
     createEvent(db, runId, "agent-spawned", { role: "architect" }, agent.id);
 
     const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary);
     const handle = await runtime.spawn({
+      agent_id: agent.id,
       run_id: runId,
       role: "architect",
       name: agent.name,
-      system_prompt: agent.system_prompt!,
+      system_prompt: prompt,
     });
 
     updateAgentPid(db, agent.id, handle.pid);

@@ -1,11 +1,16 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import type { SqliteDb } from "../db/index.js";
 import type { DfConfig, Buildplan } from "../types/index.js";
 import type { AgentRuntime } from "../runtime/interface.js";
 import { createRun, getRun, updateRunStatus, updateRunPhase, incrementRunIteration } from "../db/queries/runs.js";
 import { getSpec } from "../db/queries/specs.js";
-import { createAgent, updateAgentPid, updateAgentStatus, getActiveAgents, getStaleAgents } from "../db/queries/agents.js";
+import { createAgent, getAgent, updateAgentPid, updateAgentStatus, getActiveAgents, getStaleAgents } from "../db/queries/agents.js";
 import { getActiveBuildplan } from "../db/queries/buildplans.js";
 import { createEvent } from "../db/queries/events.js";
+import { createMessage } from "../db/queries/messages.js";
+import { listContracts, createBinding, createDependency, satisfyDependency } from "../db/queries/contracts.js";
 import { getNextPhase, shouldSkipPhase, PHASE_ORDER } from "./phases.js";
 import type { PhaseName } from "./phases.js";
 import { getReadyModules } from "./scheduler.js";
@@ -16,6 +21,8 @@ import { getArchitectPrompt } from "../agents/prompts/architect.js";
 import { getBuilderPrompt } from "../agents/prompts/builder.js";
 import { getEvaluatorPrompt } from "../agents/prompts/evaluator.js";
 import { getMergerPrompt } from "../agents/prompts/merger.js";
+import { createWorktree, removeWorktree } from "../runtime/worktree.js";
+import { findDfDir } from "../utils/config.js";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -50,6 +57,7 @@ export class PipelineEngine {
     createEvent(this.db, run.id, "run-started");
 
     log.info(`Pipeline started: ${run.id} for spec ${specId}`);
+    console.log(`[dark] Pipeline orchestrating agents for spec ${specId}. Do NOT write code yourself — agents handle implementation.`);
 
     const context: Record<string, unknown> = {
       skip_architect: options?.skipArchitect ?? false,
@@ -89,14 +97,22 @@ export class PipelineEngine {
         }
       }
 
+      // Count results
+      const agents = getActiveAgents(this.db, run.id);
+      const completedCount = this.db.prepare(
+        "SELECT COUNT(*) as cnt FROM agents WHERE run_id = ? AND status = 'completed'"
+      ).get(run.id) as { cnt: number };
+
       updateRunStatus(this.db, run.id, "completed");
       createEvent(this.db, run.id, "run-completed");
       log.success(`Pipeline completed: ${run.id}`);
+      console.log(`[dark] Pipeline complete. ${completedCount.cnt} agents finished. Review with: git diff`);
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       updateRunStatus(this.db, run.id, "failed", error);
       createEvent(this.db, run.id, "run-failed", { error });
       log.error(`Pipeline failed: ${error}`);
+      console.log(`[dark] Pipeline failed: ${error}. Check details: dark status --run-id ${run.id}. Do NOT attempt manual implementation.`);
     }
 
     return run.id;
@@ -113,11 +129,16 @@ export class PipelineEngine {
         await this.executeScoutPhase(runId);
         break;
 
-      case "architect":
+      case "architect": {
+        // Resolve the spec file path for the architect
+        const spec = getSpec(this.db, run.spec_id);
+        const specFilePath = spec?.file_path ?? "";
+
         await this.executeAgentPhase(runId, "architect", (agentId) =>
-          getArchitectPrompt({ specId: run.spec_id, runId, agentId }),
+          getArchitectPrompt({ specId: run.spec_id, runId, agentId, specFilePath }),
         );
         break;
+      }
 
       case "plan-review":
         // Auto-approve for now (manual review can be added later)
@@ -146,11 +167,18 @@ export class PipelineEngine {
         );
         break;
 
-      case "merge":
+      case "merge": {
+        // Collect worktree paths from completed builders
+        const completedBuilders = this.db.prepare(
+          "SELECT worktree_path FROM agents WHERE run_id = ? AND role = 'builder' AND status = 'completed' AND worktree_path IS NOT NULL"
+        ).all(runId) as { worktree_path: string }[];
+        const worktreePaths = completedBuilders.map((b) => b.worktree_path);
+
         await this.executeAgentPhase(runId, "merger", (agentId) =>
-          getMergerPrompt({ runId, agentId, targetBranch: this.config.project.branch, worktreePaths: [] }),
+          getMergerPrompt({ runId, agentId, targetBranch: this.config.project.branch, worktreePaths }),
         );
         break;
+      }
     }
   }
 
@@ -165,14 +193,170 @@ export class PipelineEngine {
   }
 
   /**
+   * Send actionable instructions to an agent via the mail system.
+   */
+  private sendInstructions(
+    runId: string,
+    agentId: string,
+    role: string,
+    context: Record<string, unknown>,
+  ): void {
+    let body: string;
+
+    switch (role) {
+      case "architect": {
+        const specFilePath = context.specFilePath as string | undefined;
+        let specContent = "";
+        if (specFilePath) {
+          try {
+            specContent = readFileSync(specFilePath, "utf-8");
+          } catch {
+            specContent = `(Could not read spec file: ${specFilePath})`;
+          }
+        }
+
+        body = [
+          "# Architect Instructions",
+          "",
+          "## Your Task",
+          "Analyze the specification below, decompose it into buildable modules, and create holdout test scenarios.",
+          "",
+          "## Spec Content",
+          "```",
+          specContent || "(No spec content available — check the spec file manually)",
+          "```",
+          "",
+          "## Steps",
+          `1. Read and analyze the spec above`,
+          `2. Decompose into modules with clear boundaries and interface contracts`,
+          `3. Create holdout test scenarios from the spec's Scenarios section:`,
+          `   dark scenario create ${agentId} --name "<name>" --type functional --content "<detailed test steps>"`,
+          `   dark scenario create ${agentId} --name "<name>" --type change --content "<modification description>"`,
+          `4. Submit your buildplan: dark architect submit-plan ${agentId} --plan '<json>'`,
+          `5. Mark yourself complete: dark agent complete ${agentId}`,
+          "",
+          "IMPORTANT: You MUST create at least one scenario AND submit a buildplan before completing.",
+          "Scenarios are holdout tests that builders never see — the evaluator uses them to validate the build.",
+          "",
+          "If you cannot complete this work, call:",
+          `dark agent fail ${agentId} --error "<description>"`,
+        ].join("\n");
+        break;
+      }
+
+      case "builder": {
+        const moduleId = context.moduleId as string;
+        const worktreePath = context.worktreePath as string;
+        const contracts = context.contracts as string[] | undefined;
+        const scope = context.scope as { creates?: string[]; modifies?: string[]; test_files?: string[] } | undefined;
+
+        body = [
+          "# Builder Instructions",
+          "",
+          `## Module: ${moduleId}`,
+          `## Worktree: ${worktreePath}`,
+          scope ? `## Scope:` : "",
+          scope?.creates?.length ? `- Creates: ${scope.creates.join(", ")}` : "",
+          scope?.modifies?.length ? `- Modifies: ${scope.modifies.join(", ")}` : "",
+          scope?.test_files?.length ? `- Tests: ${scope.test_files.join(", ")}` : "",
+          contracts?.length ? `## Contracts: ${contracts.join(", ")}` : "",
+          "",
+          "## Steps",
+          "1. Read this assignment and understand your module scope",
+          "2. Follow TDD: write a failing test, make it pass, refactor",
+          "3. Implement all functionality defined in your module scope",
+          "4. Commit your work in the worktree",
+          `5. Mark yourself complete: dark agent complete ${agentId}`,
+          "",
+          "If you cannot complete this work, call:",
+          `dark agent fail ${agentId} --error "<description>"`,
+        ].join("\n");
+        break;
+      }
+
+      case "evaluator": {
+        body = [
+          "# Evaluator Instructions",
+          "",
+          "## Holdout Scenarios",
+          "List available scenarios: dark scenario list --json",
+          "Scenarios are in .df/scenarios/functional/ and .df/scenarios/change/",
+          "Read each scenario file to get test steps, inputs, and expected outputs.",
+          "",
+          "## Steps",
+          "1. List scenarios: dark scenario list",
+          "2. Read each scenario file from .df/scenarios/",
+          "3. Execute each scenario against the integrated code",
+          "4. Score each scenario: pass (1.0) or fail (0.0)",
+          `5. Report your results: dark agent report-result ${agentId} --passed <true|false> --score <0.0-1.0>`,
+          `6. Mark yourself complete: dark agent complete ${agentId}`,
+          "",
+          "IMPORTANT: You MUST call report-result before complete. Complete will reject without results.",
+          "",
+          "If you cannot complete this work, call:",
+          `dark agent fail ${agentId} --error "<description>"`,
+        ].join("\n");
+        break;
+      }
+
+      case "merger": {
+        const worktreePaths = context.worktreePaths as string[] | undefined;
+        body = [
+          "# Merger Instructions",
+          "",
+          worktreePaths?.length ? `## Worktrees to merge: ${worktreePaths.join(", ")}` : "## No worktrees specified",
+          "",
+          "## Steps",
+          "1. Merge each worktree branch into the target branch in dependency order",
+          "2. Resolve any simple conflicts automatically",
+          "3. Run all tests post-merge",
+          "4. Commit the merged result to the target branch",
+          `5. Mark yourself complete: dark agent complete ${agentId}`,
+          "",
+          "IMPORTANT: You MUST create at least one commit on the target branch before complete. Complete will reject without new commits.",
+          "",
+          "If you cannot complete this work, call:",
+          `dark agent fail ${agentId} --error "<description>"`,
+        ].join("\n");
+        break;
+      }
+
+      case "integration-tester": {
+        body = [
+          "# Integration Tester Instructions",
+          "",
+          "## Steps",
+          "1. Run integration tests across all merged modules",
+          "2. Verify cross-module contracts are satisfied",
+          `3. Report your results: dark agent report-result ${agentId} --passed <true|false> --score <0.0-1.0>`,
+          `4. Mark yourself complete: dark agent complete ${agentId}`,
+          "",
+          "IMPORTANT: You MUST call report-result before complete. Complete will reject without results.",
+          "",
+          "If you cannot complete this work, call:",
+          `dark agent fail ${agentId} --error "<description>"`,
+        ].join("\n");
+        break;
+      }
+
+      default:
+        body = `Complete your ${role} task, then call: dark agent complete ${agentId}`;
+    }
+
+    createMessage(this.db, runId, "orchestrator", body, { toAgentId: agentId });
+  }
+
+  /**
    * Spawn a single agent for a phase and wait for it to complete.
    */
   private async executeAgentPhase(
     runId: string,
     role: "architect" | "evaluator" | "merger" | "integration-tester",
     getPrompt: (agentId: string) => string,
+    instructionContext?: Record<string, unknown>,
   ): Promise<void> {
     const agent = createAgent(this.db, {
+      agent_id: "", // Will be overwritten — createAgent generates its own ID
       run_id: runId,
       role,
       name: `${role}-${Date.now()}`,
@@ -183,9 +367,14 @@ export class PipelineEngine {
     // Update system prompt after we have the agent ID
     this.db.prepare("UPDATE agents SET system_prompt = ? WHERE id = ?").run(prompt, agent.id);
 
+    // Send actionable instructions via mail before spawning
+    this.sendInstructions(runId, agent.id, role, instructionContext ?? {});
+
     createEvent(this.db, runId, "agent-spawned", { role }, agent.id);
+    console.log(`[dark] Phase ${role}: spawning agent...`);
 
     const handle = await this.runtime.spawn({
+      agent_id: agent.id,
       run_id: runId,
       role,
       name: agent.name,
@@ -193,9 +382,15 @@ export class PipelineEngine {
     });
 
     updateAgentPid(this.db, agent.id, handle.pid);
+    console.log(`[dark] Phase ${role}: agent spawned (PID ${handle.pid})... waiting for completion`);
 
-    // Poll until agent completes
-    await this.waitForAgent(agent.id);
+    // Poll until agent completes (DB-based)
+    await this.waitForAgent(agent.id, handle.pid);
+
+    const finalAgent = getAgent(this.db, agent.id);
+    if (finalAgent) {
+      console.log(`[dark] Agent ${finalAgent.name} completed.`);
+    }
   }
 
   /**
@@ -208,23 +403,49 @@ export class PipelineEngine {
     if (!bp) {
       // No buildplan — spawn a single builder
       log.info("No buildplan found, spawning single builder");
-      await this.executeAgentPhase(runId, "architect" as any, (agentId) =>
-        getBuilderPrompt({
-          specId: run.spec_id, runId, agentId,
-          moduleId: "main", contracts: [], worktreePath: ".",
-        }),
-      );
+      const agent = createAgent(this.db, {
+        agent_id: "",
+        run_id: runId,
+        role: "builder",
+        name: `builder-main-${Date.now()}`,
+        system_prompt: "pending",
+      });
+
+      const prompt = getBuilderPrompt({
+        specId: run.spec_id, runId, agentId: agent.id,
+        moduleId: "main", contracts: [], worktreePath: ".",
+      });
+      this.db.prepare("UPDATE agents SET system_prompt = ? WHERE id = ?").run(prompt, agent.id);
+
+      this.sendInstructions(runId, agent.id, "builder", { moduleId: "main", worktreePath: "." });
+
+      createEvent(this.db, runId, "builder-started", { moduleId: "main" }, agent.id);
+
+      const handle = await this.runtime.spawn({
+        agent_id: agent.id,
+        run_id: runId,
+        role: "builder",
+        name: agent.name,
+        system_prompt: prompt,
+      });
+
+      updateAgentPid(this.db, agent.id, handle.pid);
+      await this.waitForAgent(agent.id, handle.pid);
       return;
     }
 
     const plan: Buildplan = JSON.parse(bp.plan);
     const completedModules = new Set<string>();
-    const activeBuilders = new Map<string, string>(); // agentId -> moduleId
+    const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null }>(); // agentId -> info
+
+    // Resolve project root for worktree creation
+    const dfDir = findDfDir();
+    const projectRoot = dfDir ? dirname(dfDir) : process.cwd();
 
     while (completedModules.size < plan.modules.length) {
       // Find modules ready to build
       const ready = getReadyModules(plan.modules, plan.dependencies, completedModules)
-        .filter((id) => !activeBuilders.has(id) && ![...activeBuilders.values()].includes(id));
+        .filter((id) => ![...activeBuilders.values()].map(v => v.moduleId).includes(id));
 
       // Spawn builders up to max_parallel
       const activeCount = (await this.runtime.listActive()).length;
@@ -232,57 +453,161 @@ export class PipelineEngine {
 
       for (const moduleId of ready.slice(0, slotsAvailable)) {
         const mod = plan.modules.find((m) => m.id === moduleId)!;
+
+        // Create worktree for this builder in /tmp/ to isolate from .df/scenarios/
+        const runShort = runId.slice(0, 8);
+        const suffix = Date.now().toString(36);
+        const branchName = `df-build/${runShort}/${moduleId}-${suffix}`;
+        const worktreeDir = join(tmpdir(), "df-worktrees", `${moduleId}-${suffix}`);
+        let worktreePath: string | null = null;
+
+        try {
+          const wt = createWorktree(projectRoot, branchName, worktreeDir);
+          worktreePath = wt.path;
+          log.info(`Worktree created for ${moduleId}: ${worktreePath}`);
+        } catch (err) {
+          log.warn(`Failed to create worktree for ${moduleId}, using project root: ${err}`);
+          worktreePath = projectRoot;
+        }
+
+        // Get contracts for this module
+        const moduleContracts = listContracts(this.db, runId, bp.id)
+          .filter((c) => {
+            // Find contracts that mention this module in the buildplan
+            const contractDef = plan.contracts.find((cd) => cd.name === c.name);
+            return contractDef?.bound_modules.includes(moduleId);
+          });
+        const contractNames = moduleContracts.map((c) => c.name);
+
         const agent = createAgent(this.db, {
+          agent_id: "",
           run_id: runId,
           role: "builder",
           name: `builder-${moduleId}`,
           module_id: moduleId,
           buildplan_id: bp.id,
+          worktree_path: worktreePath,
           system_prompt: getBuilderPrompt({
             specId: run.spec_id, runId, agentId: "",
-            moduleId, contracts: [], worktreePath: ".",
+            moduleId, contracts: contractNames, worktreePath: worktreePath ?? ".",
           }),
         });
 
+        // Update prompt with actual agent ID
+        const prompt = getBuilderPrompt({
+          specId: run.spec_id, runId, agentId: agent.id,
+          moduleId, contracts: contractNames, worktreePath: worktreePath ?? ".",
+        });
+        this.db.prepare("UPDATE agents SET system_prompt = ? WHERE id = ?").run(prompt, agent.id);
+
+        // Create contract bindings
+        for (const contract of moduleContracts) {
+          const contractDef = plan.contracts.find((cd) => cd.name === contract.name);
+          const bindingRole = contractDef?.binding_roles[moduleId] ?? "consumer";
+          createBinding(this.db, contract.id, agent.id, moduleId, bindingRole);
+        }
+
+        // Create builder dependencies from DAG
+        const moduleDeps = plan.dependencies.filter((d) => d.from === moduleId);
+        for (const dep of moduleDeps) {
+          createDependency(this.db, runId, agent.id, dep.to, dep.type);
+        }
+
+        // Send instructions via mail
+        this.sendInstructions(runId, agent.id, "builder", {
+          moduleId,
+          worktreePath: worktreePath ?? ".",
+          contracts: contractNames,
+          scope: mod.scope,
+        });
+
         createEvent(this.db, runId, "builder-started", { moduleId }, agent.id);
+        console.log(`[dark] Build phase: spawning builder for module "${moduleId}" (PID pending...)`);
 
         const handle = await this.runtime.spawn({
+          agent_id: agent.id,
           run_id: runId,
           role: "builder",
           name: agent.name,
           module_id: moduleId,
           buildplan_id: bp.id,
-          system_prompt: agent.system_prompt!,
+          worktree_path: worktreePath ?? undefined,
+          system_prompt: prompt,
         });
 
         updateAgentPid(this.db, agent.id, handle.pid);
-        activeBuilders.set(agent.id, moduleId);
+        activeBuilders.set(agent.id, { moduleId, worktreePath });
+        console.log(`[dark] Builder "${moduleId}" spawned (PID ${handle.pid})`);
       }
 
-      // Poll for completed builders
+      // Poll for completed/failed builders
       await this.sleep(POLL_INTERVAL_MS);
 
-      for (const [agentId, moduleId] of activeBuilders) {
-        const status = await this.runtime.status(agentId);
-        if (status === "stopped") {
-          completedModules.add(moduleId);
+      for (const [agentId, info] of activeBuilders) {
+        const agentRecord = getAgent(this.db, agentId);
+        if (!agentRecord) continue;
+
+        // Check DB status first (agent may have called `dark agent complete` or `dark agent fail`)
+        if (agentRecord.status === "completed") {
+          completedModules.add(info.moduleId);
           activeBuilders.delete(agentId);
-          updateAgentStatus(this.db, agentId, "completed");
-          createEvent(this.db, runId, "agent-completed", { moduleId }, agentId);
-          log.info(`Builder completed: ${moduleId}`);
+          createEvent(this.db, runId, "agent-completed", { moduleId: info.moduleId }, agentId);
+          log.info(`Builder completed: ${info.moduleId}`);
+
+          // Satisfy dependencies that depend on this module
+          const deps = this.db.prepare(
+            "SELECT id FROM builder_dependencies WHERE run_id = ? AND depends_on_module_id = ? AND satisfied = 0"
+          ).all(runId, info.moduleId) as { id: string }[];
+          for (const dep of deps) {
+            satisfyDependency(this.db, dep.id);
+          }
+          continue;
+        }
+
+        if (agentRecord.status === "failed") {
+          activeBuilders.delete(agentId);
+          createEvent(this.db, runId, "agent-failed", {
+            moduleId: info.moduleId,
+            error: agentRecord.error,
+          }, agentId);
+          log.error(`Builder failed for ${info.moduleId}: ${agentRecord.error}`);
+
+          // Clean up worktree
+          if (info.worktreePath && info.worktreePath !== projectRoot) {
+            try { removeWorktree(info.worktreePath); } catch { /* ignore */ }
+          }
+
+          throw new Error(`Builder failed for module "${info.moduleId}": ${agentRecord.error ?? "unknown error"}`);
+        }
+
+        // DB status is still running — check if PID is alive
+        const runtimeStatus = await this.runtime.status(agentId);
+        if (runtimeStatus === "stopped" || runtimeStatus === "unknown") {
+          // PID is dead but DB status is still running → crashed
+          updateAgentStatus(this.db, agentId, "failed", "Process exited without completing");
+          activeBuilders.delete(agentId);
+          createEvent(this.db, runId, "agent-failed", {
+            moduleId: info.moduleId,
+            error: "Process exited without completing",
+          }, agentId);
+          log.error(`Builder crashed for ${info.moduleId}: process exited without completing`);
+
+          // Clean up worktree
+          if (info.worktreePath && info.worktreePath !== projectRoot) {
+            try { removeWorktree(info.worktreePath); } catch { /* ignore */ }
+          }
+
+          throw new Error(`Builder crashed for module "${info.moduleId}": process exited without completing`);
         }
       }
 
-      // Check for stale agents
+      // Log stale agents as warnings but don't kill them.
+      // In --print mode, agents can't send heartbeats mid-turn.
+      // Actual failures are caught by DB status + PID liveness checks above.
       const stale = getStaleAgents(this.db, this.config.runtime.heartbeat_timeout_ms);
       for (const agent of stale) {
         if (activeBuilders.has(agent.id)) {
-          log.warn(`Stale builder detected: ${agent.name}`);
-          await this.runtime.kill(agent.id);
-          updateAgentStatus(this.db, agent.id, "killed", "heartbeat timeout");
-          const modId = activeBuilders.get(agent.id)!;
-          activeBuilders.delete(agent.id);
-          createEvent(this.db, runId, "agent-killed", { moduleId: modId, reason: "heartbeat timeout" }, agent.id);
+          log.warn(`Builder ${agent.name} has not sent a heartbeat recently (may be mid-turn)`);
         }
       }
 
@@ -297,15 +622,36 @@ export class PipelineEngine {
   }
 
   /**
-   * Wait for a single agent to complete (poll-based).
+   * Wait for a single agent to complete (DB-based with PID fallback).
    */
-  private async waitForAgent(agentId: string): Promise<void> {
+  private async waitForAgent(agentId: string, pid?: number): Promise<void> {
     while (true) {
       await this.sleep(POLL_INTERVAL_MS);
 
-      const status = await this.runtime.status(agentId);
-      if (status === "stopped" || status === "unknown") {
-        return;
+      // Check DB status first
+      const agentRecord = getAgent(this.db, agentId);
+      if (agentRecord) {
+        if (agentRecord.status === "completed") {
+          return;
+        }
+        if (agentRecord.status === "failed") {
+          throw new Error(`Agent failed: ${agentRecord.error ?? "unknown error"}`);
+        }
+      }
+
+      // Fallback: check PID liveness
+      const runtimeStatus = await this.runtime.status(agentId);
+      if (runtimeStatus === "stopped" || runtimeStatus === "unknown") {
+        // PID is dead — check DB one more time
+        const finalCheck = getAgent(this.db, agentId);
+        if (finalCheck?.status === "completed") return;
+        if (finalCheck?.status === "failed") {
+          throw new Error(`Agent failed: ${finalCheck.error ?? "unknown error"}`);
+        }
+
+        // Process exited without updating DB — mark as failed
+        updateAgentStatus(this.db, agentId, "failed", "Process exited without completing");
+        throw new Error("Agent process exited without completing");
       }
     }
   }

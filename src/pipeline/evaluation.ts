@@ -39,6 +39,7 @@ export async function runEvaluation(
   createEvent(db, runId, "evaluation-started", { mode, threshold });
 
   const agent = createAgent(db, {
+    agent_id: "",
     run_id: runId,
     role: "evaluator",
     name: `evaluator-${mode}-${Date.now()}`,
@@ -51,13 +52,20 @@ export async function runEvaluation(
     }),
   });
 
+  // Update prompt with actual agent ID
+  const prompt = getEvaluatorPrompt({
+    specId: run.spec_id, runId, agentId: agent.id, scenarioIds, mode,
+  });
+  db.prepare("UPDATE agents SET system_prompt = ? WHERE id = ?").run(prompt, agent.id);
+
   createEvent(db, runId, "agent-spawned", { role: "evaluator", mode }, agent.id);
 
   const handle = await runtime.spawn({
+    agent_id: agent.id,
     run_id: runId,
     role: "evaluator",
     name: agent.name,
-    system_prompt: agent.system_prompt!,
+    system_prompt: prompt,
   });
 
   updateAgentPid(db, agent.id, handle.pid);

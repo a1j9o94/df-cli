@@ -26,9 +26,9 @@ const PLAN_JSON = JSON.stringify({
 beforeEach(() => {
   db = getDbForTest();
   runId = createRun(db, { spec_id: "s1" }).id;
-  const archId = createAgent(db, { run_id: runId, role: "architect", name: "a1", system_prompt: "p" }).id;
+  const archId = createAgent(db, { agent_id: "", run_id: runId, role: "architect", name: "a1", system_prompt: "p" }).id;
   planId = createBuildplan(db, runId, "s1", archId, PLAN_JSON).id;
-  builderId = createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" }).id;
+  builderId = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" }).id;
 });
 
 describe("contracts queries", () => {
@@ -75,7 +75,7 @@ describe("bindings queries", () => {
 
   test("getBindingsForContract returns all bindings", () => {
     const c = createContract(db, runId, planId, "C1", "d", "ts", "content");
-    const b2 = createAgent(db, { run_id: runId, role: "builder", name: "b2", system_prompt: "p" }).id;
+    const b2 = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b2", system_prompt: "p" }).id;
     createBinding(db, c.id, builderId, "m1", "implementer");
     createBinding(db, c.id, b2, "m2", "consumer");
     expect(getBindingsForContract(db, c.id)).toHaveLength(2);

@@ -7,7 +7,7 @@ function now(): string {
 }
 
 export function createAgent(db: SqliteDb, config: AgentSpawnConfig): AgentRecord {
-  const id = newAgentId();
+  const id = config.agent_id || newAgentId();
   const ts = now();
 
   db.prepare(

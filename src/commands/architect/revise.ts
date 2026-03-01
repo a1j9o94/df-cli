@@ -48,11 +48,16 @@ export const architectReviseCommand = new Command("revise")
 
     // Spawn new architect with feedback context
     const agent = createAgent(db, {
+      agent_id: "",
       run_id: runId,
       role: "architect",
       name: `architect-revision-${Date.now()}`,
       system_prompt: getArchitectPrompt({ specId, runId, agentId: "pending" }),
     });
+
+    // Update prompt with actual agent ID
+    const prompt = getArchitectPrompt({ specId, runId, agentId: agent.id });
+    db.prepare("UPDATE agents SET system_prompt = ? WHERE id = ?").run(prompt, agent.id);
 
     // Send feedback as a message
     createMessage(db, runId, "orchestrator", `Revision requested. Feedback:\n\n${options.feedback}`, {
@@ -63,10 +68,11 @@ export const architectReviseCommand = new Command("revise")
 
     const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary);
     const handle = await runtime.spawn({
+      agent_id: agent.id,
       run_id: runId,
       role: "architect",
       name: agent.name,
-      system_prompt: agent.system_prompt!,
+      system_prompt: prompt,
     });
 
     updateAgentPid(db, agent.id, handle.pid);

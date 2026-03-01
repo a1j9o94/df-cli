@@ -13,6 +13,7 @@ import { agentCommand } from "./commands/agent/index.js";
 import { mailCommand } from "./commands/mail/index.js";
 import { resourceCommand } from "./commands/resource/index.js";
 import { expertiseCommand } from "./commands/expertise/index.js";
+import { scenarioCommand } from "./commands/scenario/index.js";
 
 program
   .name("dark")
@@ -50,6 +51,7 @@ Command groups:
   Workflow        init, build, status, run — project setup and pipeline execution
   Specs           spec create/show/list — define what to build
   Architecture    architect, contract — decomposition and interface contracts
+  Scenarios       scenario create/list — holdout test scenarios (created by architect)
   Testing         integrate — verify modules compose correctly
   Agents          agent, mail — lifecycle management and inter-agent messaging
   Infrastructure  resource, expertise — capacity limits and codebase indexing
@@ -82,5 +84,6 @@ program.addCommand(agentCommand);
 program.addCommand(mailCommand);
 program.addCommand(resourceCommand);
 program.addCommand(expertiseCommand);
+program.addCommand(scenarioCommand);
 
 program.parse();

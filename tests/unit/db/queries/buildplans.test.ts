@@ -28,7 +28,7 @@ const SAMPLE_PLAN = JSON.stringify({
 beforeEach(() => {
   db = getDbForTest();
   runId = createRun(db, { spec_id: "s1" }).id;
-  architectId = createAgent(db, { run_id: runId, role: "architect", name: "arch-1", system_prompt: "p" }).id;
+  architectId = createAgent(db, { agent_id: "", run_id: runId, role: "architect", name: "arch-1", system_prompt: "p" }).id;
 });
 
 describe("buildplans queries", () => {

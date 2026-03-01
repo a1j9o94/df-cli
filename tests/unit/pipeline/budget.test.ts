@@ -23,7 +23,7 @@ describe("checkBudget", () => {
   });
 
   test("reflects spending", () => {
-    const agent = createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
+    const agent = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
     recordCost(db, runId, agent.id, 5, 1000);
 
     const status = checkBudget(db, runId);
@@ -33,7 +33,7 @@ describe("checkBudget", () => {
   });
 
   test("detects over-budget", () => {
-    const agent = createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
+    const agent = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
     recordCost(db, runId, agent.id, 25, 5000);
 
     const status = checkBudget(db, runId);
@@ -43,7 +43,7 @@ describe("checkBudget", () => {
 
 describe("recordCost", () => {
   test("updates both agent and run cost", () => {
-    const agent = createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
+    const agent = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
     recordCost(db, runId, agent.id, 3.5, 700);
 
     const status = checkBudget(db, runId);
@@ -57,9 +57,9 @@ describe("projectCost", () => {
   });
 
   test("projects based on completed agent costs", () => {
-    const a1 = createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
-    const a2 = createAgent(db, { run_id: runId, role: "builder", name: "b2", system_prompt: "p" });
-    const a3 = createAgent(db, { run_id: runId, role: "builder", name: "b3", system_prompt: "p" });
+    const a1 = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
+    const a2 = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b2", system_prompt: "p" });
+    const a3 = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b3", system_prompt: "p" });
 
     recordCost(db, runId, a1.id, 5, 1000);
     updateAgentStatus(db, a1.id, "completed");

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getAgent } from "../../db/queries/agents.js";
+import { getRun } from "../../db/queries/runs.js";
 import { createBuildplan, updateBuildplanStatus } from "../../db/queries/buildplans.js";
 import { createContract, createBinding } from "../../db/queries/contracts.js";
 import { createEvent } from "../../db/queries/events.js";
@@ -56,8 +57,15 @@ export const architectSubmitPlanCommand = new Command("submit-plan")
       }
     }
 
+    // Resolve spec_id from the run
+    const run = getRun(db, agent.run_id);
+    if (!run) {
+      log.error(`Run not found: ${agent.run_id}`);
+      process.exit(1);
+    }
+
     // Create buildplan record
-    const bp = createBuildplan(db, agent.run_id, agent.run_id, agentId, planJson);
+    const bp = createBuildplan(db, agent.run_id, run.spec_id, agentId, planJson);
 
     // Extract and create contracts + bindings
     const plan = JSON.parse(planJson);

@@ -60,7 +60,7 @@ scout → architect → plan-review → build → integrate → evaluate-functio
 ```
 
 1. **Scout** — index the codebase so agents understand the project
-2. **Architect** — decompose the spec into modules with interface contracts and a dependency DAG
+2. **Architect** — decompose the spec into modules with interface contracts, a dependency DAG, and holdout test scenarios
 3. **Plan Review** — auto-approve small plans (≤4 modules), present large ones for human review
 4. **Build** — spawn parallel builders, each in its own git worktree, bound by contracts
 5. **Integrate** — merge worktrees, run checkpoint tests to verify modules compose correctly
@@ -75,7 +75,7 @@ If evaluation fails, the pipeline iterates (retries from the build phase) up to 
 | Role | Lifespan | Codebase Access | Writes Code | Talks to Human |
 |------|----------|----------------|-------------|----------------|
 | Orchestrator | Session-persistent | None | No | Yes |
-| Architect | 5-10 min | Read-only | Contracts only | No |
+| Architect | 5-10 min | Read-only | Contracts + scenarios | No |
 | Builder | 10-45 min | Read-write (worktree) | Yes | No |
 | Integration-Tester | 5-10 min | Read-write | No | No |
 | Evaluator | 5-20 min | Read-only | No | No |
@@ -128,6 +128,10 @@ dark contract update <id> --content <content> --reason "<reason>" --agent <agent
 dark contract acknowledge <id> --agent <agent-id>
 dark contract check <id> --agent <agent-id>
 
+# Scenarios
+dark scenario create <agent-id> --name <name> --type <functional|change> --content "<content>"
+dark scenario list [--type <type>] [--json]
+
 # Integration
 dark integrate run <run-id> [--phase <n>] [--json]
 dark integrate status [--run-id <id>] [--json]
@@ -137,6 +141,7 @@ dark agent list [--run-id <id>] [--role <role>] [--json]
 dark agent heartbeat <agent-id>
 dark agent complete <agent-id>
 dark agent fail <agent-id> --error "<description>"
+dark agent report-result <agent-id> --passed <true|false> [--score <0.0-1.0>]
 
 # Communication
 dark mail send --from <id> --to <agent-id|@role|@contract:id> --body "<msg>" --run-id <id>

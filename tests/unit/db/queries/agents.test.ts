@@ -19,6 +19,7 @@ beforeEach(() => {
 describe("agents queries", () => {
   test("createAgent inserts and returns an agent", () => {
     const agent = createAgent(db, {
+      agent_id: "",
       run_id: runId,
       role: "builder",
       name: "builder-1",
@@ -33,6 +34,7 @@ describe("agents queries", () => {
 
   test("createAgent with module_id", () => {
     const agent = createAgent(db, {
+      agent_id: "",
       run_id: runId,
       role: "builder",
       name: "builder-2",
@@ -47,8 +49,8 @@ describe("agents queries", () => {
   });
 
   test("listAgents with filters", () => {
-    createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
-    createAgent(db, { run_id: runId, role: "architect", name: "a1", system_prompt: "p" });
+    createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
+    createAgent(db, { agent_id: "", run_id: runId, role: "architect", name: "a1", system_prompt: "p" });
 
     expect(listAgents(db)).toHaveLength(2);
     expect(listAgents(db, runId)).toHaveLength(2);
@@ -57,7 +59,7 @@ describe("agents queries", () => {
   });
 
   test("updateAgentStatus changes status", () => {
-    const agent = createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
+    const agent = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
     updateAgentStatus(db, agent.id, "failed", "timeout");
     const updated = getAgent(db, agent.id)!;
     expect(updated.status).toBe("failed");
@@ -65,7 +67,7 @@ describe("agents queries", () => {
   });
 
   test("updateAgentPid sets pid and status to running", () => {
-    const agent = createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
+    const agent = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
     updateAgentPid(db, agent.id, 12345);
     const updated = getAgent(db, agent.id)!;
     expect(updated.pid).toBe(12345);
@@ -73,13 +75,13 @@ describe("agents queries", () => {
   });
 
   test("updateAgentHeartbeat sets timestamp", () => {
-    const agent = createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
+    const agent = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
     updateAgentHeartbeat(db, agent.id);
     expect(getAgent(db, agent.id)!.last_heartbeat).toBeTruthy();
   });
 
   test("updateAgentCost accumulates", () => {
-    const agent = createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
+    const agent = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
     updateAgentCost(db, agent.id, 1.0, 500);
     updateAgentCost(db, agent.id, 0.5, 250);
     const updated = getAgent(db, agent.id)!;
@@ -88,7 +90,7 @@ describe("agents queries", () => {
   });
 
   test("updateAgentTdd sets phase and cycles", () => {
-    const agent = createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
+    const agent = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
     updateAgentTdd(db, agent.id, "green", 3);
     const updated = getAgent(db, agent.id)!;
     expect(updated.tdd_phase).toBe("green");
@@ -96,8 +98,8 @@ describe("agents queries", () => {
   });
 
   test("getActiveAgents returns pending/spawning/running agents", () => {
-    const a1 = createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
-    createAgent(db, { run_id: runId, role: "builder", name: "b2", system_prompt: "p" });
+    const a1 = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" });
+    createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b2", system_prompt: "p" });
     updateAgentStatus(db, a1.id, "completed");
 
     const active = getActiveAgents(db, runId);

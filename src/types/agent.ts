@@ -38,6 +38,7 @@ export interface AgentRecord {
 }
 
 export interface AgentSpawnConfig {
+  agent_id: string;
   run_id: string;
   role: AgentRole;
   name: string;

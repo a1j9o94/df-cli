@@ -52,6 +52,7 @@ export async function runIntegration(
 
   // Spawn integration-tester agent
   const agent = createAgent(db, {
+    agent_id: "",
     run_id: runId,
     role: "integration-tester",
     name: `integration-tester-${Date.now()}`,
@@ -61,6 +62,7 @@ export async function runIntegration(
   createEvent(db, runId, "agent-spawned", { role: "integration-tester" }, agent.id);
 
   const handle = await runtime.spawn({
+    agent_id: agent.id,
     run_id: runId,
     role: "integration-tester",
     name: agent.name,

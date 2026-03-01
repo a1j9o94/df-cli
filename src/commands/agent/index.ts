@@ -3,6 +3,7 @@ import { agentListCommand } from "./list.js";
 import { agentHeartbeatCommand } from "./heartbeat.js";
 import { agentCompleteCommand } from "./complete.js";
 import { agentFailCommand } from "./fail.js";
+import { agentReportResultCommand } from "./report-result.js";
 
 export const agentCommand = new Command("agent")
   .description("Manage agent lifecycle — list, heartbeat, complete, or fail agents")
@@ -25,8 +26,10 @@ for longer than the configured timeout (default 90s), the pipeline kills it.
   $ dark agent heartbeat agt_01ABC             # send heartbeat (agents call this)
   $ dark agent complete agt_01ABC              # mark as completed
   $ dark agent fail agt_01ABC --error "tests failed"
+  $ dark agent report-result agt_01ABC --passed true --score 0.95
 `)
   .addCommand(agentListCommand)
   .addCommand(agentHeartbeatCommand)
   .addCommand(agentCompleteCommand)
-  .addCommand(agentFailCommand);
+  .addCommand(agentFailCommand)
+  .addCommand(agentReportResultCommand);

@@ -19,6 +19,13 @@ You implement a specific module in an isolated git worktree following TDD cycles
 - Worktree: ${context.worktreePath}
 ${context.contracts.length > 0 ? `- Contracts: ${context.contracts.join(", ")}` : ""}
 
+## Workflow (follow these steps in order)
+1. Check your mail for instructions: dark mail check --agent ${context.agentId}
+2. Read your module assignment and scope from the mail
+3. Follow TDD cycles (RED → GREEN → REFACTOR) until the module is complete
+4. Commit all your work in the worktree
+5. Mark yourself complete: dark agent complete ${context.agentId}
+
 ## TDD Workflow
 1. RED: Write a failing test for the next piece of functionality
 2. GREEN: Write minimal code to make the test pass
@@ -26,16 +33,16 @@ ${context.contracts.length > 0 ? `- Contracts: ${context.contracts.join(", ")}` 
 4. Repeat until the module is complete
 
 ## Contract Compliance
-- Acknowledge contracts: df contract acknowledge <contract-id> --agent ${context.agentId}
+- Acknowledge contracts: dark contract acknowledge <contract-id> --agent ${context.agentId}
 - If a contract needs modification, send mail to the architect explaining what and why
 - Do NOT modify contracts yourself — only the architect can update them
 
 ## Communication
-- Check messages: df mail check --agent ${context.agentId}
-- Send messages: df mail send --to <target> --body "..." --from ${context.agentId} --run-id ${context.runId}
-- Heartbeat: df agent heartbeat ${context.agentId}
-- Complete: df agent complete ${context.agentId}
-- Fail: df agent fail ${context.agentId} --error "<description>"
+- Check messages: dark mail check --agent ${context.agentId}
+- Send messages: dark mail send --to <target> --body "..." --from ${context.agentId} --run-id ${context.runId}
+- Heartbeat: dark agent heartbeat ${context.agentId}
+- Complete: dark agent complete ${context.agentId}
+- Fail: dark agent fail ${context.agentId} --error "<description>"
 
 ## Constraints
 - Work ONLY within your worktree

@@ -16,8 +16,8 @@ let agentB: string;
 beforeEach(() => {
   db = getDbForTest();
   runId = createRun(db, { spec_id: "s1" }).id;
-  agentA = createAgent(db, { run_id: runId, role: "orchestrator", name: "orch", system_prompt: "p" }).id;
-  agentB = createAgent(db, { run_id: runId, role: "builder", name: "b1", system_prompt: "p" }).id;
+  agentA = createAgent(db, { agent_id: "", run_id: runId, role: "orchestrator", name: "orch", system_prompt: "p" }).id;
+  agentB = createAgent(db, { agent_id: "", run_id: runId, role: "builder", name: "b1", system_prompt: "p" }).id;
 });
 
 describe("messages queries", () => {
