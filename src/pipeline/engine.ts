@@ -14,6 +14,8 @@ import { listContracts, createBinding, createDependency, satisfyDependency } fro
 import { getNextPhase, shouldSkipPhase, PHASE_ORDER } from "./phases.js";
 import type { PhaseName } from "./phases.js";
 import { getReadyModules } from "./scheduler.js";
+import { getResumePoint, getCompletedModules } from "./resume.js";
+import type { ResumeOptions } from "./resume.js";
 import { checkBudget } from "./budget.js";
 import { log } from "../utils/logger.js";
 import { getOrchestratorPrompt } from "../agents/prompts/orchestrator.js";
@@ -116,6 +118,354 @@ export class PipelineEngine {
     }
 
     return run.id;
+  }
+
+  /**
+   * Resume a previously failed or stale run.
+   * Returns run ID on success. Throws if not resumable.
+   * Emits run-resumed event. Resets status to running.
+   * Walks PHASE_ORDER from resume point. Pre-populates completedModules for build phase.
+   *
+   * Contract: engine.resume
+   */
+  async resume(options: ResumeOptions): Promise<string> {
+    const { runId, fromPhase, budgetUsd } = options;
+
+    const run = getRun(this.db, runId);
+    if (!run) throw new Error(`Run not found: ${runId}`);
+
+    // Check resumability: only failed or stale running runs
+    if (run.status === "completed") {
+      throw new Error(`Run ${runId} is not resumable: status is 'completed'`);
+    }
+    if (run.status === "cancelled") {
+      throw new Error(`Run ${runId} is not resumable: status is 'cancelled'`);
+    }
+
+    // If currently "running", check for active agents — can't resume while agents are live
+    if (run.status === "running") {
+      const activeAgents = getActiveAgents(this.db, runId);
+      const liveAgents = [];
+      for (const agent of activeAgents) {
+        const runtimeStatus = await this.runtime.status(agent.id);
+        if (runtimeStatus === "running") {
+          liveAgents.push(agent);
+        }
+      }
+      if (liveAgents.length > 0) {
+        throw new Error(
+          `Run ${runId} has ${liveAgents.length} active agents still running. Cannot resume.`
+        );
+      }
+    }
+
+    // Update budget if provided
+    if (budgetUsd !== undefined) {
+      this.db.prepare("UPDATE runs SET budget_usd = ?, updated_at = ? WHERE id = ?")
+        .run(budgetUsd, new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), runId);
+    }
+
+    // Determine resume point
+    const resumePhase = fromPhase ?? getResumePoint(this.db, runId);
+
+    // Reset run status to running and emit run-resumed event
+    updateRunStatus(this.db, runId, "running");
+    createEvent(this.db, runId, "run-resumed", { fromPhase: resumePhase });
+
+    log.info(`Pipeline resuming: ${runId} from phase '${resumePhase}'`);
+    console.log(`[dark] Pipeline resuming run ${runId} from phase '${resumePhase}'.`);
+
+    // Get completed modules from previous attempts (for build phase optimization)
+    const previouslyCompletedModules = getCompletedModules(this.db, runId);
+
+    const context: Record<string, unknown> = {
+      skip_architect: false,
+      mode: run.mode,
+      module_count: 0,
+      completedModules: previouslyCompletedModules,
+    };
+
+    // If resuming past architect, load module count from existing buildplan
+    const spec = getSpec(this.db, run.spec_id);
+    if (spec) {
+      const bp = getActiveBuildplan(this.db, run.spec_id);
+      if (bp) {
+        const plan: Buildplan = JSON.parse(bp.plan);
+        context.module_count = plan.modules.length;
+      }
+    }
+
+    // Find the starting index in PHASE_ORDER
+    const startIdx = PHASE_ORDER.indexOf(resumePhase);
+    if (startIdx === -1) {
+      throw new Error(`Invalid resume phase: ${resumePhase}`);
+    }
+
+    try {
+      // Walk through phases starting from resume point
+      for (let i = startIdx; i < PHASE_ORDER.length; i++) {
+        const phaseName = PHASE_ORDER[i];
+
+        if (shouldSkipPhase(phaseName, context)) {
+          log.info(`Skipping phase: ${phaseName}`);
+          continue;
+        }
+
+        updateRunPhase(this.db, runId, phaseName);
+        createEvent(this.db, runId, "phase-started", { phase: phaseName });
+        log.info(`Phase: ${phaseName}`);
+
+        if (phaseName === "build" && previouslyCompletedModules.size > 0) {
+          // Use the resume-aware build phase that skips completed modules
+          await this.executeResumeBuildPhase(runId, previouslyCompletedModules);
+        } else {
+          await this.executePhase(runId, phaseName, context);
+        }
+
+        createEvent(this.db, runId, "phase-completed", { phase: phaseName });
+
+        // Update context after architect phase
+        if (phaseName === "architect" || phaseName === "plan-review") {
+          const bp = getActiveBuildplan(this.db, run.spec_id);
+          if (bp) {
+            const plan: Buildplan = JSON.parse(bp.plan);
+            context.module_count = plan.modules.length;
+          }
+        }
+
+        // Budget check
+        const budget = checkBudget(this.db, runId);
+        if (budget.overBudget) {
+          log.warn(`Budget exceeded: $${budget.spentUsd.toFixed(2)} / $${budget.budgetUsd.toFixed(2)}`);
+        }
+      }
+
+      // Count results
+      const completedCount = this.db.prepare(
+        "SELECT COUNT(*) as cnt FROM agents WHERE run_id = ? AND status = 'completed'"
+      ).get(runId) as { cnt: number };
+
+      updateRunStatus(this.db, runId, "completed");
+      createEvent(this.db, runId, "run-completed");
+      log.success(`Pipeline resumed and completed: ${runId}`);
+      console.log(`[dark] Pipeline complete. ${completedCount.cnt} agents finished. Review with: git diff`);
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      updateRunStatus(this.db, runId, "failed", error);
+      createEvent(this.db, runId, "run-failed", { error });
+      log.error(`Pipeline failed: ${error}`);
+      console.log(`[dark] Pipeline failed: ${error}. Check details: dark status --run-id ${runId}. Do NOT attempt manual implementation.`);
+    }
+
+    return runId;
+  }
+
+  /**
+   * Build phase that pre-populates completedModules from previous attempts.
+   * Only builds modules that haven't already been completed.
+   */
+  private async executeResumeBuildPhase(runId: string, previouslyCompletedModules: Set<string>): Promise<void> {
+    const run = getRun(this.db, runId)!;
+    const bp = getActiveBuildplan(this.db, run.spec_id);
+
+    if (!bp) {
+      // No buildplan — fall through to normal single-builder
+      log.info("No buildplan found, spawning single builder (resume)");
+      const agent = createAgent(this.db, {
+        agent_id: "",
+        run_id: runId,
+        role: "builder",
+        name: `builder-main-${Date.now()}`,
+        system_prompt: "pending",
+      });
+
+      const prompt = getBuilderPrompt({
+        specId: run.spec_id, runId, agentId: agent.id,
+        moduleId: "main", contracts: [], worktreePath: ".",
+      });
+      this.db.prepare("UPDATE agents SET system_prompt = ? WHERE id = ?").run(prompt, agent.id);
+
+      this.sendInstructions(runId, agent.id, "builder", { moduleId: "main", worktreePath: "." });
+      createEvent(this.db, runId, "builder-started", { moduleId: "main" }, agent.id);
+
+      const handle = await this.runtime.spawn({
+        agent_id: agent.id,
+        run_id: runId,
+        role: "builder",
+        name: agent.name,
+        system_prompt: prompt,
+      });
+
+      updateAgentPid(this.db, agent.id, handle.pid);
+      await this.waitForAgent(agent.id, handle.pid);
+      return;
+    }
+
+    const plan: Buildplan = JSON.parse(bp.plan);
+    // Start with previously completed modules pre-populated
+    const completedModules = new Set<string>(previouslyCompletedModules);
+    const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null }>();
+
+    log.info(`Resuming build: ${completedModules.size} modules already completed, ${plan.modules.length - completedModules.size} remaining`);
+
+    // Resolve project root for worktree creation
+    const dfDir = findDfDir();
+    const projectRoot = dfDir ? dirname(dfDir) : process.cwd();
+
+    while (completedModules.size < plan.modules.length) {
+      // Find modules ready to build (excluding already-completed and active)
+      const ready = getReadyModules(plan.modules, plan.dependencies, completedModules)
+        .filter((id) => ![...activeBuilders.values()].map(v => v.moduleId).includes(id));
+
+      // Spawn builders up to max_parallel
+      const activeCount = (await this.runtime.listActive()).length;
+      const slotsAvailable = this.config.build.max_parallel - activeCount;
+
+      for (const moduleId of ready.slice(0, slotsAvailable)) {
+        const mod = plan.modules.find((m) => m.id === moduleId)!;
+
+        // Create worktree
+        const runShort = runId.slice(0, 8);
+        const suffix = Date.now().toString(36);
+        const branchName = `df-build/${runShort}/${moduleId}-${suffix}`;
+        const worktreeDir = join(tmpdir(), "df-worktrees", `${moduleId}-${suffix}`);
+        let worktreePath: string | null = null;
+
+        try {
+          const wt = createWorktree(projectRoot, branchName, worktreeDir);
+          worktreePath = wt.path;
+          log.info(`Worktree created for ${moduleId}: ${worktreePath}`);
+        } catch (err) {
+          log.warn(`Failed to create worktree for ${moduleId}, using project root: ${err}`);
+          worktreePath = projectRoot;
+        }
+
+        const moduleContracts = listContracts(this.db, runId, bp.id)
+          .filter((c) => {
+            const contractDef = plan.contracts.find((cd) => cd.name === c.name);
+            return contractDef?.bound_modules.includes(moduleId);
+          });
+        const contractNames = moduleContracts.map((c) => c.name);
+
+        const agent = createAgent(this.db, {
+          agent_id: "",
+          run_id: runId,
+          role: "builder",
+          name: `builder-${moduleId}`,
+          module_id: moduleId,
+          buildplan_id: bp.id,
+          worktree_path: worktreePath,
+          system_prompt: getBuilderPrompt({
+            specId: run.spec_id, runId, agentId: "",
+            moduleId, contracts: contractNames, worktreePath: worktreePath ?? ".",
+          }),
+        });
+
+        const prompt = getBuilderPrompt({
+          specId: run.spec_id, runId, agentId: agent.id,
+          moduleId, contracts: contractNames, worktreePath: worktreePath ?? ".",
+        });
+        this.db.prepare("UPDATE agents SET system_prompt = ? WHERE id = ?").run(prompt, agent.id);
+
+        for (const contract of moduleContracts) {
+          const contractDef = plan.contracts.find((cd) => cd.name === contract.name);
+          const bindingRole = contractDef?.binding_roles[moduleId] ?? "consumer";
+          createBinding(this.db, contract.id, agent.id, moduleId, bindingRole);
+        }
+
+        const moduleDeps = plan.dependencies.filter((d) => d.from === moduleId);
+        for (const dep of moduleDeps) {
+          createDependency(this.db, runId, agent.id, dep.to, dep.type);
+        }
+
+        this.sendInstructions(runId, agent.id, "builder", {
+          moduleId,
+          worktreePath: worktreePath ?? ".",
+          contracts: contractNames,
+          scope: mod.scope,
+        });
+
+        createEvent(this.db, runId, "builder-started", { moduleId }, agent.id);
+        console.log(`[dark] Build phase (resume): spawning builder for module "${moduleId}"`);
+
+        const handle = await this.runtime.spawn({
+          agent_id: agent.id,
+          run_id: runId,
+          role: "builder",
+          name: agent.name,
+          module_id: moduleId,
+          buildplan_id: bp.id,
+          worktree_path: worktreePath ?? undefined,
+          system_prompt: prompt,
+        });
+
+        updateAgentPid(this.db, agent.id, handle.pid);
+        activeBuilders.set(agent.id, { moduleId, worktreePath });
+        console.log(`[dark] Builder "${moduleId}" spawned (PID ${handle.pid})`);
+      }
+
+      // Poll for completed/failed builders
+      await this.sleep(POLL_INTERVAL_MS);
+
+      for (const [agentId, info] of activeBuilders) {
+        const agentRecord = getAgent(this.db, agentId);
+        if (!agentRecord) continue;
+
+        if (agentRecord.status === "completed") {
+          completedModules.add(info.moduleId);
+          activeBuilders.delete(agentId);
+          createEvent(this.db, runId, "agent-completed", { moduleId: info.moduleId }, agentId);
+          log.info(`Builder completed: ${info.moduleId}`);
+
+          const deps = this.db.prepare(
+            "SELECT id FROM builder_dependencies WHERE run_id = ? AND depends_on_module_id = ? AND satisfied = 0"
+          ).all(runId, info.moduleId) as { id: string }[];
+          for (const dep of deps) {
+            satisfyDependency(this.db, dep.id);
+          }
+          continue;
+        }
+
+        if (agentRecord.status === "failed") {
+          activeBuilders.delete(agentId);
+          createEvent(this.db, runId, "agent-failed", {
+            moduleId: info.moduleId,
+            error: agentRecord.error,
+          }, agentId);
+          log.error(`Builder failed for ${info.moduleId}: ${agentRecord.error}`);
+
+          if (info.worktreePath && info.worktreePath !== projectRoot) {
+            try { removeWorktree(info.worktreePath); } catch { /* ignore */ }
+          }
+
+          throw new Error(`Builder failed for module "${info.moduleId}": ${agentRecord.error ?? "unknown error"}`);
+        }
+
+        const runtimeStatus = await this.runtime.status(agentId);
+        if (runtimeStatus === "stopped" || runtimeStatus === "unknown") {
+          updateAgentStatus(this.db, agentId, "failed", "Process exited without completing");
+          activeBuilders.delete(agentId);
+          createEvent(this.db, runId, "agent-failed", {
+            moduleId: info.moduleId,
+            error: "Process exited without completing",
+          }, agentId);
+
+          if (info.worktreePath && info.worktreePath !== projectRoot) {
+            try { removeWorktree(info.worktreePath); } catch { /* ignore */ }
+          }
+
+          throw new Error(`Builder crashed for module "${info.moduleId}": process exited without completing`);
+        }
+      }
+
+      // Budget check
+      const budgetStatus = checkBudget(this.db, runId);
+      if (budgetStatus.overBudget) {
+        throw new Error(`Budget exceeded: $${budgetStatus.spentUsd.toFixed(2)} / $${budgetStatus.budgetUsd.toFixed(2)}`);
+      }
+    }
+
+    log.info(`All ${plan.modules.length} modules built (${previouslyCompletedModules.size} from previous run)`);
   }
 
   /**
