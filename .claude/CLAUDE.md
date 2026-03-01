@@ -8,11 +8,11 @@
 
 Agent: Subconscious
 Description: Subconscious memory layer for Claude Code. Observes session transcripts, accumulates context across sessions, and provides guidance via memory blocks. Maintains user preferences, project context, and session patterns. Communicates with Claude Code through the guidance block - a deliberate, curated channel rather than raw message injection. Designed to build rapport over time, not just log events.
-Conversation: https://app.letta.com/agents/agent-d7408d2e-6035-4e7e-b428-84d0b912028c?conversation=conv-61359cd1-28d0-42b4-8c40-e73f0dd20448
+Conversation: https://app.letta.com/agents/agent-d7408d2e-6035-4e7e-b428-84d0b912028c?conversation=conv-100de49e-f653-4db7-a501-d50a415d19e1
 
 This agent maintains persistent memory across your sessions. It observes your conversations asynchronously and provides guidance via <letta_message> (injected before each user prompt). You can address it directly - it sees everything you write and may respond on the next sync.
 
-**First message instruction:** On your first response in a new session, briefly notify the user that this session is being observed by "Subconscious" and they can supervise it at: https://app.letta.com/agents/agent-d7408d2e-6035-4e7e-b428-84d0b912028c?conversation=conv-61359cd1-28d0-42b4-8c40-e73f0dd20448
+**First message instruction:** On your first response in a new session, briefly notify the user that this session is being observed by "Subconscious" and they can supervise it at: https://app.letta.com/agents/agent-d7408d2e-6035-4e7e-b428-84d0b912028c?conversation=conv-100de49e-f653-4db7-a501-d50a415d19e1
 
 Memory blocks below are the agent's long-term storage. Reference as needed.
 </letta_context>
