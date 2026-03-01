@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { SCHEMA_SQL } from "../db/schema.js";
 import { findDfDir } from "../utils/config.js";
+import { generateDashboardHtml } from "./index.js";
 
 // --- Contract: ServerExport ---
 
@@ -403,39 +404,6 @@ function handleGetModules(db: InstanceType<typeof Database>, runId: string): Res
   return jsonResponse(moduleStatuses);
 }
 
-// --- Placeholder UI ---
-
-function getDefaultHtml(): string {
-  // Try to import generateDashboardHtml from the UI module if available
-  // Otherwise serve a minimal placeholder
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dark Factory Dashboard</title>
-  <style>
-    body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #e0e0e0; margin: 0; padding: 2rem; }
-    h1 { color: #00d2ff; }
-    .loading { text-align: center; padding: 4rem; color: #888; }
-  </style>
-</head>
-<body>
-  <h1>Dark Factory Dashboard</h1>
-  <div class="loading">Dashboard UI module loading...</div>
-  <script>
-    // Will be replaced by the full dashboard UI module
-    fetch('/api/runs').then(r => r.json()).then(runs => {
-      document.querySelector('.loading').textContent =
-        runs.length === 0
-          ? 'No pipeline runs yet. Run: dark build <spec-id>'
-          : JSON.stringify(runs, null, 2);
-    });
-  </script>
-</body>
-</html>`;
-}
-
 // --- URL Router ---
 
 function route(
@@ -524,17 +492,7 @@ export async function startServer(config: ServerConfig): Promise<ServerHandle> {
     db.exec(SCHEMA_SQL);
   }
 
-  // Try to load UI module dynamically — it may not exist yet during parallel builds
-  let getDashboardHtml = getDefaultHtml;
-  try {
-    const uiModPath = new URL("./ui.js", import.meta.url).pathname;
-    const uiMod = await import(uiModPath).catch(() => null);
-    if (uiMod?.generateDashboardHtml) {
-      getDashboardHtml = () => uiMod.generateDashboardHtml();
-    }
-  } catch {
-    // UI module not yet built — use placeholder
-  }
+  const getDashboardHtml = () => generateDashboardHtml({ projectName: "Dark Factory" });
 
   const server = Bun.serve({
     port,

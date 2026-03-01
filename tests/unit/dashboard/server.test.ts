@@ -543,6 +543,62 @@ describe("Dashboard Server", () => {
       const html = await res.text();
       expect(html).toContain("<!DOCTYPE html>");
     });
+
+    test("dashboard renders styled UI, not raw JSON fallback", async () => {
+      const res = await fetch(`${server?.url}/`);
+      const html = await res.text();
+
+      // Must have dark theme background from real UI
+      expect(html).toContain("#0d1117");
+      // Must have sidebar with runs list
+      expect(html).toContain('id="runs-list"');
+      // Must have auto-refresh indicator (pulsing green dot)
+      expect(html).toContain("auto-refresh-indicator");
+      // Must have status badges CSS
+      expect(html).toContain(".status-badge.running");
+      expect(html).toContain(".status-badge.failed");
+      expect(html).toContain(".status-badge.completed");
+      expect(html).toContain(".status-badge.pending");
+      // Must NOT have the placeholder fallback markers
+      expect(html).not.toContain("Dashboard UI module loading...");
+      expect(html).not.toContain("No pipeline runs yet. Run: dark build");
+    });
+
+    test("dashboard includes run cards, agent cards, and module grid", async () => {
+      const res = await fetch(`${server?.url}/`);
+      const html = await res.text();
+
+      // Run cards in sidebar
+      expect(html).toContain("run-card");
+      // Agent cards in detail panel
+      expect(html).toContain("agent-card");
+      // Module cards in detail panel
+      expect(html).toContain("module-card");
+      // Tab switching for agents/modules
+      expect(html).toContain('data-tab="agents"');
+      expect(html).toContain('data-tab="modules"');
+    });
+
+    test("dashboard auto-refresh polls every 5 seconds", async () => {
+      const res = await fetch(`${server?.url}/`);
+      const html = await res.text();
+
+      // Must have setInterval for auto-refresh
+      expect(html).toContain("setInterval");
+      // Must reference 5000ms interval
+      expect(html).toContain("5000");
+    });
+
+    test("dashboard fetches from /api/runs and renders run data", async () => {
+      const res = await fetch(`${server?.url}/`);
+      const html = await res.text();
+
+      // Must fetch from /api/runs endpoint
+      expect(html).toContain('"/api/runs"');
+      // Must handle clicking a run to load detail
+      expect(html).toContain("/agents");
+      expect(html).toContain("/modules");
+    });
   });
 
   describe("CORS headers", () => {
