@@ -9,12 +9,15 @@ import { getRun } from "../../db/queries/runs.js";
 import { listBuildplans } from "../../db/queries/buildplans.js";
 import { listEvents } from "../../db/queries/events.js";
 import { createEvent } from "../../db/queries/events.js";
+import { recordCost } from "../../pipeline/budget.js";
 import { log } from "../../utils/logger.js";
 
 export const agentCompleteCommand = new Command("complete")
   .description("Mark an agent as completed")
   .argument("<agent-id>", "Agent ID")
-  .action(async (agentId: string) => {
+  .option("--cost <usd>", "Report accumulated cost in USD")
+  .option("--tokens <n>", "Report accumulated token usage")
+  .action(async (agentId: string, options: { cost?: string; tokens?: string }) => {
     const dfDir = findDfDir();
     if (!dfDir) {
       log.error("Not in a Dark Factory project.");
@@ -35,6 +38,12 @@ export const agentCompleteCommand = new Command("complete")
       log.error(`Cannot complete: ${guardError}`);
       log.error("Finish your required work before calling complete.");
       process.exit(1);
+    }
+
+    if (options.cost || options.tokens) {
+      const costUsd = options.cost ? parseFloat(options.cost) : 0;
+      const tokens = options.tokens ? parseInt(options.tokens, 10) : 0;
+      recordCost(db, agent.run_id, agentId, costUsd, tokens);
     }
 
     updateAgentStatus(db, agentId, "completed");

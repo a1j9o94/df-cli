@@ -4,12 +4,15 @@ import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getAgent, updateAgentHeartbeat } from "../../db/queries/agents.js";
 import { createEvent } from "../../db/queries/events.js";
+import { recordCost } from "../../pipeline/budget.js";
 import { log } from "../../utils/logger.js";
 
 export const agentHeartbeatCommand = new Command("heartbeat")
   .description("Send a heartbeat for an agent")
   .argument("<agent-id>", "Agent ID")
-  .action(async (agentId: string) => {
+  .option("--cost <usd>", "Report accumulated cost in USD")
+  .option("--tokens <n>", "Report accumulated token usage")
+  .action(async (agentId: string, options: { cost?: string; tokens?: string }) => {
     const dfDir = findDfDir();
     if (!dfDir) {
       log.error("Not in a Dark Factory project.");
@@ -25,5 +28,12 @@ export const agentHeartbeatCommand = new Command("heartbeat")
     }
 
     updateAgentHeartbeat(db, agentId);
+
+    if (options.cost || options.tokens) {
+      const costUsd = options.cost ? parseFloat(options.cost) : 0;
+      const tokens = options.tokens ? parseInt(options.tokens, 10) : 0;
+      recordCost(db, agent.run_id, agentId, costUsd, tokens);
+    }
+
     createEvent(db, agent.run_id, "agent-heartbeat", undefined, agentId);
   });

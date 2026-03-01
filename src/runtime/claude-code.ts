@@ -32,7 +32,7 @@ export class ClaudeCodeRuntime implements AgentRuntime {
         "--print",
         "--dangerously-skip-permissions",
         "--system-prompt", config.system_prompt,
-        "--max-turns", "100",
+        "--max-turns", "10000",
         initialMessage,
       ],
       {

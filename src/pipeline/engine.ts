@@ -14,7 +14,7 @@ import { listContracts, createBinding, createDependency, satisfyDependency } fro
 import { getNextPhase, shouldSkipPhase, PHASE_ORDER } from "./phases.js";
 import type { PhaseName } from "./phases.js";
 import { getReadyModules } from "./scheduler.js";
-import { checkBudget } from "./budget.js";
+import { checkBudget, recordCost } from "./budget.js";
 import { log } from "../utils/logger.js";
 import { getOrchestratorPrompt } from "../agents/prompts/orchestrator.js";
 import { getArchitectPrompt } from "../agents/prompts/architect.js";
@@ -389,8 +389,24 @@ export class PipelineEngine {
 
     const finalAgent = getAgent(this.db, agent.id);
     if (finalAgent) {
-      console.log(`[dark] Agent ${finalAgent.name} completed.`);
+      this.estimateCostIfMissing(finalAgent);
+      console.log(`[dark] Agent ${finalAgent.name} completed. Cost: $${finalAgent.cost_usd.toFixed(2)}`);
     }
+  }
+
+  /**
+   * If an agent completed without self-reporting cost, estimate from elapsed time.
+   * Rough heuristic: ~$0.05/min for Sonnet agents (typical tool-use sessions).
+   */
+  private estimateCostIfMissing(agent: { id: string; run_id: string; cost_usd: number; created_at: string; updated_at: string }): void {
+    if (agent.cost_usd > 0) return; // Already reported
+
+    const elapsedMs = new Date(agent.updated_at).getTime() - new Date(agent.created_at).getTime();
+    const elapsedMin = elapsedMs / 60_000;
+    const estimatedCost = Math.max(0.01, elapsedMin * 0.05); // ~$0.05/min heuristic
+    const estimatedTokens = Math.round(elapsedMin * 4000); // ~4K tokens/min heuristic
+
+    recordCost(this.db, agent.run_id, agent.id, estimatedCost, estimatedTokens);
   }
 
   /**
@@ -552,7 +568,8 @@ export class PipelineEngine {
           completedModules.add(info.moduleId);
           activeBuilders.delete(agentId);
           createEvent(this.db, runId, "agent-completed", { moduleId: info.moduleId }, agentId);
-          log.info(`Builder completed: ${info.moduleId}`);
+          this.estimateCostIfMissing(agentRecord);
+          log.info(`Builder completed: ${info.moduleId} ($${agentRecord.cost_usd.toFixed(2)})`);
 
           // Satisfy dependencies that depend on this module
           const deps = this.db.prepare(
