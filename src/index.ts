@@ -3,6 +3,7 @@ import { program } from "commander";
 
 import { initCommand } from "./commands/init.js";
 import { buildCommand } from "./commands/build.js";
+import { continueCommand } from "./commands/continue.js";
 import { statusCommand } from "./commands/status.js";
 import { runCommand } from "./commands/run/index.js";
 import { specCommand } from "./commands/spec/index.js";
@@ -48,7 +49,7 @@ mail system. The orchestrator manages their lifecycle, budget, and phase gates.
   .addHelpText("after", `
 Command groups:
 
-  Workflow        init, build, status, run — project setup and pipeline execution
+  Workflow        init, build, continue, status, run — project setup and pipeline execution
   Specs           spec create/show/list — define what to build
   Architecture    architect, contract — decomposition and interface contracts
   Scenarios       scenario create/list — holdout test scenarios (created by architect)
@@ -74,6 +75,7 @@ Examples:
 
 program.addCommand(initCommand);
 program.addCommand(buildCommand);
+program.addCommand(continueCommand);
 program.addCommand(statusCommand);
 program.addCommand(runCommand);
 program.addCommand(specCommand);

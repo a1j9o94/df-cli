@@ -5,6 +5,7 @@ export type EventType =
   | "run-failed"
   | "run-resumed"
   | "run-cancelled"
+  | "run-resumed"
   | "phase-started"
   | "phase-completed"
   | "phase-failed"

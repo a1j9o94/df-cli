@@ -62,3 +62,37 @@ export function getCompletedModules(db: SqliteDb, runId: string): Set<string> {
 
   return new Set(rows.map((r) => r.module_id));
 }
+
+/**
+ * Returns runs eligible for resumption: failed runs or running runs with no active agents.
+ * Contract: getResumableRuns
+ */
+export function getResumableRuns(db: SqliteDb): Array<{
+  id: string;
+  spec_id: string;
+  status: string;
+  current_phase: string;
+  created_at: string;
+  error?: string;
+}> {
+  const rows = db.prepare(
+    `SELECT r.id, r.spec_id, r.status, r.current_phase, r.created_at, r.error
+     FROM runs r
+     WHERE r.status = 'failed'
+        OR (r.status = 'running' AND NOT EXISTS (
+             SELECT 1 FROM agents a
+             WHERE a.run_id = r.id
+               AND a.status IN ('pending', 'spawning', 'running')
+           ))
+     ORDER BY r.created_at DESC`
+  ).all() as Array<{
+    id: string; spec_id: string; status: string;
+    current_phase: string; created_at: string; error: string | null;
+  }>;
+
+  return rows.map((r) => ({
+    id: r.id, spec_id: r.spec_id, status: r.status,
+    current_phase: r.current_phase, created_at: r.created_at,
+    ...(r.error != null ? { error: r.error } : {}),
+  }));
+}
