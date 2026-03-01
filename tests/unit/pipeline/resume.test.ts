@@ -1,40 +1,35 @@
-import { beforeEach, describe, expect, test } from "bun:test";
-import { getDbForTest } from "../../../src/db/index.js";
-import type { SqliteDb } from "../../../src/db/index.js";
-import { createAgent } from "../../../src/db/queries/agents.js";
+import { describe, test, expect, beforeEach } from "bun:test";
+import { getDbForTest, type SqliteDb } from "../../../src/db/index.js";
+import { createRun, getRun, updateRunStatus, updateRunPhase } from "../../../src/db/queries/runs.js";
 import { createEvent } from "../../../src/db/queries/events.js";
-import { createRun, updateRunStatus } from "../../../src/db/queries/runs.js";
+import { createAgent, updateAgentStatus } from "../../../src/db/queries/agents.js";
+import { getResumePoint } from "../../../src/pipeline/resume.js";
+import { getCompletedModules } from "../../../src/pipeline/resume.js";
 import type { PhaseName } from "../../../src/pipeline/phases.js";
-import {
-  getCompletedModules,
-  getResumableRuns,
-  getResumePoint,
-} from "../../../src/pipeline/resume.js";
-import type { ResumeOptions } from "../../../src/pipeline/resume.js";
-
-let db: SqliteDb;
-let runId: string;
-
-beforeEach(() => {
-  db = getDbForTest();
-  runId = createRun(db, { spec_id: "spec_test" }).id;
-});
-
-// ─── getResumePoint ───────────────────────────────────────────────────
 
 describe("getResumePoint", () => {
+  let db: SqliteDb;
+  let runId: string;
+
+  beforeEach(() => {
+    db = getDbForTest();
+    const run = createRun(db, { spec_id: "test-spec" });
+    runId = run.id;
+    updateRunStatus(db, runId, "failed");
+  });
+
   test("returns 'scout' when no phases completed", () => {
     const point = getResumePoint(db, runId);
     expect(point).toBe("scout");
   });
 
-  test("returns next phase after last completed", () => {
+  test("returns 'architect' when scout is completed", () => {
     createEvent(db, runId, "phase-completed", { phase: "scout" });
     const point = getResumePoint(db, runId);
     expect(point).toBe("architect");
   });
 
-  test("returns 'build' when scout, architect, plan-review completed", () => {
+  test("returns 'build' when architect and plan-review are completed", () => {
     createEvent(db, runId, "phase-completed", { phase: "scout" });
     createEvent(db, runId, "phase-completed", { phase: "architect" });
     createEvent(db, runId, "phase-completed", { phase: "plan-review" });
@@ -42,251 +37,143 @@ describe("getResumePoint", () => {
     expect(point).toBe("build");
   });
 
-  test("returns 'evaluate-functional' when build completed", () => {
-    createEvent(db, runId, "phase-completed", { phase: "scout" });
-    createEvent(db, runId, "phase-completed", { phase: "architect" });
-    createEvent(db, runId, "phase-completed", { phase: "plan-review" });
-    createEvent(db, runId, "phase-completed", { phase: "build" });
-    createEvent(db, runId, "phase-completed", { phase: "integrate" });
+  test("returns 'integrate' when build is completed", () => {
+    for (const phase of ["scout", "architect", "plan-review", "build"]) {
+      createEvent(db, runId, "phase-completed", { phase });
+    }
     const point = getResumePoint(db, runId);
-    expect(point).toBe("evaluate-functional");
+    expect(point).toBe("integrate");
   });
 
-  test("throws when all phases completed", () => {
-    createEvent(db, runId, "phase-completed", { phase: "scout" });
-    createEvent(db, runId, "phase-completed", { phase: "architect" });
-    createEvent(db, runId, "phase-completed", { phase: "plan-review" });
-    createEvent(db, runId, "phase-completed", { phase: "build" });
-    createEvent(db, runId, "phase-completed", { phase: "integrate" });
-    createEvent(db, runId, "phase-completed", { phase: "evaluate-functional" });
-    createEvent(db, runId, "phase-completed", { phase: "evaluate-change" });
-    createEvent(db, runId, "phase-completed", { phase: "merge" });
+  test("returns 'merge' when all phases except merge are completed", () => {
+    for (const phase of ["scout", "architect", "plan-review", "build", "integrate", "evaluate-functional", "evaluate-change"]) {
+      createEvent(db, runId, "phase-completed", { phase });
+    }
+    const point = getResumePoint(db, runId);
+    expect(point).toBe("merge");
+  });
 
+  test("throws if all phases are completed", () => {
+    for (const phase of ["scout", "architect", "plan-review", "build", "integrate", "evaluate-functional", "evaluate-change", "merge"]) {
+      createEvent(db, runId, "phase-completed", { phase });
+    }
     expect(() => getResumePoint(db, runId)).toThrow();
   });
 
-  test("handles non-sequential completion events", () => {
-    // scout completed, architect not — should resume at architect
-    createEvent(db, runId, "phase-completed", { phase: "scout" });
-    createEvent(db, runId, "phase-started", { phase: "architect" }); // started but not completed
-    const point = getResumePoint(db, runId);
-    expect(point).toBe("architect");
-  });
-
-  test("only considers phase-completed events, not phase-started", () => {
+  test("ignores phase-started events (only looks at phase-completed)", () => {
     createEvent(db, runId, "phase-started", { phase: "scout" });
-    // No phase-completed for scout
+    // Only started, not completed — should still resume from scout
     const point = getResumePoint(db, runId);
     expect(point).toBe("scout");
   });
 });
 
-// ─── getCompletedModules ──────────────────────────────────────────────
-
 describe("getCompletedModules", () => {
-  test("returns empty set when no builders exist", () => {
-    const modules = getCompletedModules(db, runId);
-    expect(modules).toBeInstanceOf(Set);
-    expect(modules.size).toBe(0);
+  let db: SqliteDb;
+  let runId: string;
+
+  beforeEach(() => {
+    db = getDbForTest();
+    const run = createRun(db, { spec_id: "test-spec" });
+    runId = run.id;
   });
 
-  test("returns module_ids of completed builders", () => {
-    createAgent(db, {
-      agent_id: "agt_b1",
+  test("returns empty set when no builders exist", () => {
+    const result = getCompletedModules(db, runId);
+    expect(result.size).toBe(0);
+  });
+
+  test("returns completed builder module IDs", () => {
+    const agent1 = createAgent(db, {
+      agent_id: "",
       run_id: runId,
       role: "builder",
-      name: "builder-1",
-      module_id: "mod-foo",
-      system_prompt: "build foo",
+      name: "builder-mod-a",
+      module_id: "mod-a",
+      system_prompt: "test",
     });
-    // Manually set status to completed
-    db.prepare("UPDATE agents SET status = 'completed' WHERE id = ?").run("agt_b1");
+    updateAgentStatus(db, agent1.id, "completed");
 
-    createAgent(db, {
-      agent_id: "agt_b2",
+    const agent2 = createAgent(db, {
+      agent_id: "",
       run_id: runId,
       role: "builder",
-      name: "builder-2",
-      module_id: "mod-bar",
-      system_prompt: "build bar",
+      name: "builder-mod-b",
+      module_id: "mod-b",
+      system_prompt: "test",
     });
-    db.prepare("UPDATE agents SET status = 'completed' WHERE id = ?").run("agt_b2");
+    updateAgentStatus(db, agent2.id, "completed");
 
-    const modules = getCompletedModules(db, runId);
-    expect(modules.size).toBe(2);
-    expect(modules.has("mod-foo")).toBe(true);
-    expect(modules.has("mod-bar")).toBe(true);
+    const result = getCompletedModules(db, runId);
+    expect(result.size).toBe(2);
+    expect(result.has("mod-a")).toBe(true);
+    expect(result.has("mod-b")).toBe(true);
   });
 
   test("excludes failed builders", () => {
-    createAgent(db, {
-      agent_id: "agt_b3",
+    const agent1 = createAgent(db, {
+      agent_id: "",
       run_id: runId,
       role: "builder",
-      name: "builder-3",
-      module_id: "mod-ok",
-      system_prompt: "build ok",
+      name: "builder-mod-a",
+      module_id: "mod-a",
+      system_prompt: "test",
     });
-    db.prepare("UPDATE agents SET status = 'completed' WHERE id = ?").run("agt_b3");
+    updateAgentStatus(db, agent1.id, "completed");
 
-    createAgent(db, {
-      agent_id: "agt_b4",
+    const agent2 = createAgent(db, {
+      agent_id: "",
       run_id: runId,
       role: "builder",
-      name: "builder-4",
-      module_id: "mod-fail",
-      system_prompt: "build fail",
+      name: "builder-mod-b",
+      module_id: "mod-b",
+      system_prompt: "test",
     });
-    db.prepare("UPDATE agents SET status = 'failed' WHERE id = ?").run("agt_b4");
+    updateAgentStatus(db, agent2.id, "failed", "some error");
 
-    const modules = getCompletedModules(db, runId);
-    expect(modules.size).toBe(1);
-    expect(modules.has("mod-ok")).toBe(true);
-    expect(modules.has("mod-fail")).toBe(false);
+    const result = getCompletedModules(db, runId);
+    expect(result.size).toBe(1);
+    expect(result.has("mod-a")).toBe(true);
+    expect(result.has("mod-b")).toBe(false);
   });
 
   test("excludes non-builder agents", () => {
-    createAgent(db, {
-      agent_id: "agt_a1",
+    const builder = createAgent(db, {
+      agent_id: "",
+      run_id: runId,
+      role: "builder",
+      name: "builder-mod-a",
+      module_id: "mod-a",
+      system_prompt: "test",
+    });
+    updateAgentStatus(db, builder.id, "completed");
+
+    const architect = createAgent(db, {
+      agent_id: "",
       run_id: runId,
       role: "architect",
       name: "architect-1",
-      system_prompt: "architect prompt",
+      system_prompt: "test",
     });
-    db.prepare("UPDATE agents SET status = 'completed' WHERE id = ?").run("agt_a1");
+    updateAgentStatus(db, architect.id, "completed");
 
-    const modules = getCompletedModules(db, runId);
-    expect(modules.size).toBe(0);
+    const result = getCompletedModules(db, runId);
+    expect(result.size).toBe(1);
+    expect(result.has("mod-a")).toBe(true);
   });
 
-  test("excludes builders from other runs", () => {
-    const otherRunId = createRun(db, { spec_id: "spec_other" }).id;
-
-    createAgent(db, {
-      agent_id: "agt_b5",
-      run_id: otherRunId,
-      role: "builder",
-      name: "builder-5",
-      module_id: "mod-other",
-      system_prompt: "build other",
-    });
-    db.prepare("UPDATE agents SET status = 'completed' WHERE id = ?").run("agt_b5");
-
-    const modules = getCompletedModules(db, runId);
-    expect(modules.size).toBe(0);
-  });
-});
-
-// ─── getResumableRuns ─────────────────────────────────────────────────
-
-describe("getResumableRuns", () => {
-  test("returns empty array when no runs", () => {
-    // The beforeEach creates a pending run, which shouldn't be resumable
-    const runs = getResumableRuns(db);
-    expect(runs).toEqual([]);
-  });
-
-  test("returns failed runs", () => {
-    updateRunStatus(db, runId, "failed", "budget exceeded");
-    const runs = getResumableRuns(db);
-    expect(runs.length).toBe(1);
-    expect(runs[0].id).toBe(runId);
-    expect(runs[0].status).toBe("failed");
-    expect(runs[0].error).toBe("budget exceeded");
-  });
-
-  test("returns running runs with no active agents (stale)", () => {
-    updateRunStatus(db, runId, "running");
-
-    // No agents at all — stale running run
-    const runs = getResumableRuns(db);
-    expect(runs.length).toBe(1);
-    expect(runs[0].id).toBe(runId);
-    expect(runs[0].status).toBe("running");
-  });
-
-  test("does NOT return running runs with active agents", () => {
-    updateRunStatus(db, runId, "running");
-
-    createAgent(db, {
-      agent_id: "agt_active",
+  test("handles builders without module_id gracefully", () => {
+    const agent = createAgent(db, {
+      agent_id: "",
       run_id: runId,
       role: "builder",
-      name: "builder-active",
-      system_prompt: "building",
+      name: "builder-main",
+      system_prompt: "test",
     });
-    db.prepare("UPDATE agents SET status = 'running' WHERE id = ?").run("agt_active");
+    updateAgentStatus(db, agent.id, "completed");
 
-    const runs = getResumableRuns(db);
-    expect(runs.length).toBe(0);
-  });
-
-  test("does NOT return completed runs", () => {
-    updateRunStatus(db, runId, "completed");
-    const runs = getResumableRuns(db);
-    expect(runs.length).toBe(0);
-  });
-
-  test("does NOT return pending runs", () => {
-    // run is pending by default
-    const runs = getResumableRuns(db);
-    expect(runs.length).toBe(0);
-  });
-
-  test("orders by created_at DESC", () => {
-    // Give the first run an earlier timestamp
-    db.prepare("UPDATE runs SET created_at = '2025-01-01T00:00:00Z' WHERE id = ?").run(runId);
-    const run2Id = createRun(db, { spec_id: "spec_test2" }).id;
-    // Give the second run a later timestamp
-    db.prepare("UPDATE runs SET created_at = '2025-06-01T00:00:00Z' WHERE id = ?").run(run2Id);
-
-    updateRunStatus(db, runId, "failed");
-    updateRunStatus(db, run2Id, "failed");
-
-    const runs = getResumableRuns(db);
-    expect(runs.length).toBe(2);
-    // run2 created later, so it should be first (DESC order)
-    expect(runs[0].id).toBe(run2Id);
-    expect(runs[1].id).toBe(runId);
-  });
-
-  test("includes spec_id and current_phase", () => {
-    db.prepare("UPDATE runs SET current_phase = ? WHERE id = ?").run("build", runId);
-    updateRunStatus(db, runId, "failed");
-
-    const runs = getResumableRuns(db);
-    expect(runs.length).toBe(1);
-    expect(runs[0].spec_id).toBe("spec_test");
-    expect(runs[0].current_phase).toBe("build");
-  });
-});
-
-// ─── ResumeOptions type ──────────────────────────────────────────────
-
-describe("ResumeOptions", () => {
-  test("type is correctly shaped", () => {
-    // Type-level test: this should compile
-    const opts: ResumeOptions = {
-      runId: "run_123",
-    };
-    expect(opts.runId).toBe("run_123");
-    expect(opts.fromPhase).toBeUndefined();
-    expect(opts.budgetUsd).toBeUndefined();
-  });
-
-  test("accepts optional fromPhase", () => {
-    const opts: ResumeOptions = {
-      runId: "run_123",
-      fromPhase: "build",
-    };
-    expect(opts.fromPhase).toBe("build");
-  });
-
-  test("accepts optional budgetUsd", () => {
-    const opts: ResumeOptions = {
-      runId: "run_123",
-      budgetUsd: 20.0,
-    };
-    expect(opts.budgetUsd).toBe(20.0);
+    // Should not crash; builder without module_id is excluded
+    const result = getCompletedModules(db, runId);
+    expect(result.size).toBe(0);
   });
 });

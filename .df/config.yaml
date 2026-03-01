@@ -1,0 +1,20 @@
+project:
+  name: df-cli
+  root: .
+  branch: main
+build:
+  default_mode: thorough
+  max_parallel: 4
+  budget_usd: 50
+  max_iterations: 3
+runtime:
+  agent_binary: claude
+  heartbeat_interval_ms: 30000
+  heartbeat_timeout_ms: 90000
+  max_agent_lifetime_ms: 2700000
+thresholds:
+  satisfaction: 0.8
+  changeability: 0.6
+resources:
+  max_worktrees: 6
+  max_api_slots: 4
