@@ -72,7 +72,8 @@ export const buildCommand = new Command("build")
       }
     }
 
-    const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary);
+    const logsDir = join(dfDir, "logs");
+    const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary, logsDir);
     const engine = new PipelineEngine(db, runtime, config);
 
     const runId = await engine.execute(specId, {
