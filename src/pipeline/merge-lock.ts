@@ -1,24 +1,36 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import type { SqliteDb } from "../db/index.js";
 
+/**
+ * State stored in the .df/merge.lock file.
+ * Conforms to the MergeLockFileFormat contract:
+ * { runId: string, acquiredAt: string (ISO 8601), pid: integer }
+ * No additional properties allowed.
+ */
 export interface MergeLockInfo {
   runId: string;
   acquiredAt: string;
   pid: number;
 }
 
+/** @deprecated Use MergeLockInfo instead */
+export type MergeLockState = MergeLockInfo;
+
 const LOCK_FILENAME = "merge.lock";
+const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const POLL_INTERVAL_MS = 1_000;
 
 function lockPath(dfDir: string): string {
   return join(dfDir, LOCK_FILENAME);
 }
 
 /**
- * Check if a PID is alive. Returns true if the process exists.
+ * Check if a process with the given PID is still alive.
  */
-function isPidAlive(pid: number): boolean {
+function isProcessAlive(pid: number): boolean {
   try {
-    // Sending signal 0 checks existence without sending actual signal
+    // Sending signal 0 checks existence without killing
     process.kill(pid, 0);
     return true;
   } catch {
@@ -35,20 +47,31 @@ export function getMergeLockInfo(dfDir: string): MergeLockInfo | null {
   if (!existsSync(path)) return null;
 
   try {
-    const content = readFileSync(path, "utf-8");
-    const parsed = JSON.parse(content);
+    const raw = readFileSync(path, "utf-8");
+    const parsed = JSON.parse(raw);
+
+    // Validate required fields and types per MergeLockFileFormat schema
     if (
-      typeof parsed.runId === "string" &&
-      typeof parsed.acquiredAt === "string" &&
-      typeof parsed.pid === "number"
+      typeof parsed.runId !== "string" ||
+      typeof parsed.acquiredAt !== "string" ||
+      !Number.isInteger(parsed.pid)
     ) {
-      return parsed as MergeLockInfo;
+      return null;
     }
-    return null;
+
+    return {
+      runId: parsed.runId,
+      acquiredAt: parsed.acquiredAt,
+      pid: parsed.pid,
+    };
   } catch {
+    // Corrupted or unreadable lock file
     return null;
   }
 }
+
+/** @deprecated Use getMergeLockInfo instead */
+export const getMergeLockState = getMergeLockInfo;
 
 /**
  * Acquire the merge lock.
@@ -65,20 +88,20 @@ export function acquireMergeLock(dfDir: string, runId: string): boolean {
   const existing = getMergeLockInfo(dfDir);
 
   if (existing) {
-    // Same run — idempotent
+    // Same run re-acquiring — idempotent
     if (existing.runId === runId) {
       return true;
     }
 
-    // Different run — check if PID is alive
-    if (isPidAlive(existing.pid)) {
-      return false; // Lock is held by a live process
+    // Different run — check if the holder is still alive
+    if (isProcessAlive(existing.pid)) {
+      return false;
     }
 
-    // PID is dead — stale lock, steal it
+    // Stale lock (dead PID) — steal it
   }
 
-  // Write the lock
+  // Write new lock
   const lockInfo: MergeLockInfo = {
     runId,
     acquiredAt: new Date().toISOString(),
@@ -90,10 +113,8 @@ export function acquireMergeLock(dfDir: string, runId: string): boolean {
 }
 
 /**
- * Release the merge lock.
- *
- * Removes the lockfile only if it belongs to the specified run.
- * No-op if the lock doesn't exist or belongs to another run.
+ * Release the merge lock, but only if it belongs to the given runId.
+ * No-op if the lock doesn't exist or belongs to a different run.
  */
 export function releaseMergeLock(dfDir: string, runId: string): void {
   const existing = getMergeLockInfo(dfDir);
@@ -108,10 +129,10 @@ export function releaseMergeLock(dfDir: string, runId: string): void {
 }
 
 /**
- * Wait until the merge lock can be acquired, or timeout.
+ * Wait until the merge lock can be acquired, or throw on timeout.
  *
- * Polls at the specified interval until the lock is acquired.
- * Throws if the timeout is exceeded.
+ * Polls at the specified interval. If the lock holder's PID is dead,
+ * the stale lock is automatically stolen.
  *
  * @param dfDir - The .df directory path
  * @param runId - The run ID to acquire the lock for
@@ -121,26 +142,72 @@ export function releaseMergeLock(dfDir: string, runId: string): void {
 export async function waitForMergeLock(
   dfDir: string,
   runId: string,
-  timeoutMs: number = 300_000,
-  pollIntervalMs: number = 1_000,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  pollIntervalMs: number = POLL_INTERVAL_MS,
 ): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
+  const start = Date.now();
 
-  while (Date.now() < deadline) {
+  while (true) {
     if (acquireMergeLock(dfDir, runId)) {
       return;
     }
 
+    const elapsed = Date.now() - start;
+    if (elapsed >= timeoutMs) {
+      throw new Error(
+        `Merge lock timeout: could not acquire lock within ${timeoutMs}ms. ` +
+        `Lock held by run: ${getMergeLockInfo(dfDir)?.runId ?? "unknown"}`,
+      );
+    }
+
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
+}
 
-  // One final attempt
-  if (acquireMergeLock(dfDir, runId)) {
-    return;
+/**
+ * Get the merge queue position for a given run.
+ *
+ * Returns:
+ * - 0 if this run currently holds the lock
+ * - null if this run is not in the merge phase / not queued
+ * - A positive integer indicating how many runs are ahead in the queue
+ *
+ * Queue position is determined by counting runs in "merge" phase
+ * that were created before this run.
+ */
+export function getMergeQueuePosition(
+  dfDir: string,
+  db: SqliteDb,
+  runId: string,
+): number | null {
+  // Check if this run holds the lock
+  const lockInfo = getMergeLockInfo(dfDir);
+  if (lockInfo?.runId === runId) {
+    return 0;
   }
 
-  throw new Error(
-    `Merge lock timeout: could not acquire lock within ${timeoutMs}ms. ` +
-    `Lock held by run: ${getMergeLockInfo(dfDir)?.runId ?? "unknown"}`
-  );
+  // Query runs in merge phase, ordered by creation time
+  try {
+    const rows = db
+      .query(
+        `SELECT id, created_at FROM runs
+         WHERE current_phase = 'merge' AND status = 'running'
+         ORDER BY created_at ASC`,
+      )
+      .all() as Array<{ id: string; created_at: string }>;
+
+    const myIndex = rows.findIndex((r) => r.id === runId);
+    if (myIndex === -1) return null;
+
+    // Position is the number of runs ahead (those with earlier created_at)
+    const ahead = myIndex;
+    if (lockInfo && rows.some((r) => r.id === lockInfo.runId)) {
+      // Lock holder is in the list, but they count as "merging" not "ahead"
+      // They're at position 0, everyone else shifts
+    }
+
+    return ahead;
+  } catch {
+    return null;
+  }
 }
