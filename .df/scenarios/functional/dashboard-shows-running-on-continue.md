@@ -1,29 +1,33 @@
 ---
 name: dashboard-shows-running-on-continue
 type: functional
-spec_id: run_01KJNH14DGMNSTJH5EJVY17TQ9
-created_by: agt_01KJNH14DHP9J33BQJ5KW6S6ZM
+spec_id: run_01KJRD336D6QVSH0Z3P60Y3QA3
+created_by: agt_01KJRD336E2WR8VT2VHPW6XR1E
 ---
 
-Test: After 'dark continue', module card shows latest agent status (Running), not stale failed status.
+SCENARIO: Dashboard shows 'running' status for a module after dark continue, not stale 'failed' status.
 
 SETUP:
-1. Create in-memory SQLite DB with schema
-2. Insert a run (run_r1) in status 'running', current_phase 'build'
-3. Insert a buildplan with 2 modules: mod-alpha, mod-beta
-4. Insert FIRST builder agent for mod-alpha: agt_old, status='failed', created_at='2026-03-01T11:00:00Z', cost_usd=1.5, tokens_used=20000, pid=1111
-5. Insert SECOND (retry) builder agent for mod-alpha: agt_new, status='running', created_at='2026-03-01T11:10:00Z', cost_usd=0.5, tokens_used=5000, pid=2222
-6. Insert builder agent for mod-beta: agt_beta, status='completed', created_at='2026-03-01T11:00:00Z'
+1. Create an in-memory SQLite DB with schema
+2. Insert a run (id='run_cont1', status='running', phase='build')
+3. Insert a buildplan with 2 modules: 'mod-A' and 'mod-B'
+4. Insert agent for mod-A: (id='agt_old', role='builder', module_id='mod-A', status='failed', created_at='2026-03-01T11:00:00Z')
+5. Insert agent for mod-A (retry): (id='agt_new', role='builder', module_id='mod-A', status='running', created_at='2026-03-01T12:00:00Z')
+6. Insert agent for mod-B: (id='agt_b', role='builder', module_id='mod-B', status='completed', created_at='2026-03-01T11:00:00Z')
+7. Start dashboard server with this DB
 
 TEST STEPS:
-1. GET /api/runs/{run_r1}/modules
+1. GET /api/runs/run_cont1/modules
 2. Parse JSON response
+3. Find the module with id='mod-A'
 
 EXPECTED:
-- Response status 200
-- mod-alpha entry has agentStatus='running' (NOT 'failed')
-- mod-beta entry has agentStatus='completed'
+- mod-A.agentStatus === 'running' (NOT 'failed')
+- The returned status reflects the LATEST agent (agt_new), not the earliest (agt_old)
 
 PASS CRITERIA:
-- agentStatus for mod-alpha MUST be 'running'
-- If agentStatus is 'failed', the bug is NOT fixed (FAIL)
+- The agentStatus field for mod-A must be 'running'
+- If it returns 'failed', the bug is NOT fixed
+
+IMPLEMENTATION HINT FOR EVALUATOR:
+The fix should be in handleGetModules() in src/dashboard/server.ts. The SQL query for agent lookup must include ORDER BY created_at DESC before LIMIT 1.
