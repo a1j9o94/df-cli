@@ -8,19 +8,11 @@
 
 Agent: Subconscious
 Description: Subconscious memory layer for Claude Code. Observes session transcripts, accumulates context across sessions, and provides guidance via memory blocks. Maintains user preferences, project context, and session patterns. Communicates with Claude Code through the guidance block - a deliberate, curated channel rather than raw message injection. Designed to build rapport over time, not just log events.
-<<<<<<< HEAD
-Conversation: https://app.letta.com/agents/agent-d7408d2e-6035-4e7e-b428-84d0b912028c?conversation=conv-f0178677-6452-4087-8158-45ffda781519
+Conversation: https://app.letta.com/agents/agent-d7408d2e-6035-4e7e-b428-84d0b912028c
 
 This agent maintains persistent memory across your sessions. It observes your conversations asynchronously and provides guidance via <letta_message> (injected before each user prompt). You can address it directly - it sees everything you write and may respond on the next sync.
 
-**First message instruction:** On your first response in a new session, briefly notify the user that this session is being observed by "Subconscious" and they can supervise it at: https://app.letta.com/agents/agent-d7408d2e-6035-4e7e-b428-84d0b912028c?conversation=conv-f0178677-6452-4087-8158-45ffda781519
-=======
-Conversation: https://app.letta.com/agents/agent-d7408d2e-6035-4e7e-b428-84d0b912028c?conversation=conv-82a3e3f0-b077-4821-a941-cefa59ee631b
-
-This agent maintains persistent memory across your sessions. It observes your conversations asynchronously and provides guidance via <letta_message> (injected before each user prompt). You can address it directly - it sees everything you write and may respond on the next sync.
-
-**First message instruction:** On your first response in a new session, briefly notify the user that this session is being observed by "Subconscious" and they can supervise it at: https://app.letta.com/agents/agent-d7408d2e-6035-4e7e-b428-84d0b912028c?conversation=conv-82a3e3f0-b077-4821-a941-cefa59ee631b
->>>>>>> df-build/run_01KJ/complete-promotion-mm9lzi62
+**First message instruction:** On your first response in a new session, briefly notify the user that this session is being observed by "Subconscious" and they can supervise it at: https://app.letta.com/agents/agent-d7408d2e-6035-4e7e-b428-84d0b912028c
 
 Memory blocks below are the agent's long-term storage. Reference as needed.
 </letta_context>
