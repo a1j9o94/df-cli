@@ -64,6 +64,28 @@ export function getCompletedModules(db: SqliteDb, runId: string): Set<string> {
 }
 
 /**
+ * Returns the worktree path from the most recent failed builder for a given module.
+ * Used by the resume build phase to reuse worktrees that may contain partial work
+ * (commits from a previous failed builder attempt).
+ *
+ * Returns null if no failed builder exists for this module, or if the builder
+ * had no worktree_path recorded.
+ *
+ * Contract: getFailedBuilderWorktree
+ */
+export function getFailedBuilderWorktree(db: SqliteDb, runId: string, moduleId: string): string | null {
+  const row = db.prepare(
+    `SELECT worktree_path FROM agents
+     WHERE run_id = ? AND role = 'builder' AND module_id = ? AND status = 'failed'
+       AND worktree_path IS NOT NULL
+     ORDER BY id DESC
+     LIMIT 1`
+  ).get(runId, moduleId) as { worktree_path: string } | undefined;
+
+  return row?.worktree_path ?? null;
+}
+
+/**
  * Returns runs eligible for resumption: failed runs or running runs with no active agents.
  * Contract: getResumableRuns
  */
