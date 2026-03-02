@@ -1,33 +1,28 @@
 ---
 name: agent-list-worktree-path
 type: functional
-spec_id: run_01KJQERB5P8DCWZJXCZR5Z64BW
-created_by: agt_01KJQERB5RN11QM94PWHDCE5WH
+spec_id: run_01KJR3DRQJPAE01XP0BJ0TGM1E
+created_by: agt_01KJR3DRQKZK8N369V2TJZ66EJ
 ---
 
-SCENARIO: Agent list shows worktree path for each builder agent.
+Test: Agent list shows worktree path for builder agents.
 
 SETUP:
-1. Initialize dark factory project
-2. Start a build with at least 2 builder agents running in parallel
-3. Ensure builders have worktree_path set in the database
+1. Initialize in-memory DB with schema
+2. Create a run record
+3. Create a builder agent with worktree_path='/var/folders/.../foo-mm8abc', status=running
 
-TEST STEPS:
-1. Run 'dark agent list'
-2. For each builder agent, check for worktree path line
+EXECUTE:
+Run 'dark agent list' or invoke the list formatter
 
 EXPECTED OUTPUT:
-Each builder agent entry should include a second line with worktree path:
-  agt_XXXXX  builder-foo (builder)  running  12m 34s  ~$0.62  3 files  module=foo
+- The worktree path MUST appear in the output for each builder agent that has one
+- The path should appear on a sub-line (indented) beneath the main agent summary line, prefixed with 'worktree:' or similar label
+- Format example:
+  agt_01XYZ  builder-foo (builder)  running  12m 34s  ~$0.62  3 files  module=foo
     worktree: /var/folders/.../foo-mm8abc
 
 PASS CRITERIA:
-- Every agent with role=builder shows a 'worktree:' line beneath its main info line
-- The worktree path is an absolute filesystem path
-- The path matches the worktree_path stored in the agents table (verify via --json output)
-- Non-builder agents (orchestrator, architect) that lack worktree_path do NOT show a worktree line (no empty 'worktree: ' output)
-
-FAIL CRITERIA:
-- Builder agents missing worktree path in output
-- Worktree path shown as 'null' or empty string
-- Need to query sqlite to find worktree path
+- Output contains the literal worktree path string '/var/folders/.../foo-mm8abc'
+- The worktree path appears labeled (e.g., 'worktree:')
+- Agents without worktree_path do NOT show a worktree line
