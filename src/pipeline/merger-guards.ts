@@ -88,7 +88,9 @@ export function runProjectTests(projectRoot: string): TestResult {
 /**
  * Scan all tracked (and staged) files for merge conflict markers.
  *
- * Checks for `<<<<<<<`, `=======`, `>>>>>>>` patterns in tracked files.
+ * Checks for `<<<<<<<`, `=======`, `>>>>>>>` patterns at the start of lines
+ * in tracked files. Line-start anchoring avoids false positives from code
+ * that mentions conflict markers in comments, strings, or documentation.
  */
 export function scanConflictMarkers(projectRoot: string): ConflictScanResult {
   const files: string[] = [];
@@ -110,10 +112,13 @@ export function scanConflictMarkers(projectRoot: string): ConflictScanResult {
 
       try {
         const content = readFileSync(filePath, "utf-8");
+        // Real conflict markers always appear at the start of a line.
+        // Using line-start anchors avoids false positives from code that
+        // *mentions* conflict markers (comments, test strings, docs).
         if (
-          content.includes("<<<<<<<") &&
-          content.includes("=======") &&
-          content.includes(">>>>>>>")
+          /^<{7}/m.test(content) &&
+          /^={7}/m.test(content) &&
+          /^>{7}/m.test(content)
         ) {
           files.push(file);
         }

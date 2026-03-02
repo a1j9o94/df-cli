@@ -97,8 +97,8 @@ describe("waitForAgent", () => {
       updateAgentStatus(db, agent.id, "completed");
     }, 50);
 
-    // Should resolve without error
-    await waitForAgent(db, runtime, agent.id);
+    // Should resolve without error (use fast poll interval for tests)
+    await waitForAgent(db, runtime, agent.id, undefined, 50);
   });
 
   test("throws when agent fails", async () => {
@@ -117,7 +117,7 @@ describe("waitForAgent", () => {
     }, 50);
 
     try {
-      await waitForAgent(db, runtime, agent.id);
+      await waitForAgent(db, runtime, agent.id, undefined, 50);
       expect(true).toBe(false); // Should not reach
     } catch (err) {
       expect((err as Error).message).toContain("Agent failed");
@@ -149,7 +149,7 @@ describe("waitForAgent", () => {
     });
 
     try {
-      await waitForAgent(db, runtime, agent.id);
+      await waitForAgent(db, runtime, agent.id, undefined, 50);
       expect(true).toBe(false); // Should not reach
     } catch (err) {
       expect((err as Error).message).toContain("process exited without completing");
@@ -234,6 +234,7 @@ describe("executeAgentPhase", () => {
       (agentId) => `test prompt for ${agentId}`,
       {},
       () => {}, // no-op sendInstructions for test
+      50, // fast poll interval for tests
     );
 
     expect(spawnedRole).toBe("evaluator");

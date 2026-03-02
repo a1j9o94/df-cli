@@ -101,6 +101,20 @@ describe("scanConflictMarkers", () => {
     expect(result.files).toContain("conflict.txt");
   });
 
+  test("does not flag inline mentions of conflict markers (comments, strings, docs)", () => {
+    // Simulates code that *talks about* conflict markers without being a real conflict
+    writeFileSync(
+      join(repoDir, "guards.ts"),
+      '// Checks for `<<<<<<<`, `=======`, `>>>>>>>` patterns\n' +
+      'if (content.includes("<<<<<<<") && content.includes("=======") && content.includes(">>>>>>>")) {\n' +
+      '  found = true;\n}\n',
+    );
+    execSync("git add guards.ts", { cwd: repoDir, stdio: "pipe" });
+
+    const result = scanConflictMarkers(repoDir);
+    expect(result.found).toBe(false);
+  });
+
   test("does not flag conflict markers in untracked files", () => {
     writeFileSync(
       join(repoDir, "untracked.txt"),
