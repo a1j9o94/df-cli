@@ -60,6 +60,12 @@ The buildplan JSON must contain:
 3. Err toward fewer, fatter modules (coordination cost ~ N^2)
 4. The dependency graph must be a DAG — no cycles
 5. Estimate honestly — underestimates erode trust, overestimates waste budget
+6. **Large file edits require special handling:**
+   - If a module requires modifying a file >300 lines, consider splitting into sub-modules
+   - Each sub-module should touch at most 1-2 existing files
+   - Prefer adding new functions to a file over restructuring existing code
+   - If restructuring is needed, create a dedicated module with no other scope
+   - This prevents builder context exhaustion — a 600-line file read + edit cycle can exceed context limits
 
 ## Communication
 - Check messages: dark mail check --agent ${context.agentId}

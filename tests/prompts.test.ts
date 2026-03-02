@@ -1,0 +1,159 @@
+import { describe, test, expect } from "bun:test";
+import { getBuilderPrompt } from "../src/agents/prompts/builder.js";
+import { getArchitectPrompt } from "../src/agents/prompts/architect.js";
+
+const baseBuilderContext = {
+  specId: "spec_test123",
+  runId: "run_test456",
+  agentId: "agt_test789",
+  moduleId: "my-module",
+  contracts: ["ctr_abc"],
+  worktreePath: "/tmp/worktrees/my-module",
+};
+
+const baseArchitectContext = {
+  specId: "spec_test123",
+  runId: "run_test456",
+  agentId: "agt_test789",
+};
+
+// =============================================================================
+// Builder Prompt: Auto-commit after each TDD cycle
+// =============================================================================
+
+describe("Builder prompt — auto-commit instructions", () => {
+  test("includes auto-commit instruction after each passing test", () => {
+    const prompt = getBuilderPrompt(baseBuilderContext);
+    expect(prompt).toContain("git add -A && git commit");
+  });
+
+  test("auto-commit instruction mentions TDD cycle", () => {
+    const prompt = getBuilderPrompt(baseBuilderContext);
+    // Should reference committing after each passing test / TDD cycle
+    expect(prompt).toMatch(/after each (passing test|TDD cycle|successful test)/i);
+  });
+
+  test("auto-commit instruction includes a descriptive commit message format", () => {
+    const prompt = getBuilderPrompt(baseBuilderContext);
+    // The commit message should describe what was just implemented
+    expect(prompt).toMatch(/git commit -m/);
+  });
+
+  test("auto-commit section appears in the TDD Workflow section", () => {
+    const prompt = getBuilderPrompt(baseBuilderContext);
+    // The auto-commit instruction should be in or near the TDD Workflow section
+    const tddSectionIndex = prompt.indexOf("## TDD Workflow");
+    const autoCommitIndex = prompt.indexOf("git add -A && git commit");
+    expect(tddSectionIndex).toBeGreaterThan(-1);
+    expect(autoCommitIndex).toBeGreaterThan(-1);
+    // Auto-commit should come after TDD Workflow heading
+    expect(autoCommitIndex).toBeGreaterThan(tddSectionIndex);
+  });
+
+  test("preserves existing builder prompt structure", () => {
+    const prompt = getBuilderPrompt(baseBuilderContext);
+    // All existing sections should still be present
+    expect(prompt).toContain("## Identity");
+    expect(prompt).toContain("## Assignment");
+    expect(prompt).toContain("## Workflow");
+    expect(prompt).toContain("## TDD Workflow");
+    expect(prompt).toContain("## Contract Compliance");
+    expect(prompt).toContain("## Communication");
+    expect(prompt).toContain("## Constraints");
+  });
+
+  test("includes agent-specific values in assignment", () => {
+    const prompt = getBuilderPrompt(baseBuilderContext);
+    expect(prompt).toContain("spec_test123");
+    expect(prompt).toContain("run_test456");
+    expect(prompt).toContain("agt_test789");
+    expect(prompt).toContain("my-module");
+    expect(prompt).toContain("/tmp/worktrees/my-module");
+    expect(prompt).toContain("ctr_abc");
+  });
+
+  test("works with empty contracts list", () => {
+    const prompt = getBuilderPrompt({
+      ...baseBuilderContext,
+      contracts: [],
+    });
+    expect(prompt).toContain("## Identity");
+    expect(prompt).not.toContain("Contracts:");
+  });
+});
+
+// =============================================================================
+// Architect Prompt: Large-file decomposition guidance
+// =============================================================================
+
+describe("Architect prompt — large-file decomposition guidance", () => {
+  test("includes guidance about files >300 lines", () => {
+    const prompt = getArchitectPrompt(baseArchitectContext);
+    expect(prompt).toContain("300");
+  });
+
+  test("advises splitting large-file modules into sub-modules", () => {
+    const prompt = getArchitectPrompt(baseArchitectContext);
+    expect(prompt).toMatch(/split|sub-module/i);
+  });
+
+  test("advises at most 1-2 existing files per sub-module", () => {
+    const prompt = getArchitectPrompt(baseArchitectContext);
+    expect(prompt).toMatch(/1-2 (existing )?files|at most (1-2|one or two)/i);
+  });
+
+  test("advises preferring adding new functions over restructuring", () => {
+    const prompt = getArchitectPrompt(baseArchitectContext);
+    expect(prompt).toMatch(/prefer.*add|new function.*over.*restructur/i);
+  });
+
+  test("advises dedicating restructuring to its own module", () => {
+    const prompt = getArchitectPrompt(baseArchitectContext);
+    expect(prompt).toMatch(/restructur.*dedicated|dedicated.*restructur/i);
+  });
+
+  test("guidance appears in Decomposition Principles section", () => {
+    const prompt = getArchitectPrompt(baseArchitectContext);
+    const decompositionIndex = prompt.indexOf("## Decomposition Principles");
+    expect(decompositionIndex).toBeGreaterThan(-1);
+
+    // The large-file guidance should be after Decomposition Principles
+    const guidanceIndex = prompt.indexOf("300");
+    expect(guidanceIndex).toBeGreaterThan(decompositionIndex);
+  });
+
+  test("preserves existing architect prompt structure", () => {
+    const prompt = getArchitectPrompt(baseArchitectContext);
+    expect(prompt).toContain("## Identity");
+    expect(prompt).toContain("## Inputs");
+    expect(prompt).toContain("## Workflow");
+    expect(prompt).toContain("## Creating Holdout Scenarios");
+    expect(prompt).toContain("## Buildplan Output");
+    expect(prompt).toContain("## Decomposition Principles");
+    expect(prompt).toContain("## Communication");
+  });
+
+  test("includes agent-specific values", () => {
+    const prompt = getArchitectPrompt(baseArchitectContext);
+    expect(prompt).toContain("spec_test123");
+    expect(prompt).toContain("run_test456");
+    expect(prompt).toContain("agt_test789");
+  });
+
+  test("includes optional specFilePath when provided", () => {
+    const prompt = getArchitectPrompt({
+      ...baseArchitectContext,
+      specFilePath: "/path/to/spec.md",
+    });
+    expect(prompt).toContain("/path/to/spec.md");
+  });
+
+  test("includes optional codebasePaths when provided", () => {
+    const prompt = getArchitectPrompt({
+      ...baseArchitectContext,
+      codebasePaths: ["src/", "lib/"],
+    });
+    expect(prompt).toContain("src/");
+    expect(prompt).toContain("lib/");
+  });
+});
