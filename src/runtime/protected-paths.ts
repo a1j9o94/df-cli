@@ -24,6 +24,11 @@ export const PROTECTED_PATTERNS: readonly string[] = Object.freeze([
   ".df/logs/",
   ".claude/",
   ".letta/",
+  "node_modules/",
+  "dist/",
+  "build/",
+  ".env",
+  ".env.local",
 ]);
 
 /**
