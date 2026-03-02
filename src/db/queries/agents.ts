@@ -89,6 +89,18 @@ export function getActiveAgents(db: SqliteDb, runId: string): AgentRecord[] {
   ).all(runId) as AgentRecord[];
 }
 
+/**
+ * Returns agents with 'incomplete' status for a given run.
+ * Incomplete agents are those whose process exited but had commits in their worktree —
+ * they did real work but didn't call `dark agent complete`.
+ * These are retryable via `dark continue`.
+ */
+export function getIncompleteAgents(db: SqliteDb, runId: string): AgentRecord[] {
+  return db.prepare(
+    "SELECT * FROM agents WHERE run_id = ? AND status = 'incomplete' ORDER BY created_at"
+  ).all(runId) as AgentRecord[];
+}
+
 export function getStaleAgents(db: SqliteDb, timeoutMs: number): AgentRecord[] {
   const cutoff = new Date(Date.now() - timeoutMs).toISOString().replace(/\.\d{3}Z$/, "Z");
   return db.prepare(

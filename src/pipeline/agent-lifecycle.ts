@@ -182,6 +182,35 @@ export async function executeAgentPhase(
   }
 }
 
+/**
+ * Returns a badge color for an agent status, used by dashboard display.
+ *
+ * - "incomplete" → "amber" (has work, didn't call complete — retryable)
+ * - "failed" → "red" (no work or error)
+ * - "completed" → "green"
+ * - "running" → "blue"
+ * - "spawning" → "blue"
+ * - "pending" → "gray"
+ * - "killed" → "red"
+ */
+export function getStatusBadge(status: string): "green" | "blue" | "amber" | "red" | "gray" {
+  switch (status) {
+    case "completed":
+      return "green";
+    case "running":
+    case "spawning":
+      return "blue";
+    case "incomplete":
+      return "amber";
+    case "failed":
+    case "killed":
+      return "red";
+    case "pending":
+    default:
+      return "gray";
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
