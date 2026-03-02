@@ -1,8 +1,25 @@
 ---
 name: clean-worktree-passthrough
 type: functional
-spec_id: run_01KJQQT8BDGGZEKPZN2WEF41K9
-created_by: agt_01KJQQT8BFH68W87KWNKGGES7S
+spec_id: run_01KJR06QZXWJ6N1KB7X9XGPP1X
+created_by: agt_01KJR06R00KR48KRNSS5DJPVBF
 ---
 
-PRECONDITION: A git repo with main branch and a worktree branch. The worktree is clean — all changes committed, no unstaged files, no protected files tracked. STEPS: (1) Create main repo with initial commit. (2) Create worktree branch. (3) In worktree: add a new file, stage it, commit it properly. No unstaged changes remain. (4) Advance main with a different non-conflicting commit. (5) Call sanitizeWorktree(worktreePath). (6) Call rebaseWorktreeBranch(worktreePath, 'main'). EXPECTED: sanitizeWorktree is a no-op — no new commits created (commit count before === commit count after). git status --porcelain was already empty. Rebase proceeds normally and succeeds. PASS CRITERIA: The number of commits on the worktree branch does NOT change after sanitizeWorktree (no sanitize commit created). SanitizeResult.committedChanges === false (or equivalent). RebaseResult.success === true. FAIL CRITERIA: sanitizeWorktree creates an unnecessary empty commit, or rebase fails.
+Setup: Create a git repo with initial commit. Create a worktree branch. In the worktree, add a new file (feature.ts), stage it, and commit it properly. The worktree has a clean working tree (git status --porcelain returns empty). Advance main with a separate commit.
+
+Steps:
+1. Call the rebase-and-merge flow with this clean worktree.
+2. Pre-rebase sanitization should:
+   a. Detect that git status --porcelain is empty (no unstaged, no protected files in index)
+   b. Skip all cleanup steps (no-op)
+   c. NOT create any sanitization commit
+3. Rebase should succeed normally.
+4. Merge into main should succeed.
+
+Expected:
+- rebaseAndMerge returns success=true  
+- The feature.ts file appears on main
+- No extra 'sanitize worktree' commit in branch history
+- Sanitization was effectively a no-op
+
+Pass/fail: PASS if merge succeeds normally without any sanitization commits. FAIL if unnecessary sanitization commits are created or if an error occurs on clean worktrees.
