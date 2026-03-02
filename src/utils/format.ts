@@ -21,7 +21,7 @@ function stripFields(data: unknown, fields: string[]): unknown {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
       if (!fields.includes(key)) {
-        result[key] = value;
+        result[key] = stripFields(value, fields);
       }
     }
     return result;
