@@ -1,9 +1,7 @@
-# Dependencies
-node_modules/
-dist/
-build/
+# Dark Factory worktree isolation — auto-generated
+# DO NOT EDIT: This file is managed by the Dark Factory pipeline.
+# Protected paths are defined in src/runtime/protected-paths.ts
 
-# Dark Factory state (local, not committed)
 .df/state.db
 .df/state.db-shm
 .df/state.db-wal
@@ -11,30 +9,5 @@ build/
 .df/state.db.backup
 .df/worktrees/
 .df/logs/
-
-# Claude Code agent state
 .claude/
-
-# Environment
-.env
-.env.local
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Letta (local sync)
 .letta/
-
-# Test coverage
-coverage/
-.nyc_output/
-
-# Original zip
-files.zip

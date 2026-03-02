@@ -1,7 +1,32 @@
 import chalk from "chalk";
 
-export function formatJson(data: unknown): string {
+export interface FormatJsonOptions {
+  /** Field names to exclude from the output (applies to objects and arrays of objects) */
+  excludeFields?: string[];
+}
+
+export function formatJson(data: unknown, options?: FormatJsonOptions): string {
+  const excludeFields = options?.excludeFields;
+  if (excludeFields && excludeFields.length > 0) {
+    data = stripFields(data, excludeFields);
+  }
   return JSON.stringify(data, null, 2);
+}
+
+function stripFields(data: unknown, fields: string[]): unknown {
+  if (Array.isArray(data)) {
+    return data.map((item) => stripFields(item, fields));
+  }
+  if (data !== null && typeof data === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+      if (!fields.includes(key)) {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+  return data;
 }
 
 export function formatStatus(status: string): string {
