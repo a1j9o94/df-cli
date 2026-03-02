@@ -81,3 +81,118 @@ function stripAnsi(str: string): string {
   // eslint-disable-next-line no-control-regex
   return str.replace(/\x1b\[[0-9;]*m/g, "");
 }
+
+/**
+ * Format elapsed time from a created_at ISO timestamp to now.
+ * Returns human-readable: '5s', '12m 34s', '1h 2m'
+ */
+export function formatElapsed(createdAt: string): string {
+  const elapsed = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
+  const secs = Math.max(0, elapsed);
+
+  if (secs < 60) {
+    return `${secs}s`;
+  }
+
+  const minutes = Math.floor(secs / 60);
+  const remainingSecs = secs % 60;
+
+  if (minutes < 60) {
+    return `${minutes}m ${remainingSecs}s`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMins = minutes % 60;
+  return `${hours}h ${remainingMins}m`;
+}
+
+/**
+ * Format an ISO date as relative time from now.
+ * Returns: '2m ago', '1h ago', 'just now', 'never' (for null input)
+ */
+export function formatRelativeTime(isoDate: string | null): string {
+  if (isoDate === null) return "never";
+
+  const elapsed = Math.floor((Date.now() - new Date(isoDate).getTime()) / 1000);
+
+  if (elapsed < 10) return "just now";
+  if (elapsed < 60) return `${elapsed}s ago`;
+
+  const minutes = Math.floor(elapsed / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+/**
+ * Format USD cost with dollar sign.
+ * Returns: '$0.00' for 0, '$0.62', '$1.33'. No ~ prefix (caller adds if estimated).
+ */
+export function formatCost(costUsd: number): string {
+  return `$${costUsd.toFixed(2)}`;
+}
+
+/**
+ * Format token count with comma separators.
+ * Returns: '15,234', '1,000,000'
+ */
+export function formatTokens(count: number): string {
+  return count.toLocaleString("en-US");
+}
+
+/**
+ * Format a file count with proper pluralization.
+ * Returns: '0 files', '1 file', '3 files'
+ */
+export function formatFilesChanged(count: number): string {
+  return count === 1 ? "1 file" : `${count} files`;
+}
+
+/** Info about a module's build progress */
+export interface ModuleProgressInfo {
+  name: string;
+  status: string;
+  elapsed: string | undefined;
+}
+
+/**
+ * Format per-module build progress as a single line.
+ * Returns: 'merge-lock(done) engine-rebase(building 12m 34s) queue-vis(building 11m 0s)'
+ */
+export function formatModuleProgress(modules: ModuleProgressInfo[]): string {
+  if (modules.length === 0) return "";
+
+  return modules
+    .map((m) => {
+      const label = moduleStatusLabel(m.status);
+      if (m.elapsed && (m.status === "running" || m.status === "spawning")) {
+        return `${m.name}(${label} ${m.elapsed})`;
+      }
+      if (m.elapsed && m.status === "failed") {
+        return `${m.name}(${label} ${m.elapsed})`;
+      }
+      return `${m.name}(${label})`;
+    })
+    .join(" ");
+}
+
+function moduleStatusLabel(status: string): string {
+  switch (status) {
+    case "completed":
+      return "done";
+    case "running":
+    case "spawning":
+      return "building";
+    case "pending":
+      return "pending";
+    case "failed":
+    case "killed":
+      return "failed";
+    default:
+      return status;
+  }
+}
