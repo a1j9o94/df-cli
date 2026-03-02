@@ -145,6 +145,12 @@ function buildBuilderBody(agentId: string, context: Record<string, unknown>): st
     "4. Commit your work in the worktree",
     `5. Mark yourself complete: dark agent complete ${agentId}`,
     "",
+    "## CRITICAL — Completion Required",
+    "",
+    `Your work is on a **staging branch**. It will NOT be merged until you call \`dark agent complete ${agentId}\`.`,
+    "",
+    `**CRITICAL: You MUST call \`dark agent complete ${agentId}\` as your FINAL action. Without this call, your work will NOT be merged.**`,
+    "",
     "If you cannot complete this work, call:",
     `dark agent fail ${agentId} --error "<description>"`,
   ].join("\n");

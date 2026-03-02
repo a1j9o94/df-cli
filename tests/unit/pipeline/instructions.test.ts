@@ -264,3 +264,55 @@ describe("sendInstructions - file preloading", () => {
     expect(stepsIndex).toBeGreaterThan(preloadIndex);
   });
 });
+
+// ============================================================
+// sendInstructions — staging branch warning in builder message
+// ============================================================
+describe("sendInstructions - builder staging branch warning", () => {
+  test("builder initial message mentions staging branch", () => {
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "staging-test",
+      worktreePath: "/tmp/wt-staging",
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toMatch(/staging branch/i);
+  });
+
+  test("builder initial message warns work won't be merged without complete", () => {
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "staging-test",
+      worktreePath: "/tmp/wt-staging",
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("NOT be merged");
+    expect(messages[0].body).toContain(`dark agent complete ${agentId}`);
+  });
+
+  test("builder initial message includes CRITICAL warning", () => {
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "staging-test",
+      worktreePath: "/tmp/wt-staging",
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("CRITICAL");
+  });
+
+  test("staging branch warning appears after the Steps section", () => {
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "staging-test",
+      worktreePath: "/tmp/wt-staging",
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    const body = messages[0].body;
+    const stepsIndex = body.indexOf("## Steps");
+    const criticalIndex = body.indexOf("CRITICAL");
+
+    expect(stepsIndex).toBeGreaterThan(-1);
+    expect(criticalIndex).toBeGreaterThan(-1);
+    expect(criticalIndex).toBeGreaterThan(stepsIndex);
+  });
+});

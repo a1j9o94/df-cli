@@ -157,3 +157,35 @@ describe("Architect prompt — large-file decomposition guidance", () => {
     expect(prompt).toContain("lib/");
   });
 });
+
+// =============================================================================
+// Builder Prompt: CRITICAL completion warning (staging branch pattern)
+// =============================================================================
+
+describe("Builder prompt — CRITICAL completion warning", () => {
+  test("includes CRITICAL completion warning with agent ID", () => {
+    const prompt = getBuilderPrompt(baseBuilderContext);
+    expect(prompt).toContain("CRITICAL");
+    expect(prompt).toContain("dark agent complete agt_test789");
+    expect(prompt).toContain("will NOT be merged");
+  });
+
+  test("CRITICAL warning appears at the END of the prompt (after all other sections)", () => {
+    const prompt = getBuilderPrompt(baseBuilderContext);
+    const criticalIndex = prompt.indexOf("CRITICAL");
+    const constraintsIndex = prompt.indexOf("## Constraints");
+    // CRITICAL must come AFTER all sections including Constraints
+    expect(criticalIndex).toBeGreaterThan(constraintsIndex);
+  });
+
+  test("mentions staging branch in the prompt", () => {
+    const prompt = getBuilderPrompt(baseBuilderContext);
+    expect(prompt).toMatch(/staging branch/i);
+  });
+
+  test("staging branch warning explains work won't be merged without complete", () => {
+    const prompt = getBuilderPrompt(baseBuilderContext);
+    // The initial message should contain the staging branch warning
+    expect(prompt).toMatch(/staging branch.*NOT.*merged|NOT.*merged.*staging/is);
+  });
+});

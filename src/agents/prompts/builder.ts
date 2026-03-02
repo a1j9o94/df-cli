@@ -53,5 +53,13 @@ IMPORTANT: Committing after each successful TDD cycle preserves your progress. I
 - You have NO access to holdout scenarios
 - Stay within your module scope (files in scope.creates and scope.modifies)
 - Report cost regularly via heartbeats
+
+## CRITICAL — Completion Required
+
+Your work is on a **staging branch**. It will NOT be merged until you call \`dark agent complete ${context.agentId}\`.
+
+**CRITICAL: You MUST call \`dark agent complete ${context.agentId}\` as your FINAL action. Without this call, your work will NOT be merged.**
+
+If you cannot complete, call: \`dark agent fail ${context.agentId} --error "<description>"\`
 `;
 }
