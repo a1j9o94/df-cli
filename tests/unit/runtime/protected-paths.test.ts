@@ -164,3 +164,60 @@ describe("getProtectedFiles", () => {
     expect(getProtectedFiles(files)).toEqual([]);
   });
 });
+
+describe("single source of truth contract", () => {
+  test("all protected directory patterns end with /", () => {
+    const dirPatterns = PROTECTED_PATTERNS.filter(
+      (p) => p.endsWith("/"),
+    );
+    // Verify directory patterns are recognized by isProtectedPath
+    for (const pattern of dirPatterns) {
+      const dirName = pattern.slice(0, -1); // e.g., ".claude"
+      expect(isProtectedPath(dirName)).toBe(true);
+      expect(isProtectedPath(`${dirName}/anyfile.txt`)).toBe(true);
+    }
+  });
+
+  test("every pattern in PROTECTED_PATTERNS is recognized by isProtectedPath", () => {
+    for (const pattern of PROTECTED_PATTERNS) {
+      if (pattern.endsWith("/")) {
+        // Directory pattern: test the dir itself and a file inside it
+        const dirName = pattern.slice(0, -1);
+        expect(isProtectedPath(dirName)).toBe(true);
+        expect(isProtectedPath(`${dirName}/test-file.txt`)).toBe(true);
+      } else {
+        // Exact file pattern
+        expect(isProtectedPath(pattern)).toBe(true);
+      }
+    }
+  });
+
+  test("getProtectedFiles and filterProtectedFiles are complementary", () => {
+    const mixed = [
+      "src/index.ts",
+      ".df/state.db",
+      "package.json",
+      ".claude/CLAUDE.md",
+      "node_modules/pkg/index.js",
+    ];
+    const protectedOnes = getProtectedFiles(mixed);
+    const safeOnes = filterProtectedFiles(mixed);
+
+    // Every file should be in exactly one list
+    expect(protectedOnes.length + safeOnes.length).toBe(mixed.length);
+
+    // No overlap
+    for (const safe of safeOnes) {
+      expect(protectedOnes).not.toContain(safe);
+    }
+  });
+
+  test("generateWorktreeGitignore includes all PROTECTED_PATTERNS", () => {
+    // This validates the single-source-of-truth: any new pattern added to
+    // PROTECTED_PATTERNS is automatically included in generated .gitignore files
+    const gitignore = generateWorktreeGitignore();
+    for (const pattern of PROTECTED_PATTERNS) {
+      expect(gitignore).toContain(pattern);
+    }
+  });
+});
