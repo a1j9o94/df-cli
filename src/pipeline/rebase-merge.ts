@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { sanitizedMerge } from "./merge-sanitization.js";
 
 export interface RebaseResult {
   success: boolean;
@@ -131,25 +132,14 @@ export function rebaseAndMerge(
       continue;
     }
 
-    // Step 2: Merge the rebased branch into target
-    try {
-      execSync(`git merge ${branch} --no-edit`, {
-        cwd: mainRepoPath,
-        stdio: "pipe",
-        env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
-      });
+    // Step 2: Merge the rebased branch into target using sanitized merge
+    // This automatically strips .df/state.db*, .claude/, .letta/ files
+    const mergeResult2 = sanitizedMerge(mainRepoPath, branch);
+    if (mergeResult2.success) {
       mergedBranches.push(branch);
-    } catch (err) {
-      // Merge failed — try to abort
-      try {
-        execSync("git merge --abort", { cwd: mainRepoPath, stdio: "pipe" });
-      } catch {
-        // ignore
-      }
-
-      const errorMsg = err instanceof Error ? err.message : String(err);
+    } else {
       failedBranches.push(branch);
-      errors.push(`Merge of ${branch} into ${targetBranch} failed: ${errorMsg}`);
+      errors.push(mergeResult2.error ?? `Merge of ${branch} into ${targetBranch} failed`);
     }
   }
 

@@ -1,11 +1,12 @@
 import { Command } from "commander";
 import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { createSpec } from "../../db/queries/specs.js";
 import { newSpecId } from "../../utils/id.js";
 import { serializeFrontmatter } from "../../utils/frontmatter.js";
+import { autoCommitFile } from "../../pipeline/auto-commit.js";
 import { log } from "../../utils/logger.js";
 
 export const specCreateCommand = new Command("create")
@@ -39,6 +40,14 @@ export const specCreateCommand = new Command("create")
 
     writeFileSync(absPath, content);
     createSpec(db, id, title, filePath);
+
+    // Auto-commit spec file to git (belt-and-suspenders: specs in both DB and git)
+    const projectRoot = dirname(dfDir);
+    const gitRelativePath = join(".df", filePath);
+    const commitResult = autoCommitFile(projectRoot, gitRelativePath, `Auto-commit: spec ${id} created`);
+    if (commitResult.success) {
+      log.info("  Spec committed to git history");
+    }
 
     log.success(`Created spec: ${id}`);
     log.info(`  File: ${absPath}`);

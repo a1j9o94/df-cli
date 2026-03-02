@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { execSync } from "node:child_process";
 import { readdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getAgent, updateAgentStatus } from "../../db/queries/agents.js";
@@ -10,6 +10,7 @@ import { listBuildplans } from "../../db/queries/buildplans.js";
 import { listEvents } from "../../db/queries/events.js";
 import { createEvent } from "../../db/queries/events.js";
 import { recordCost } from "../../pipeline/budget.js";
+import { checkMergerGuards } from "../../pipeline/merger-guards.js";
 import { log } from "../../utils/logger.js";
 
 export const agentCompleteCommand = new Command("complete")
@@ -145,7 +146,7 @@ function checkCompletionGuard(
       const run = getRun(db, agent.run_id);
       if (!run) return "Run not found";
 
-      const projectRoot = join(dfDir, "..");
+      const projectRoot = dirname(dfDir);
       try {
         // Check if there are commits after the run started
         const newCommits = execSync(
@@ -159,6 +160,13 @@ function checkCompletionGuard(
       } catch {
         return null; // If git commands fail, don't block completion
       }
+
+      // Run merger guards: tests, conflict markers, state DB check
+      const guardResult = checkMergerGuards(projectRoot, dfDir);
+      if (!guardResult.passed) {
+        return `Merger guards failed:\n${guardResult.errors.map((e) => `  - ${e}`).join("\n")}`;
+      }
+
       return null;
     }
 

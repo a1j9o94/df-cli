@@ -7,6 +7,7 @@ import { formatJson, formatStatus } from "../utils/format.js";
 import { log } from "../utils/logger.js";
 import { join } from "node:path";
 import { getRunQueueInfo, formatQueueStatus } from "../pipeline/queue-visibility.js";
+import { checkDbHealth } from "../pipeline/db-health.js";
 
 export const statusCommand = new Command("status")
   .description("Show current pipeline status")
@@ -16,6 +17,21 @@ export const statusCommand = new Command("status")
     const dfDir = findDfDir();
     if (!dfDir) {
       log.error("Not in a Dark Factory project. Run 'df init' first.");
+      process.exit(1);
+    }
+
+    // Check DB health before attempting to read
+    const healthCheck = checkDbHealth(dfDir);
+    if (healthCheck.corrupt) {
+      if (options.json) {
+        console.log(formatJson({
+          error: "state_db_corrupt",
+          backupAvailable: healthCheck.backupAvailable,
+          message: healthCheck.message,
+        }));
+      } else {
+        log.error(healthCheck.message);
+      }
       process.exit(1);
     }
 

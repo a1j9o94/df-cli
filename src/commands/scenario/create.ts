@@ -1,10 +1,11 @@
 import { Command } from "commander";
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getAgent } from "../../db/queries/agents.js";
 import { createEvent } from "../../db/queries/events.js";
+import { autoCommitFile } from "../../pipeline/auto-commit.js";
 import { log } from "../../utils/logger.js";
 
 export const scenarioCreateCommand = new Command("create")
@@ -64,6 +65,14 @@ export const scenarioCreateCommand = new Command("create")
       scenario_type: options.type,
       scenario_path: filePath,
     }, agentId);
+
+    // Auto-commit scenario file to git (belt-and-suspenders: scenarios in both DB and git)
+    const projectRoot = dirname(dfDir);
+    const gitRelativePath = join(".df", "scenarios", options.type, `${safeName}.md`);
+    const commitResult = autoCommitFile(projectRoot, gitRelativePath, `Auto-commit: scenario ${options.name} created`);
+    if (commitResult.success) {
+      log.info("  Scenario committed to git history");
+    }
 
     log.success(`Scenario created: ${filePath}`);
     log.info(`  Name: ${options.name}`);

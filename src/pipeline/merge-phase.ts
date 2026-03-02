@@ -7,6 +7,7 @@ import { getMergerPrompt } from "../agents/prompts/merger.js";
 import { findDfDir } from "../utils/config.js";
 import { acquireMergeLock, releaseMergeLock, waitForMergeLock, getMergeLockInfo } from "./merge-lock.js";
 import { rebaseAndMerge } from "./rebase-merge.js";
+import { backupStateDb, restoreStateDb, removeBackup, isDbCorrupt } from "./state-db-backup.js";
 import { log } from "../utils/logger.js";
 
 /**
@@ -70,8 +71,17 @@ export async function executeMergePhase(
   createEvent(db, runId, "merge-lock-acquired");
   log.info("Merge lock acquired");
 
+  // Step 2: Backup state DB before merge
+  const backupResult = backupStateDb(dfDir);
+  if (backupResult.success) {
+    createEvent(db, runId, "state-db-backed-up");
+    log.info("State DB backed up before merge");
+  } else {
+    log.warn(`Could not backup state DB: ${backupResult.error}`);
+  }
+
   try {
-    // Step 2-4: Rebase and merge all builder branches
+    // Step 3-5: Rebase and merge all builder branches (with sanitization)
     if (worktreePaths.length > 0) {
       const projectRoot = dirname(dfDir);
       const mergeResult = rebaseAndMerge(worktreePaths, projectRoot, targetBranch);
@@ -95,12 +105,38 @@ export async function executeMergePhase(
       log.info(`All ${mergeResult.mergedBranches.length} branches merged successfully`);
     }
 
-    // Step 5: Spawn merger agent for post-merge validation
+    // Verify state DB wasn't corrupted by the merge
+    if (isDbCorrupt(dfDir)) {
+      log.error("State DB corrupted during merge — restoring from backup");
+      const restoreResult = restoreStateDb(dfDir);
+      if (restoreResult.success) {
+        createEvent(db, runId, "state-db-restored");
+        log.info("State DB restored from backup");
+      } else {
+        log.error(`Failed to restore state DB: ${restoreResult.error}`);
+      }
+    }
+
+    // Step 6: Spawn merger agent for post-merge validation
     await executeAgentPhaseFn(runId, "merger", (agentId) =>
       getMergerPrompt({ runId, agentId, targetBranch, worktreePaths }),
     );
+
+    // Remove backup on successful completion
+    removeBackup(dfDir);
+    createEvent(db, runId, "state-db-backup-removed");
+  } catch (err) {
+    // On failure, check if DB was corrupted and restore
+    if (isDbCorrupt(dfDir) && backupResult.success) {
+      log.error("State DB corrupted during merge — restoring from backup");
+      const restoreResult = restoreStateDb(dfDir);
+      if (restoreResult.success) {
+        log.info("State DB restored from backup");
+      }
+    }
+    throw err;
   } finally {
-    // Step 6: Always release lock
+    // Step 7: Always release lock
     releaseMergeLock(dfDir, runId);
     createEvent(db, runId, "merge-lock-released");
     log.info("Merge lock released");
