@@ -171,11 +171,11 @@ function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unkno
     }
   }
 
-  // Count completed builder agents for this run
+  // Count completed distinct modules for this run (not total builders, to avoid double-counting retries)
   completedCount = (
     db
       .prepare(
-        "SELECT COUNT(*) as cnt FROM agents WHERE run_id = ? AND role = 'builder' AND status = 'completed'",
+        "SELECT COUNT(DISTINCT module_id) as cnt FROM agents WHERE run_id = ? AND role = 'builder' AND status = 'completed'",
       )
       .get(runId) as { cnt: number }
   ).cnt;
@@ -362,9 +362,9 @@ function handleGetModules(db: InstanceType<typeof Database>, runId: string): Res
   }
 
   const moduleStatuses: ModuleStatus[] = modules.map((mod) => {
-    // Find the builder agent assigned to this module
+    // Find the LATEST builder agent assigned to this module (most recent on retry)
     const agent = db
-      .prepare("SELECT * FROM agents WHERE run_id = ? AND module_id = ? LIMIT 1")
+      .prepare("SELECT * FROM agents WHERE run_id = ? AND module_id = ? ORDER BY created_at DESC LIMIT 1")
       .get(runId, mod.id) as Record<string, unknown> | null;
 
     // Count contract bindings for the agent
