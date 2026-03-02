@@ -86,6 +86,47 @@ export function getFailedBuilderWorktree(db: SqliteDb, runId: string, moduleId: 
 }
 
 /**
+ * Returns the worktree path from the most recent incomplete builder for a given module.
+ * Incomplete agents have commits but didn't call `dark agent complete`.
+ * Their worktrees contain real work that should be continued.
+ *
+ * Returns null if no incomplete builder exists for this module, or if the builder
+ * had no worktree_path recorded.
+ *
+ * Contract: getIncompleteBuilderWorktree
+ */
+export function getIncompleteBuilderWorktree(db: SqliteDb, runId: string, moduleId: string): string | null {
+  const row = db.prepare(
+    `SELECT worktree_path FROM agents
+     WHERE run_id = ? AND role = 'builder' AND module_id = ? AND status = 'incomplete'
+       AND worktree_path IS NOT NULL
+     ORDER BY rowid DESC
+     LIMIT 1`
+  ).get(runId, moduleId) as { worktree_path: string } | undefined;
+
+  return row?.worktree_path ?? null;
+}
+
+/**
+ * Returns the best worktree path for retrying a builder on a given module.
+ * Prefers incomplete agents (have commits/work) over failed agents (may have no work).
+ *
+ * Lookup order:
+ * 1. Most recent incomplete builder (has commits, preferred for retry)
+ * 2. Most recent failed builder (may have partial work)
+ * 3. null if neither exists
+ *
+ * Contract: getRetryableBuilderWorktree
+ */
+export function getRetryableBuilderWorktree(db: SqliteDb, runId: string, moduleId: string): string | null {
+  // Prefer incomplete (has commits) over failed
+  const incomplete = getIncompleteBuilderWorktree(db, runId, moduleId);
+  if (incomplete) return incomplete;
+
+  return getFailedBuilderWorktree(db, runId, moduleId);
+}
+
+/**
  * Returns runs eligible for resumption: failed runs or running runs with no active agents.
  * Contract: getResumableRuns
  */
