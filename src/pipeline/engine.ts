@@ -18,6 +18,7 @@ import { getEvaluatorPrompt } from "../agents/prompts/evaluator.js";
 // Extracted module imports
 import { sendInstructions } from "./instructions.js";
 import { executeAgentPhase } from "./agent-lifecycle.js";
+import { sendInstructions as sendInstructionsFn } from "./instructions.js";
 import { executeBuildPhase, executeResumeBuildPhase } from "./build-phase.js";
 import { executeMergePhase } from "./merge-phase.js";
 
@@ -265,18 +266,18 @@ export class PipelineEngine {
         break;
 
       case "architect": {
-        // Resolve the spec file path for the architect
         const spec = getSpec(this.db, run.spec_id);
         const specFilePath = spec?.file_path ?? "";
 
         await executeAgentPhase(this.db, this.runtime, runId, "architect", (agentId) =>
           getArchitectPrompt({ specId: run.spec_id, runId, agentId, specFilePath }),
+          { specFilePath },
+          sendInstructionsFn,
         );
         break;
       }
 
       case "plan-review":
-        // Auto-approve for now (manual review can be added later)
         log.info("Plan review: auto-approved");
         break;
 
@@ -287,23 +288,33 @@ export class PipelineEngine {
       case "integrate":
         await executeAgentPhase(this.db, this.runtime, runId, "integration-tester", (agentId) =>
           getEvaluatorPrompt({ specId: run.spec_id, runId, agentId, scenarioIds: [], mode: "functional" }),
+          {},
+          sendInstructionsFn,
         );
         break;
 
       case "evaluate-functional":
         await executeAgentPhase(this.db, this.runtime, runId, "evaluator", (agentId) =>
           getEvaluatorPrompt({ specId: run.spec_id, runId, agentId, scenarioIds: [], mode: "functional" }),
+          {},
+          sendInstructionsFn,
         );
         break;
 
       case "evaluate-change":
         await executeAgentPhase(this.db, this.runtime, runId, "evaluator", (agentId) =>
           getEvaluatorPrompt({ specId: run.spec_id, runId, agentId, scenarioIds: [], mode: "change" }),
+          {},
+          sendInstructionsFn,
         );
         break;
 
       case "merge": {
-        await executeMergePhase(this.db, this.runtime, this.config, runId);
+        await executeMergePhase(this.db, this.runtime, this.config, runId,
+          async (rId, role, getPrompt, ctx) => {
+            await executeAgentPhase(this.db, this.runtime, rId, role, getPrompt, ctx ?? {}, sendInstructionsFn);
+          },
+        );
         break;
       }
     }

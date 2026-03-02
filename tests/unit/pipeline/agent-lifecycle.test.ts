@@ -12,8 +12,6 @@ import {
   waitForAgent,
   estimateCostIfMissing,
   executeAgentPhase,
-  setPollInterval,
-  resetPollInterval,
 } from "../../../src/pipeline/agent-lifecycle.js";
 
 let db: SqliteDb;
@@ -72,11 +70,11 @@ function createMockRuntime(db: SqliteDb, options?: { autoComplete?: boolean; del
 beforeEach(() => {
   db = getDbForTest();
   // Use fast polling for tests (10ms instead of 5s)
-  setPollInterval(10);
+  // setPollInterval not available in extracted module
 });
 
 afterEach(() => {
-  resetPollInterval();
+  // resetPollInterval not available in extracted module
 });
 
 describe("waitForAgent", () => {
@@ -234,6 +232,8 @@ describe("executeAgentPhase", () => {
       run.id,
       "evaluator",
       (agentId) => `test prompt for ${agentId}`,
+      {},
+      () => {}, // no-op sendInstructions for test
     );
 
     expect(spawnedRole).toBe("evaluator");

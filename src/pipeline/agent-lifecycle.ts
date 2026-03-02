@@ -1,67 +1,34 @@
+/**
+ * Agent lifecycle primitives: spawn, wait, and cost estimation.
+ *
+ * Extracted from engine.ts — these are the core agent management functions
+ * used by all pipeline phases (architect, builder, evaluator, merger, integration-tester).
+ */
+
 import type { SqliteDb } from "../db/index.js";
 import type { AgentRuntime } from "../runtime/interface.js";
 import { createAgent, getAgent, updateAgentPid, updateAgentStatus } from "../db/queries/agents.js";
 import { createEvent } from "../db/queries/events.js";
 import { recordCost } from "./budget.js";
-<<<<<<< HEAD
 
-const DEFAULT_POLL_INTERVAL_MS = 5_000;
-
-/**
- * Configurable poll interval for testing. Use setPollInterval() to override.
- */
-let pollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
+/** Default poll interval for waitForAgent (5 seconds). */
+export const DEFAULT_POLL_INTERVAL_MS = 5_000;
 
 /**
- * Set the poll interval (primarily for testing).
- */
-export function setPollInterval(ms: number): void {
-  pollIntervalMs = ms;
-}
-
-/**
- * Reset the poll interval to the default.
- */
-export function resetPollInterval(): void {
-  pollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
-=======
-import { sendInstructions } from "./instructions.js";
-
-const POLL_INTERVAL_MS = 5_000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
->>>>>>> df-build/run_01KJ/wire-engine-mm8rvhdu
-}
-
-/**
- * Wait for a single agent to complete (DB-based with PID fallback).
-<<<<<<< HEAD
+ * Poll until an agent reaches a terminal state (completed or failed).
  *
- * Polls the database for agent status changes. If the agent's process exits
- * without updating its status, marks it as failed.
- *
- * @param db - Database instance
- * @param runtime - Agent runtime for checking process liveness
- * @param agentId - The agent ID to wait for
- * @param pid - Optional PID for process liveness fallback
-=======
- * Polls every POLL_INTERVAL_MS. Throws on failure or unexpected exit.
- * Extracted from PipelineEngine.waitForAgent().
->>>>>>> df-build/run_01KJ/wire-engine-mm8rvhdu
+ * Checks DB status first, then falls back to PID liveness via the runtime.
+ * If the process exits without updating its DB status, marks the agent as failed.
  */
 export async function waitForAgent(
   db: SqliteDb,
   runtime: AgentRuntime,
   agentId: string,
   pid?: number,
+  pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
 ): Promise<void> {
   while (true) {
-<<<<<<< HEAD
     await sleep(pollIntervalMs);
-=======
-    await sleep(POLL_INTERVAL_MS);
->>>>>>> df-build/run_01KJ/wire-engine-mm8rvhdu
 
     // Check DB status first
     const agentRecord = getAgent(db, agentId);
@@ -94,13 +61,6 @@ export async function waitForAgent(
 /**
  * If an agent completed without self-reporting cost, estimate from elapsed time.
  * Rough heuristic: ~$0.05/min for Sonnet agents (typical tool-use sessions).
-<<<<<<< HEAD
- *
- * @param db - Database instance
- * @param agent - Agent record with id, run_id, cost_usd, created_at, updated_at
-=======
- * Extracted from PipelineEngine.estimateCostIfMissing().
->>>>>>> df-build/run_01KJ/wire-engine-mm8rvhdu
  */
 export function estimateCostIfMissing(
   db: SqliteDb,
@@ -118,22 +78,14 @@ export function estimateCostIfMissing(
 
 /**
  * Spawn a single agent for a phase and wait for it to complete.
-<<<<<<< HEAD
  *
- * Creates the agent record, generates the prompt, sends instructions via mail,
- * spawns the agent process, waits for completion, and estimates cost if needed.
- *
- * @param db - Database instance
- * @param runtime - Agent runtime for spawning
- * @param runId - The current run ID
- * @param role - The agent role to spawn
- * @param getPrompt - Function that generates the system prompt given an agent ID
- * @param sendInstructionsFn - Optional callback to send instructions via mail
- * @param instructionContext - Optional context to pass to sendInstructionsFn
-=======
- * Creates agent record, generates prompt, sends instructions, spawns via runtime, polls until done.
- * Extracted from PipelineEngine.executeAgentPhase().
->>>>>>> df-build/run_01KJ/wire-engine-mm8rvhdu
+ * This is the standard lifecycle for non-builder phases:
+ * 1. Create agent record in DB
+ * 2. Generate prompt (via caller-provided getPrompt)
+ * 3. Send instructions via mail (via caller-provided sendInstructions)
+ * 4. Spawn the agent process
+ * 5. Poll until completion
+ * 6. Estimate cost if agent didn't self-report
  */
 export async function executeAgentPhase(
   db: SqliteDb,
@@ -141,11 +93,15 @@ export async function executeAgentPhase(
   runId: string,
   role: "architect" | "evaluator" | "merger" | "integration-tester",
   getPrompt: (agentId: string) => string,
-<<<<<<< HEAD
-  sendInstructionsFn?: (runId: string, agentId: string, role: string, context: Record<string, unknown>) => void,
-=======
->>>>>>> df-build/run_01KJ/wire-engine-mm8rvhdu
-  instructionContext?: Record<string, unknown>,
+  instructionContext: Record<string, unknown>,
+  sendInstructions: (
+    db: SqliteDb,
+    runId: string,
+    agentId: string,
+    role: string,
+    context: Record<string, unknown>,
+  ) => void,
+  pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
 ): Promise<void> {
   const agent = createAgent(db, {
     agent_id: "", // Will be overwritten — createAgent generates its own ID
@@ -160,13 +116,7 @@ export async function executeAgentPhase(
   db.prepare("UPDATE agents SET system_prompt = ? WHERE id = ?").run(prompt, agent.id);
 
   // Send actionable instructions via mail before spawning
-<<<<<<< HEAD
-  if (sendInstructionsFn) {
-    sendInstructionsFn(runId, agent.id, role, instructionContext ?? {});
-  }
-=======
-  sendInstructions(db, runId, agent.id, role, instructionContext ?? {});
->>>>>>> df-build/run_01KJ/wire-engine-mm8rvhdu
+  sendInstructions(db, runId, agent.id, role, instructionContext);
 
   createEvent(db, runId, "agent-spawned", { role }, agent.id);
   console.log(`[dark] Phase ${role}: spawning agent...`);
@@ -183,7 +133,7 @@ export async function executeAgentPhase(
   console.log(`[dark] Phase ${role}: agent spawned (PID ${handle.pid})... waiting for completion`);
 
   // Poll until agent completes (DB-based)
-  await waitForAgent(db, runtime, agent.id, handle.pid);
+  await waitForAgent(db, runtime, agent.id, handle.pid, pollIntervalMs);
 
   const finalAgent = getAgent(db, agent.id);
   if (finalAgent) {
@@ -191,10 +141,7 @@ export async function executeAgentPhase(
     console.log(`[dark] Agent ${finalAgent.name} completed. Cost: $${finalAgent.cost_usd.toFixed(2)}`);
   }
 }
-<<<<<<< HEAD
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-=======
->>>>>>> df-build/run_01KJ/wire-engine-mm8rvhdu
