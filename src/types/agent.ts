@@ -25,6 +25,7 @@ export interface AgentRecord {
   module_id: string | null;
   buildplan_id: string | null;
   worktree_path: string | null;
+  branch_name: string | null;
   system_prompt: string | null;
   tdd_phase: string | null;
   tdd_cycles: number;
