@@ -1,31 +1,32 @@
 ---
 name: agent-list-active-filter
 type: functional
-spec_id: run_01KJQERB5P8DCWZJXCZR5Z64BW
-created_by: agt_01KJQERB5RN11QM94PWHDCE5WH
+spec_id: run_01KJR3DRQJPAE01XP0BJ0TGM1E
+created_by: agt_01KJR3DRQKZK8N369V2TJZ66EJ
 ---
 
-SCENARIO: 'dark agent list --active' filters to only agents with live PIDs.
+Test: 'dark agent list --active' filters to only agents with live PIDs.
 
 SETUP:
-1. Initialize dark factory project
-2. Run a build that has completed (has dead agents from previous run)
-3. Start a new build (resume) so there are both active and dead agents in the DB
-4. Ensure at least 2 agents are in 'completed' or 'failed' or 'killed' status AND at least 1 agent is in 'running' status
+1. Initialize in-memory DB
+2. Create a run record
+3. Create 4 agents for the same module across different attempts:
+   - Agent A: status=completed (previous attempt, dead)
+   - Agent B: status=failed (previous attempt, dead)
+   - Agent C: status=running, pid=99999 (non-existent PID, should be excluded)
+   - Agent D: status=running, pid=<current process PID> (live PID, should be included)
 
-TEST STEPS:
-1. Run 'dark agent list' (no filter) — count total agents
-2. Run 'dark agent list --active' — count filtered agents
-3. Run 'dark agent list --json' and 'dark agent list --active --json' for machine-readable comparison
+EXECUTE:
+Run 'dark agent list --active'
+
+EXPECTED OUTPUT:
+- Only Agent D (with the live PID) should appear
+- Agent A (completed) should NOT appear
+- Agent B (failed) should NOT appear
+- Agent C (running but dead PID) should NOT appear
 
 PASS CRITERIA:
-- 'dark agent list --active' shows FEWER agents than unfiltered list (dead agents excluded)
-- Every agent shown by --active has status in ('pending', 'spawning', 'running')
-- No agent shown by --active has status 'completed', 'failed', or 'killed'
-- --active flag works in combination with --run-id and --role filters
-- --active flag works with --json output mode
-
-FAIL CRITERIA:
-- --active shows same count as unfiltered (dead agents not excluded)
-- --active shows agents with terminal status (completed/failed/killed)
-- --active flag is not recognized by the CLI
+- Output contains Agent D's ID
+- Output does NOT contain Agent A, B, or C IDs
+- The --active flag is accepted without error
+- If no agents have live PIDs, output says 'No agents found' or similar
