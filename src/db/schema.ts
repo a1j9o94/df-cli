@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS agents (
   module_id       TEXT,
   buildplan_id    TEXT REFERENCES buildplans(id),
   worktree_path   TEXT,
+  branch_name     TEXT,
   system_prompt   TEXT,
   tdd_phase       TEXT,
   tdd_cycles      INTEGER NOT NULL DEFAULT 0,
