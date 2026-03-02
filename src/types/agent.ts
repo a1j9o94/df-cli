@@ -12,7 +12,8 @@ export type AgentStatus =
   | "running"
   | "completed"
   | "failed"
-  | "killed";
+  | "killed"
+  | "incomplete";
 
 export interface AgentRecord {
   id: string;
