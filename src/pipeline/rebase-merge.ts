@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { existsSync, unlinkSync, rmSync } from "node:fs";
+import { existsSync, unlinkSync, rmSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { isProtectedPath, getProtectedFiles } from "../runtime/protected-paths.js";
 import { sanitizeWorktree, sanitizeMainRepo, unstashMainRepo } from "./worktree-sanitization.js";
@@ -151,12 +151,12 @@ export function rebaseAndMerge(
       const sanitizeResult = sanitizeWorktree(wtPath);
       if (!sanitizeResult.success) {
         failedBranches.push(branch);
+        const dirtyInfo = sanitizeResult.remainingDirtyFiles?.length
+          ? `: dirty files: ${sanitizeResult.remainingDirtyFiles.join(", ")}`
+          : "";
         errors.push(
           sanitizeResult.error ??
-            `Worktree sanitization failed for ${branch}` +
-            (sanitizeResult.remainingDirtyFiles
-              ? `: dirty files: ${sanitizeResult.remainingDirtyFiles.join(", ")}`
-              : ""),
+            `Worktree sanitization failed for ${branch}${dirtyInfo}`,
         );
         continue;
       }
@@ -213,12 +213,16 @@ export function rebaseAndMerge(
                 } catch {
                   // File did not exist before — remove it from working tree
                   unlinkSync(fullPath);
-                  // Try to remove empty parent directories
+                  // Try to remove empty parent directories (non-recursive to avoid
+                  // accidentally deleting directories that contain other files)
                   try {
                     const dir = dirname(fullPath);
-                    rmSync(dir, { recursive: true });
+                    // Only remove if directory is empty — non-recursive rmSync
+                    if (readdirSync(dir).length === 0) {
+                      rmSync(dir);
+                    }
                   } catch {
-                    // ignore — directory may not be empty
+                    // ignore — directory may not be empty or may not exist
                   }
                 }
               }
