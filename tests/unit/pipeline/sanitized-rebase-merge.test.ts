@@ -189,6 +189,70 @@ describe("rebaseAndMerge with pre-rebase sanitization", () => {
     expect(content).toContain("session config");
   });
 
+  test("scenario 6: multiple protected files + dirty .claude removed before rebase", () => {
+    const wtDir = createWorktreeBranch(repoDir, "multi-protected");
+
+    // Builder committed protected files: .df/state.db-wal, .df/state.db-shm, .claude/CLAUDE.md
+    writeFileSync(join(wtDir, "real-feature.ts"), "export const real = true;\n");
+    mkdirSync(join(wtDir, ".df"), { recursive: true });
+    writeFileSync(join(wtDir, ".df", "state.db-wal"), "stale wal data");
+    writeFileSync(join(wtDir, ".df", "state.db-shm"), "stale shm data");
+    mkdirSync(join(wtDir, ".claude"), { recursive: true });
+    writeFileSync(join(wtDir, ".claude", "CLAUDE.md"), "builder modified this");
+    execSync("git add -f -A", { cwd: wtDir, stdio: "pipe" });
+    execSync('git commit -m "Feature with protected files"', { cwd: wtDir, stdio: "pipe" });
+
+    // Then builder modifies .claude/CLAUDE.md again without committing (unstaged change)
+    writeFileSync(join(wtDir, ".claude", "CLAUDE.md"), "builder modified this again");
+
+    const result = rebaseAndMerge([wtDir], repoDir, "main");
+    expect(result.success).toBe(true);
+
+    // Real feature should be in main
+    expect(existsSync(join(repoDir, "real-feature.ts"))).toBe(true);
+
+    // Protected files should NOT be in main
+    expect(existsSync(join(repoDir, ".df", "state.db-wal"))).toBe(false);
+    expect(existsSync(join(repoDir, ".df", "state.db-shm"))).toBe(false);
+
+    // .claude/CLAUDE.md should NOT be in the merged result
+    // (it was a protected path from the worktree, not from main)
+    const trackedFiles = execSync("git ls-files", {
+      cwd: repoDir,
+      encoding: "utf-8",
+    }).trim();
+    expect(trackedFiles).not.toContain(".df/state.db");
+    expect(trackedFiles).not.toContain(".claude/CLAUDE.md");
+  });
+
+  test("scenario 7: node_modules not tracked in git ls-files on main after merge", () => {
+    const wtDir = createWorktreeBranch(repoDir, "modules-tracked");
+
+    // Builder committed node_modules to git
+    writeFileSync(join(wtDir, "index.ts"), "import pkg from 'pkg';\n");
+    mkdirSync(join(wtDir, "node_modules", "pkg"), { recursive: true });
+    writeFileSync(join(wtDir, "node_modules", "pkg", "index.js"), "module.exports = 42;");
+    mkdirSync(join(wtDir, "node_modules", ".package-lock.json"), { recursive: true });
+    execSync("git add -f -A", { cwd: wtDir, stdio: "pipe" });
+    execSync('git commit -m "App with tracked node_modules"', { cwd: wtDir, stdio: "pipe" });
+
+    const result = rebaseAndMerge([wtDir], repoDir, "main");
+    expect(result.success).toBe(true);
+
+    // Real code should be in main
+    expect(existsSync(join(repoDir, "index.ts"))).toBe(true);
+
+    // node_modules should not exist on filesystem
+    expect(existsSync(join(repoDir, "node_modules"))).toBe(false);
+
+    // node_modules should not be tracked in git
+    const trackedFiles = execSync("git ls-files", {
+      cwd: repoDir,
+      encoding: "utf-8",
+    }).trim();
+    expect(trackedFiles).not.toContain("node_modules/");
+  });
+
   test("multiple dirty worktrees all get sanitized", () => {
     const wt1 = createWorktreeBranch(repoDir, "dirty-1");
     const wt2 = createWorktreeBranch(repoDir, "dirty-2");
