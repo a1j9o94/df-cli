@@ -6,12 +6,16 @@ import { listAgents } from "../../db/queries/agents.js";
 import { formatJson, formatStatus } from "../../utils/format.js";
 import { log } from "../../utils/logger.js";
 
+/** Fields excluded from --json output by default (large, rarely useful in list views) */
+const AGENT_EXCLUDED_FIELDS = ["system_prompt"];
+
 export const agentListCommand = new Command("list")
   .description("List agents")
   .option("--run-id <id>", "Filter by run ID")
   .option("--role <role>", "Filter by role")
   .option("--json", "Output as JSON")
-  .action(async (options: { runId?: string; role?: string; json?: boolean }) => {
+  .option("--verbose", "Include system_prompt in JSON output")
+  .action(async (options: { runId?: string; role?: string; json?: boolean; verbose?: boolean }) => {
     const dfDir = findDfDir();
     if (!dfDir) {
       log.error("Not in a Dark Factory project. Run 'df init' first.");
@@ -22,7 +26,8 @@ export const agentListCommand = new Command("list")
     const agents = listAgents(db, options.runId, options.role);
 
     if (options.json) {
-      console.log(formatJson(agents));
+      const excludeFields = options.verbose ? [] : AGENT_EXCLUDED_FIELDS;
+      console.log(formatJson(agents, { excludeFields }));
       return;
     }
 

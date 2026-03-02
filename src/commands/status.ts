@@ -9,12 +9,16 @@ import { join } from "node:path";
 import { getRunQueueInfo, formatQueueStatus } from "../pipeline/queue-visibility.js";
 import { checkDbHealth } from "../pipeline/db-health.js";
 
+/** Fields excluded from --json output by default (large, rarely useful in status views) */
+const STATUS_EXCLUDED_FIELDS = ["system_prompt"];
+
 export const statusCommand = new Command("status")
   .description("Show current pipeline status")
   .option("--run-id <id>", "Show status for a specific run")
   .option("--json", "Output as JSON")
+  .option("--verbose", "Include all fields in JSON output")
   .option("--restore", "Restore state DB from backup if corrupt")
-  .action(async (options: { runId?: string; json?: boolean; restore?: boolean }) => {
+  .action(async (options: { runId?: string; json?: boolean; verbose?: boolean; restore?: boolean }) => {
     const dfDir = findDfDir();
     if (!dfDir) {
       log.error("Not in a Dark Factory project. Run 'df init' first.");
@@ -38,6 +42,7 @@ export const statusCommand = new Command("status")
 
     const db = getDb(join(dfDir, "state.db"));
     const runs = listRuns(db);
+    const excludeFields = options.verbose ? [] : STATUS_EXCLUDED_FIELDS;
 
     if (runs.length === 0) {
       if (options.json) {
@@ -60,7 +65,7 @@ export const statusCommand = new Command("status")
       const queueInfo = getRunQueueInfo(db, run.id);
 
       if (options.json) {
-        console.log(formatJson({ run, agents, mergeQueue: queueInfo }));
+        console.log(formatJson({ run, agents, mergeQueue: queueInfo }, { excludeFields }));
         return;
       }
 
@@ -88,7 +93,7 @@ export const statusCommand = new Command("status")
 
     // Show summary of all runs
     if (options.json) {
-      console.log(formatJson({ runs }));
+      console.log(formatJson({ runs }, { excludeFields }));
       return;
     }
 

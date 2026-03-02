@@ -1,7 +1,8 @@
 import { Command } from "commander";
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { findDfDir } from "../../utils/config.js";
+import { formatJson } from "../../utils/format.js";
 import { log } from "../../utils/logger.js";
 
 export const scenarioListCommand = new Command("list")
@@ -43,7 +44,7 @@ export const scenarioListCommand = new Command("list")
     }
 
     if (options.json) {
-      console.log(JSON.stringify(scenarios, null, 2));
+      console.log(formatJson(scenarios));
     } else if (scenarios.length === 0) {
       log.info("No scenarios found.");
     } else {
