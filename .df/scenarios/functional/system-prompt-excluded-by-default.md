@@ -1,31 +1,39 @@
 ---
 name: system-prompt-excluded-by-default
 type: functional
-spec_id: run_01KJP6GSHWMZED4PZV683YAQNR
-created_by: agt_01KJP6GSHX4V399DJ40R87K3YJ
+spec_id: run_01KJQEP7BHVFD7GS7YYJDWFWJH
+created_by: agt_01KJQEP7BJ05Z2KCGS05N3R3ZW
 ---
 
-## System Prompt Excluded by Default
+## Test: system_prompt excluded from --json output by default
 
 ### Preconditions
-- A Dark Factory project is initialized
-- At least one agent exists with a non-null system_prompt field (any content)
+- Dark Factory project initialized with state.db
+- At least 1 agent exists with a non-null system_prompt field
 
-### Setup Steps
-1. Ensure at least one agent has system_prompt set (the standard pipeline creates agents with system prompts from src/agents/prompts/)
-
-### Test Execution
-Run: dark agent list --json
+### Steps
+1. Run: dark agent list --json
+2. Parse the JSON output
+3. Inspect each agent object in the returned array
+4. Check for the presence of the 'system_prompt' key
 
 ### Expected Output
-- Valid JSON array of agent objects
-- NONE of the agent objects contain a 'system_prompt' key
-- Verify: dark agent list --json | python3 -c "import sys,json; data=json.load(sys.stdin); assert all('system_prompt' not in a for a in data), 'system_prompt found in output'"
+- The JSON array contains agent objects
+- NO agent object contains a 'system_prompt' key
+- All other AgentRecord fields are present (id, run_id, role, name, status, pid, module_id, cost_usd, tokens_used, etc.)
 
-### Additional Validation
-- The output should be noticeably smaller than if system_prompt were included
-- All other agent fields (id, run_id, role, name, status, pid, module_id, etc.) should still be present
+### Verification Command
+dark agent list --json | python3 -c "
+import sys, json
+agents = json.load(sys.stdin)
+for a in agents:
+    assert 'system_prompt' not in a, f'system_prompt found in agent {a["id"]}'
+    assert 'id' in a, 'id field missing'
+    assert 'role' in a, 'role field missing'
+    assert 'status' in a, 'status field missing'
+print('PASS: system_prompt correctly excluded from all', len(agents), 'agents')
+"
 
 ### Pass/Fail Criteria
-- PASS: No agent object in the JSON output contains 'system_prompt' key
-- FAIL: Any agent object contains 'system_prompt' key
+- PASS: No agent object in the JSON output contains system_prompt field
+- FAIL: Any agent object contains system_prompt field
