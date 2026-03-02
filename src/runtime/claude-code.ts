@@ -98,13 +98,19 @@ export class ClaudeCodeRuntime implements AgentRuntime {
         DF_ROLE: config.role,
       },
       stdout: stdoutMode,
-      stderr: "ignore",
+      stderr: "pipe",
     });
 
     // If logging, pipe stdout lines to the log writer
     const stdout = proc.process.stdout;
     if (logWriter && stdout && typeof stdout !== "number") {
       this.pipeStdoutToLog(stdout, logWriter);
+    }
+
+    // Always capture stderr for crash diagnostics
+    const stderr = proc.process.stderr;
+    if (stderr && typeof stderr !== "number") {
+      this.captureStderr(stderr, agentId);
     }
 
     const handle: InternalHandle = {
@@ -163,6 +169,33 @@ export class ClaudeCodeRuntime implements AgentRuntime {
       // Process may have been killed — that's fine, we still have what we captured
     } finally {
       writer.close();
+    }
+  }
+
+  /**
+   * Capture stderr from an agent process and log it when the process exits.
+   * This is how we diagnose why agents crash.
+   */
+  private async captureStderr(
+    stderr: ReadableStream<Uint8Array>,
+    agentId: string,
+  ): Promise<void> {
+    const reader = stderr.getReader();
+    const decoder = new TextDecoder();
+    let output = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        output += decoder.decode(value, { stream: true });
+      }
+    } catch {
+      // Process killed — fine
+    }
+
+    if (output.trim()) {
+      console.error(`[dark] Agent ${agentId} stderr:\n${output.trim()}`);
     }
   }
 
