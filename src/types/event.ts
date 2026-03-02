@@ -29,7 +29,12 @@ export type EventType =
   | "integration-failed"
   | "evaluation-started"
   | "evaluation-passed"
-  | "evaluation-failed";
+  | "evaluation-failed"
+  | "merge-queued"
+  | "merge-lock-acquired"
+  | "merge-lock-released"
+  | "merge-lock-timeout"
+  | "rebase-merge-result";
 
 export interface EventRecord {
   id: string;
