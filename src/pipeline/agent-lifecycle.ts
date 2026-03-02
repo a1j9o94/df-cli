@@ -118,8 +118,14 @@ export async function waitForAgent(
       // Other errors or no result
       const hasCommits = options?.checkWorktreeCommits?.(agentId) ?? false;
       if (hasCommits) {
-        updateAgentStatus(db, agentId, "incomplete", "Process exited — commits preserved");
-        return result;
+        const agentForEvent = getAgent(db, agentId);
+        const agentName = agentForEvent?.name ?? agentId;
+        const errorDesc = `Agent ${agentName} exited — commits exist in worktree but agent didn't call complete`;
+        updateAgentStatus(db, agentId, "incomplete", errorDesc);
+        createEvent(db, agentForEvent?.run_id ?? "", "agent-incomplete", {
+          agentId, reason: "commits_exist_no_complete",
+        }, agentId);
+        throw new Error(`Agent ${agentName} incomplete: ${errorDesc}`);
       }
 
       updateAgentStatus(db, agentId, "failed", "Process exited without completing");
