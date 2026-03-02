@@ -1,26 +1,28 @@
 ---
 name: change-preload-strategy
 type: change
-spec_id: run_01KJP8WZ5DKH52F4S0SWCGKJWW
-created_by: agt_01KJP8WZ5FJ90GR22QSDS2FYR3
+spec_id: run_01KJQ3RPWCVM02YZ86GB23AHTX
+created_by: agt_01KJQ3RPWEX5P5Z3N2EG0ASHGW
 ---
 
 ## Changeability Scenario: Switch pre-load strategy from full file to function-level excerpt
 
 ### Modification Description
-Change the file pre-loading logic from 'include the full file content (up to 200 lines)' to 'include only function-level excerpts based on what the module needs to modify'. For example, if the module scope says it modifies the sendInstructions() method in engine.ts, only include that method plus its surrounding context (imports, class declaration) — not the entire 1136-line file.
+Change the file pre-loading strategy from 'include the full file contents' to 'include only function-level excerpts relevant to the module scope.' For example, if a module needs to modify function parseConfig() in a 600-line file, only include parseConfig() and its immediate context (±20 lines) rather than the entire file.
 
 ### Affected Areas
-- src/utils/file-excerpt.ts (the content extraction logic — this is the ONLY file that should need changes)
-- The builder mail body format should NOT change (still a markdown section with file content)
-- The engine.ts sendInstructions method should NOT change (it calls the extraction utility and passes the result)
+- The content extraction logic in the instructions system (src/pipeline/instructions.ts) — specifically the function that reads file contents and prepares the excerpt for builder mail
+- This is the ONLY file/function that should need to change
+- The mail delivery system (mail/send.ts) should NOT need changes
+- The builder prompt format (src/agents/prompts/builder.ts) should NOT need changes
+- The build-phase.ts orchestration should NOT need changes
 
 ### Expected Effort
-- 1 file changed: src/utils/file-excerpt.ts (or equivalent content extraction module)
-- ~20-50 lines of new logic for function-level AST parsing or regex-based extraction
-- No changes to engine.ts, builder.ts, or the mail system
-- Existing tests for the utility should be updatable without restructuring
+- 1 file changed (instructions.ts or a new helper it calls)
+- The change should be isolated to the content extraction logic
+- No changes to the mail transport, builder prompt template, or build phase orchestration
+- Estimated: 20-50 lines of code change
 
 ### Pass/Fail Criteria
-- PASS: Changing the extraction strategy requires modifying ONLY the content extraction utility, not the mail delivery pipeline or prompt templates
-- FAIL: Changing extraction strategy requires modifying engine.ts sendInstructions, builder.ts prompt, or the message DB schema
+- PASS: Switching to function-level excerpts requires changing only the content extraction logic (1 file, <100 lines), with no changes to mail delivery, prompt format, or build orchestration
+- FAIL: Changing the pre-load strategy requires modifications across multiple unrelated modules (mail, prompts, build phase)

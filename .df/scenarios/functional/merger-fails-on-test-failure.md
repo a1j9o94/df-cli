@@ -1,29 +1,29 @@
 ---
 name: merger-fails-on-test-failure
 type: functional
-spec_id: run_01KJP6FN10E981ZTJDAYHGHVXQ
-created_by: agt_01KJP6FN18BEE7QPK06ETWXPQH
+spec_id: run_01KJQ3REAY3PPJ95V0NGGPB8WZ
+created_by: agt_01KJQ3REAZSCFRXXN0X7HMFP16
 ---
 
-## Merger Fails on Test Failure
+## Test: Merger fails on test failure
 
 ### Preconditions
-- A Dark Factory project is initialized
-- A run exists with a merger agent in running state
-- The project has a test command configured (bun test)
-- At least one test file exists that will FAIL (e.g., a test asserting false)
+- A Dark Factory project with a test command configured (e.g., `bun test` in package.json)
+- A merger agent exists in the DB with role='merger' and status='running'
+- The project has at least one test file that is currently FAILING (exit code != 0)
 
 ### Steps
-1. Create a test file in the project that deliberately fails (e.g., expect(true).toBe(false))
-2. Ensure the merger agent has created at least one commit on the target branch (satisfying the existing guard)
-3. Run: dark agent complete <merger-agent-id>
+1. Set up a project where `bun test` (or the configured test command) fails with exit code 1
+2. Run `dark agent complete <merger-agent-id>`
+3. Capture the exit code and stderr/stdout output
 
-### Expected Results
-- The complete command exits with a non-zero exit code
-- The error message includes which tests failed (test name or file name)
-- The error message indicates tests must pass before completing
-- The agent status remains 'running' (not changed to 'completed')
+### Expected Output
+- Step 2: Command exits with non-zero exit code
+- Step 2: Error message clearly states that tests failed
+- Step 2: Error message includes which test command was run and its output/exit code
+- The merger agent status in the DB remains 'running' (NOT 'completed')
 
-### Pass/Fail Criteria
-- PASS: dark agent complete rejects with test failure details, agent stays running
-- FAIL: dark agent complete succeeds despite failing tests, OR error message does not indicate which tests failed
+### Pass Criteria
+- `dark agent complete` rejects when tests fail
+- Error message mentions test failure specifically (not a generic error)
+- Merger agent is NOT marked as completed in the database

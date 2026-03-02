@@ -8,6 +8,7 @@
 import { readFileSync } from "node:fs";
 import type { SqliteDb } from "../db/index.js";
 import { createMessage } from "../db/queries/messages.js";
+import { extractFileContents, formatPreloadedFiles } from "./file-preload.js";
 
 /**
  * Send actionable instructions to an agent via the mail system.
@@ -104,7 +105,25 @@ function buildBuilderBody(agentId: string, context: Record<string, unknown>): st
   const moduleId = context.moduleId as string;
   const worktreePath = context.worktreePath as string;
   const contracts = context.contracts as string[] | undefined;
-  const scope = context.scope as { creates?: string[]; modifies?: string[]; test_files?: string[] } | undefined;
+  const scope = context.scope as
+    | { creates?: string[]; modifies?: string[]; test_files?: string[] }
+    | undefined;
+
+  // Pre-load file contents for files the builder needs to modify.
+  // This prevents builders from wasting context window turns reading files.
+  let preloadSection = "";
+  if (scope?.modifies?.length && worktreePath) {
+    const normalizedScope = {
+      creates: scope.creates || [],
+      modifies: scope.modifies,
+      test_files: scope.test_files || [],
+    };
+    const preloadedFiles = extractFileContents(normalizedScope, worktreePath);
+    const formattedFiles = formatPreloadedFiles(preloadedFiles);
+    if (formattedFiles) {
+      preloadSection = `## Pre-loaded Files\n\nThe following files from your scope are pre-loaded to save you context. You do NOT need to read these files — they are already here.\n\n${formattedFiles}`;
+    }
+  }
 
   return [
     "# Builder Instructions",
@@ -116,6 +135,8 @@ function buildBuilderBody(agentId: string, context: Record<string, unknown>): st
     scope?.modifies?.length ? `- Modifies: ${scope.modifies.join(", ")}` : "",
     scope?.test_files?.length ? `- Tests: ${scope.test_files.join(", ")}` : "",
     contracts?.length ? `## Contracts: ${contracts.join(", ")}` : "",
+    "",
+    preloadSection,
     "",
     "## Steps",
     "1. Read this assignment and understand your module scope",
@@ -158,7 +179,9 @@ function buildMergerBody(agentId: string, context: Record<string, unknown>): str
   return [
     "# Merger Instructions",
     "",
-    worktreePaths?.length ? `## Worktrees to merge: ${worktreePaths.join(", ")}` : "## No worktrees specified",
+    worktreePaths?.length
+      ? `## Worktrees to merge: ${worktreePaths.join(", ")}`
+      : "## No worktrees specified",
     "",
     "## Steps",
     "1. Merge each worktree branch into the target branch in dependency order",

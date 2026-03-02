@@ -1,33 +1,31 @@
 ---
 name: crash-preserves-partial-work
 type: functional
-spec_id: run_01KJP8WZ5DKH52F4S0SWCGKJWW
-created_by: agt_01KJP8WZ5FJ90GR22QSDS2FYR3
+spec_id: run_01KJQ3RPWCVM02YZ86GB23AHTX
+created_by: agt_01KJQ3RPWEX5P5Z3N2EG0ASHGW
 ---
 
-## Scenario: Crash preserves partial work in worktree
+## Scenario: Crash preserves partial work
 
 ### Preconditions
-- A builder agent is running in an isolated worktree (e.g., /tmp/df-worktrees/module-xyz)
-- The builder has made 2 git commits in the worktree before crashing
-- The builder process exits without calling 'dark agent complete'
+- A builder agent is spawned for a module requiring multiple implementation steps
+- The builder has auto-commit enabled (per Fix 2)
+- The builder has made 2 successful commits in the worktree
 
 ### Test Steps
-1. Set up a builder in a worktree
-2. Simulate the builder making 2 commits (e.g., 'feat: implement function A' and 'feat: implement function B')
-3. Simulate a crash (process exit without completing)
-4. Check that the engine's failure handler does NOT call removeWorktree() when commits exist
-5. Verify the worktree still exists on disk
-6. Check git log in the worktree shows the 2 commits
-7. Resume the build using dark continue
-8. Verify the new builder's mail includes reference to the previous commits
+1. Simulate a builder that makes 2 commits (2 TDD cycles complete), then crashes (process exits without calling dark agent complete)
+2. After the crash, inspect the worktree directory
+3. Verify the 2 commits are still present in the worktree's git log
+4. Resume the build (dark continue)
+5. Verify the new builder sees the previous commits and continues from where the last builder left off
 
-### Expected Output
-- After crash, worktree directory still exists at the original path
-- git log in the worktree shows the 2 commits from the previous attempt
-- On resume, the new builder receives instructions mentioning the previous commits
-- The new builder continues from where the previous one left off (doesn't re-implement already-committed code)
+### Expected Results
+- The worktree directory still exists after the crash
+- The 2 commits from the previous builder are present in git log
+- The worktree is NOT cleaned up on builder failure (unlike current behavior which calls removeWorktree on failure)
+- On resume, the new builder's instructions reference the previous commits
+- The new builder does not redo already-committed work
 
 ### Pass/Fail Criteria
-- PASS: Worktree survives crash, commits are intact, resume builder gets previous commit info
-- FAIL: Worktree is cleaned up on crash (removeWorktree called), OR resume creates a fresh worktree ignoring previous commits
+- PASS: Worktree with 2 commits survives crash; resumed builder continues from commit 2
+- FAIL: Worktree is deleted on crash, or resumed builder starts from scratch

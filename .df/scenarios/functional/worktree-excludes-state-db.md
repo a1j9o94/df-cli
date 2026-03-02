@@ -1,31 +1,32 @@
 ---
 name: worktree-excludes-state-db
 type: functional
-spec_id: run_01KJP6FN10E981ZTJDAYHGHVXQ
-created_by: agt_01KJP6FN18BEE7QPK06ETWXPQH
+spec_id: run_01KJQ3REAY3PPJ95V0NGGPB8WZ
+created_by: agt_01KJQ3REAZSCFRXXN0X7HMFP16
 ---
 
-## Worktree Excludes State DB
+## Test: Worktree excludes state DB files
 
 ### Preconditions
-- A Dark Factory project is initialized (dark init)
-- .df/state.db exists with at least one run recorded
+- A Dark Factory project is initialized with `dark init`
+- The project root contains `.df/state.db` (SQLite database)
 
 ### Steps
-1. Call createWorktree() (or trigger it via engine build phase) to create a new worktree
-2. In the new worktree, verify a .gitignore file exists at the worktree root
-3. Verify the .gitignore contains entries for: .df/state.db*, .df/worktrees/, .df/logs/, .claude/, .letta/
-4. In the worktree, create a dummy .df/state.db-wal file
-5. Run git add .df/state.db-wal from the worktree
-6. Attempt git commit
+1. Call `createWorktree(projectRoot, 'test-branch')` to create a new worktree
+2. In the worktree directory, verify a `.gitignore` file exists
+3. Verify the `.gitignore` contains entries for: `.df/state.db*`, `.df/worktrees/`, `.df/logs/`, `.claude/`, `.letta/`
+4. In the worktree, create a file at `.df/state.db-wal` with dummy content
+5. Run `git add .df/state.db-wal` in the worktree
+6. Run `git commit -m 'test'` in the worktree
+7. Verify the commit is rejected (either by gitignore preventing add, or by pre-commit hook)
+8. Verify `.df/state.db-wal` is NOT in the git staging area
 
-### Expected Results
-- Step 2: .gitignore file exists at worktree root
-- Step 3: All five patterns are present in the .gitignore
-- Step 5: git add should either be blocked by .gitignore (file stays untracked) OR if somehow staged...
-- Step 6: The pre-commit hook rejects the commit with a clear error message mentioning .df/state.db
-- The .df/state.db* files must NEVER appear in a commit from a worktree branch
+### Expected Output
+- Step 2: `.gitignore` file exists in worktree root
+- Step 3: All five patterns are present in the gitignore
+- Step 7: The git add or commit is rejected for `.df/state.db*` files
+- Step 8: No `.df/state.db*` files are staged
 
-### Pass/Fail Criteria
-- PASS: .gitignore is auto-created in worktree AND .df/state.db* files cannot be committed
-- FAIL: .gitignore is missing, or .df/state.db* files can be committed from the worktree
+### Pass Criteria
+- Worktree has a `.gitignore` with all protected patterns
+- It is impossible to commit `.df/state.db*` files from a worktree

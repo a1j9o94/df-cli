@@ -1,34 +1,31 @@
 ---
 name: retry-reuses-worktree
 type: functional
-spec_id: run_01KJP8WZ5DKH52F4S0SWCGKJWW
-created_by: agt_01KJP8WZ5FJ90GR22QSDS2FYR3
+spec_id: run_01KJQ3RPWCVM02YZ86GB23AHTX
+created_by: agt_01KJQ3RPWEX5P5Z3N2EG0ASHGW
 ---
 
 ## Scenario: Retry reuses worktree with commits
 
 ### Preconditions
-- A builder agent previously failed for a module (e.g., module 'instruction-enrichment')
-- The previous builder's worktree at /tmp/df-worktrees/instruction-enrichment-xxx still exists
-- The worktree contains commits from the previous attempt
-- dark continue is called to retry the run
+- A builder agent was spawned, made commits in its worktree, then failed
+- The worktree exists at /tmp/df-worktrees/<moduleId>-<suffix> with commits from the previous attempt
+- The run is in a resumable state (failed)
 
 ### Test Steps
-1. Query the agents table for the failed builder to get its worktree_path
-2. Verify the worktree path exists and has commits (git log)
-3. Call dark continue to resume the run
-4. Observe the new builder spawned for the same module
-5. Check the new builder's worktree_path in the agents table
-6. Verify it matches the PREVIOUS worktree path (reused, not a fresh /tmp/df-worktrees/instruction-enrichment-yyy)
-7. Check the new builder's mail instructions reference the previous commits
+1. Run a builder that makes 2 commits, then fails (agent status = failed)
+2. Record the worktree path and its git log (commit hashes)
+3. Run dark continue to retry the failed builder
+4. Check what worktree path the new builder receives
+5. Check the new builder's instruction mail
 
-### Expected Output
-- The resume build phase checks for existing worktrees before creating new ones
-- DB query: SELECT worktree_path FROM agents WHERE run_id = ? AND module_id = ? AND status = 'failed' returns the old path
-- If the old worktree exists AND has commits since HEAD, it is reused
-- The new builder's instructions include: 'Previous attempt made these commits: [list]'
-- The new builder works in the same worktree, not a fresh one
+### Expected Results
+- The new builder gets the SAME worktree path (not a fresh worktree)
+- The existing commits from the previous attempt are still in the worktree's git log
+- The new builder's instruction mail mentions: 'Previous attempt made these commits: [list of commit messages]'
+- The new builder continues from where the old one left off
+- No fresh worktree is created if the old one has commits
 
 ### Pass/Fail Criteria
-- PASS: New builder reuses old worktree with commits intact, instructions mention previous commits
-- FAIL: New builder gets a fresh worktree (ignoring previous work), OR old worktree was deleted before retry
+- PASS: Same worktree reused, previous commits visible, new builder instructions reference previous work
+- FAIL: Fresh worktree created (old one deleted), or new builder has no knowledge of previous progress

@@ -1,32 +1,33 @@
 ---
 name: agent-logs-captured
 type: functional
-spec_id: run_01KJP8WZ5DKH52F4S0SWCGKJWW
-created_by: agt_01KJP8WZ5FJ90GR22QSDS2FYR3
+spec_id: run_01KJQ3RPWCVM02YZ86GB23AHTX
+created_by: agt_01KJQ3RPWEX5P5Z3N2EG0ASHGW
 ---
 
-## Scenario: Agent logs captured in stream-json format
+## Scenario: Agent logs captured in structured format
 
 ### Preconditions
+- A builder agent is spawned for any module
 - The .df/logs/ directory exists (or is created automatically)
-- A builder agent is spawned and runs to completion
 
 ### Test Steps
-1. Check that src/runtime/claude-code.ts spawn method uses '--output-format stream-json' instead of '--print'
-2. Verify stdout is captured to a file at .df/logs/<agent-id>.jsonl
-3. Spawn a builder agent and wait for it to complete
-4. Check that .df/logs/<agent-id>.jsonl exists
-5. Read the file and verify it contains valid JSONL (one JSON object per line)
-6. Verify the log contains tool calls, token usage data, and the last action before completion
+1. Run a builder agent to completion (or failure)
+2. Check for a log file at .df/logs/<agent-id>.jsonl
+3. Parse the JSONL file and inspect its contents
 
-### Expected Output
-- claude-code.ts spawn method passes '--output-format stream-json' as an argument
-- The stdout of the process is piped to a file at .df/logs/<agent-id>.jsonl
-- After agent completes, the .jsonl file exists and is non-empty
-- Each line of the file is valid JSON
-- The file contains entries showing what the agent was doing (tool calls, messages)
-- Token usage information is present in the log
+### Expected Results
+- A file exists at .df/logs/<agent-id>.jsonl after the builder runs
+- The file contains valid JSONL (one JSON object per line)
+- The JSON objects include structured data from claude --output-format stream-json, such as:
+  - Token usage per turn
+  - Tool calls made by the agent
+  - Cost information (actual, not estimated)
+  - The last tool call before completion or crash
+- The claude --print invocation in claude-code.ts uses --output-format stream-json
+- The output stream is piped/captured to the .df/logs/<agent-id>.jsonl file
+- Logs are write-only during the run (no reading during execution)
 
 ### Pass/Fail Criteria
-- PASS: .df/logs/<agent-id>.jsonl exists after agent run, contains valid JSONL with tool calls and token usage
-- FAIL: No log file created, OR file is empty, OR file contains non-JSON content, OR '--print' is still used instead of '--output-format stream-json'
+- PASS: .df/logs/<agent-id>.jsonl exists, contains valid JSONL with token usage and tool calls
+- FAIL: No log file created, or claude --print does not use --output-format stream-json

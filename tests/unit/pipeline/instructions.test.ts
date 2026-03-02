@@ -1,4 +1,6 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { getDbForTest } from "../../../src/db/index.js";
 import { createRun } from "../../../src/db/queries/runs.js";
 import { createAgent } from "../../../src/db/queries/agents.js";
@@ -171,5 +173,94 @@ describe("sendInstructions", () => {
     expect(messages.length).toBe(1);
     expect(messages[0].body).toContain("# Merger Instructions");
     expect(messages[0].body).toContain("No worktrees specified");
+  });
+});
+
+// ============================================================
+// sendInstructions — file preloading integration
+// ============================================================
+describe("sendInstructions - file preloading", () => {
+  const FIXTURE_DIR = join(import.meta.dir, "__fixtures__", "instructions-preload");
+
+  beforeEach(() => {
+    mkdirSync(join(FIXTURE_DIR, "src"), { recursive: true });
+  });
+
+  afterEach(() => {
+    if (existsSync(FIXTURE_DIR)) {
+      rmSync(FIXTURE_DIR, { recursive: true, force: true });
+    }
+  });
+
+  test("builder instructions include pre-loaded file contents when scope.modifies has files", () => {
+    writeFileSync(join(FIXTURE_DIR, "src/target.ts"), "export const x = 1;\nexport const y = 2;\n");
+
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "preload-mod",
+      worktreePath: FIXTURE_DIR,
+      scope: { creates: [], modifies: ["src/target.ts"], test_files: [] },
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages.length).toBe(1);
+    expect(messages[0].body).toContain("### Pre-loaded File: src/target.ts");
+    expect(messages[0].body).toContain("export const x = 1;");
+    expect(messages[0].body).toContain("export const y = 2;");
+  });
+
+  test("builder instructions include pre-loaded section header", () => {
+    writeFileSync(join(FIXTURE_DIR, "src/target.ts"), "const a = 1;\n");
+
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "preload-mod",
+      worktreePath: FIXTURE_DIR,
+      scope: { creates: [], modifies: ["src/target.ts"], test_files: [] },
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("## Pre-loaded Files");
+  });
+
+  test("builder instructions with no modifies do not include pre-loaded section", () => {
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "no-preload",
+      worktreePath: FIXTURE_DIR,
+      scope: { creates: ["src/new.ts"], modifies: [], test_files: [] },
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).not.toContain("## Pre-loaded Files");
+    expect(messages[0].body).not.toContain("### Pre-loaded File:");
+  });
+
+  test("builder instructions without scope do not include pre-loaded section", () => {
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "no-scope",
+      worktreePath: FIXTURE_DIR,
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).not.toContain("## Pre-loaded Files");
+  });
+
+  test("pre-loaded section appears after scope and before TDD steps", () => {
+    writeFileSync(join(FIXTURE_DIR, "src/target.ts"), "const a = 1;\n");
+
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "order-mod",
+      worktreePath: FIXTURE_DIR,
+      scope: { creates: [], modifies: ["src/target.ts"], test_files: [] },
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    const body = messages[0].body;
+
+    const scopeIndex = body.indexOf("## Scope:");
+    const preloadIndex = body.indexOf("## Pre-loaded Files");
+    const stepsIndex = body.indexOf("## Steps");
+
+    expect(scopeIndex).toBeGreaterThanOrEqual(0);
+    expect(preloadIndex).toBeGreaterThan(scopeIndex);
+    expect(stepsIndex).toBeGreaterThan(preloadIndex);
   });
 });
