@@ -7,12 +7,7 @@ import { formatJson, formatStatus } from "../utils/format.js";
 import { log } from "../utils/logger.js";
 import { join } from "node:path";
 import { getRunQueueInfo, formatQueueStatus } from "../pipeline/queue-visibility.js";
-<<<<<<< HEAD
 import { checkDbHealth } from "../pipeline/db-health.js";
-=======
-import { detectDbCorruption } from "../utils/db-health.js";
-import { restoreStateDb } from "../utils/state-backup.js";
->>>>>>> df-build/run_01KJ/git-commit-on-create-mm92zb2z
 
 export const statusCommand = new Command("status")
   .description("Show current pipeline status")
@@ -26,7 +21,6 @@ export const statusCommand = new Command("status")
       process.exit(1);
     }
 
-<<<<<<< HEAD
     // Check DB health before attempting to read
     const healthCheck = checkDbHealth(dfDir);
     if (healthCheck.corrupt) {
@@ -40,38 +34,6 @@ export const statusCommand = new Command("status")
         log.error(healthCheck.message);
       }
       process.exit(1);
-=======
-    // Guard 4 (partial): Check DB health before opening
-    const health = detectDbCorruption(dfDir);
-    if (health.isCorrupt) {
-      log.error(`State DB is corrupt or missing: ${health.error}`);
-
-      if (health.hasBackup) {
-        if (options.restore) {
-          const restored = restoreStateDb(dfDir);
-          if (restored) {
-            log.success("State DB restored from backup.");
-            log.info("Re-run 'dark status' to see pipeline status.");
-          } else {
-            log.error("Failed to restore from backup.");
-          }
-        } else {
-          log.info("A backup is available. Run 'dark status --restore' to restore from backup.");
-        }
-      } else {
-        log.warn("No backup available. The state DB may need to be recreated with 'dark init'.");
-      }
-
-      if (options.json) {
-        console.log(formatJson({
-          error: "State DB corrupt",
-          details: health.error,
-          hasBackup: health.hasBackup,
-          restored: options.restore ?? false,
-        }));
-      }
-      return;
->>>>>>> df-build/run_01KJ/git-commit-on-create-mm92zb2z
     }
 
     const db = getDb(join(dfDir, "state.db"));

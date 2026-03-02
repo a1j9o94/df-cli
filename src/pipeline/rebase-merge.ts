@@ -1,11 +1,7 @@
 import { execSync } from "node:child_process";
-<<<<<<< HEAD
 import { existsSync, unlinkSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { isProtectedPath, getProtectedFiles } from "../runtime/protected-paths.js";
-=======
-import { sanitizedMerge } from "./merge-sanitization.js";
->>>>>>> df-build/run_01KJ/worktree-isolation-mm92yzda
 
 export interface RebaseResult {
   success: boolean;
@@ -138,7 +134,6 @@ export function rebaseAndMerge(
       continue;
     }
 
-<<<<<<< HEAD
     // Step 2: Merge the rebased branch into target using --no-commit for sanitization
     try {
       // Use --no-commit so we can inspect and sanitize staged files before committing
@@ -203,16 +198,10 @@ export function rebaseAndMerge(
         stdio: "pipe",
         env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
       });
-=======
-    // Step 2: Merge the rebased branch into target using sanitized merge
-    // This automatically strips .df/state.db*, .claude/, .letta/ files
-    const mergeResult2 = sanitizedMerge(mainRepoPath, branch);
-    if (mergeResult2.success) {
->>>>>>> df-build/run_01KJ/worktree-isolation-mm92yzda
       mergedBranches.push(branch);
-    } else {
+    } catch (err) {
       failedBranches.push(branch);
-      errors.push(mergeResult2.error ?? `Merge of ${branch} into ${targetBranch} failed`);
+      errors.push(err instanceof Error ? err.message : `Merge of ${branch} into ${targetBranch} failed`);
     }
   }
 

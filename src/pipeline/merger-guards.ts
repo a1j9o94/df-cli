@@ -71,7 +71,7 @@ export function runProjectTests(projectRoot: string): TestResult {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 120_000, // 2 minute timeout
-      shell: true,
+      shell: "/bin/sh",
     });
     return { passed: true, output };
   } catch (err: any) {

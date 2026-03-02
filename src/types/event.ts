@@ -34,7 +34,10 @@ export type EventType =
   | "merge-lock-acquired"
   | "merge-lock-released"
   | "merge-lock-timeout"
-  | "rebase-merge-result";
+  | "rebase-merge-result"
+  | "state-db-backed-up"
+  | "state-db-restored"
+  | "state-db-backup-removed";
 
 export interface EventRecord {
   id: string;

@@ -1,13 +1,7 @@
 import { execSync } from "node:child_process";
-<<<<<<< HEAD
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync, readFileSync, mkdirSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { generateWorktreeGitignore } from "./protected-paths.js";
-=======
-import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { writeWorktreeGitignore } from "./worktree-isolation.js";
->>>>>>> df-build/run_01KJ/worktree-isolation-mm92yzda
 
 export interface WorktreeInfo {
   path: string;
@@ -92,7 +86,7 @@ export function createWorktree(
   }).trim();
 
   // Apply worktree isolation: .gitignore + pre-commit hook
-  writeWorktreeGitignore(dir);
+  generateWorktreeGitignore();
   installPreCommitHook(dir);
 
   return { path: dir, branch, head };
