@@ -11,6 +11,7 @@ import { listEvents } from "../../db/queries/events.js";
 import { createEvent } from "../../db/queries/events.js";
 import { recordCost } from "../../pipeline/budget.js";
 import { checkMergerGuards } from "../../pipeline/merger-guards.js";
+import { promoteBranch, isStagingBranch } from "../../pipeline/complete-promotion.js";
 import { log } from "../../utils/logger.js";
 
 export const agentCompleteCommand = new Command("complete")
@@ -45,6 +46,17 @@ export const agentCompleteCommand = new Command("complete")
       const costUsd = options.cost ? parseFloat(options.cost) : 0;
       const tokens = options.tokens ? parseInt(options.tokens, 10) : 0;
       recordCost(db, agent.run_id, agentId, costUsd, tokens);
+    }
+
+    // Promote staging branch to ready branch (builders with staging branches only)
+    if (agent.role === "builder" && agent.branch_name && isStagingBranch(agent.branch_name)) {
+      const promotion = promoteBranch(db, agentId);
+      if (!promotion.success) {
+        log.error(`Branch promotion failed: ${promotion.error}`);
+        log.error("Agent work is preserved on the staging branch but will NOT be merged.");
+        process.exit(1);
+      }
+      log.success(`Branch promoted: ${promotion.oldBranch} → ${promotion.newBranch}`);
     }
 
     updateAgentStatus(db, agentId, "completed");
