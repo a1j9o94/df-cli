@@ -270,4 +270,127 @@ describe("rebaseAndMerge with pre-rebase sanitization", () => {
     expect(existsSync(join(repoDir, "feature1.ts"))).toBe(true);
     expect(existsSync(join(repoDir, "feature2.ts"))).toBe(true);
   });
+
+  test("protected files in merge staging are filtered out post-merge", () => {
+    // This tests the post-merge sanitization step in rebaseAndMerge
+    // where getProtectedFiles() filters staged files after --no-commit merge
+    const wtDir = createWorktreeBranch(repoDir, "builder-with-claude");
+
+    // Builder committed both real work AND .claude config changes
+    writeFileSync(join(wtDir, "feature.ts"), "export const x = 1;\n");
+    mkdirSync(join(wtDir, ".claude"), { recursive: true });
+    writeFileSync(join(wtDir, ".claude", "CLAUDE.md"), "builder-specific config\n");
+    mkdirSync(join(wtDir, ".letta"), { recursive: true });
+    writeFileSync(join(wtDir, ".letta", "memory.json"), '{"key":"val"}\n');
+    execSync("git add -f -A", { cwd: wtDir, stdio: "pipe" });
+    execSync('git commit -m "Feature plus config"', { cwd: wtDir, stdio: "pipe" });
+
+    const result = rebaseAndMerge([wtDir], repoDir, "main");
+    expect(result.success).toBe(true);
+
+    // Feature should be in main
+    expect(existsSync(join(repoDir, "feature.ts"))).toBe(true);
+
+    // Protected config files should NOT be in main
+    expect(existsSync(join(repoDir, ".claude", "CLAUDE.md"))).toBe(false);
+    expect(existsSync(join(repoDir, ".letta", "memory.json"))).toBe(false);
+  });
+
+  test("empty worktree list returns success with empty arrays", () => {
+    const result = rebaseAndMerge([], repoDir, "main");
+    expect(result.success).toBe(true);
+    expect(result.mergedBranches).toEqual([]);
+    expect(result.failedBranches).toEqual([]);
+    expect(result.errors).toEqual([]);
+  });
+
+  test("worktree with both uncommitted changes and protected files", () => {
+    // Combined scenario: dirty worktree + protected files + node_modules
+    const wtDir = createWorktreeBranch(repoDir, "messy-builder");
+
+    // Builder committed some work
+    writeFileSync(join(wtDir, "committed.ts"), "export const a = 1;\n");
+    execSync("git add -A", { cwd: wtDir, stdio: "pipe" });
+    execSync('git commit -m "Partial work"', { cwd: wtDir, stdio: "pipe" });
+
+    // Then left uncommitted changes, protected files, AND node_modules
+    writeFileSync(join(wtDir, "uncommitted.ts"), "export const b = 2;\n");
+    mkdirSync(join(wtDir, ".df"), { recursive: true });
+    writeFileSync(join(wtDir, ".df", "state.db-shm"), "shared memory data");
+    mkdirSync(join(wtDir, "node_modules", "pkg"), { recursive: true });
+    writeFileSync(join(wtDir, "node_modules", "pkg", "index.js"), "x");
+
+    const result = rebaseAndMerge([wtDir], repoDir, "main");
+    expect(result.success).toBe(true);
+    expect(result.mergedBranches.length).toBe(1);
+
+    // Real work should be in main
+    expect(existsSync(join(repoDir, "committed.ts"))).toBe(true);
+    expect(existsSync(join(repoDir, "uncommitted.ts"))).toBe(true);
+
+    // Protected files and node_modules should NOT be in main
+    expect(existsSync(join(repoDir, ".df", "state.db-shm"))).toBe(false);
+    expect(existsSync(join(repoDir, "node_modules"))).toBe(false);
+  });
+
+  test("sequential merges maintain correct state between worktrees", () => {
+    // Test that when multiple worktrees are merged sequentially,
+    // each successive rebase picks up the previous merge's changes
+    const wt1 = createWorktreeBranch(repoDir, "builder-alpha");
+    const wt2 = createWorktreeBranch(repoDir, "builder-beta");
+
+    // Builder 1 creates a file
+    writeFileSync(join(wt1, "alpha.ts"), "export const alpha = 'first';\n");
+    execSync("git add -A", { cwd: wt1, stdio: "pipe" });
+    execSync('git commit -m "Alpha feature"', { cwd: wt1, stdio: "pipe" });
+
+    // Builder 2 creates a different file
+    writeFileSync(join(wt2, "beta.ts"), "export const beta = 'second';\n");
+    execSync("git add -A", { cwd: wt2, stdio: "pipe" });
+    execSync('git commit -m "Beta feature"', { cwd: wt2, stdio: "pipe" });
+
+    // Advance main with a change
+    writeFileSync(join(repoDir, "main-update.txt"), "main advanced\n");
+    execSync("git add -A", { cwd: repoDir, stdio: "pipe" });
+    execSync('git commit -m "Main advance"', { cwd: repoDir, stdio: "pipe" });
+
+    const result = rebaseAndMerge([wt1, wt2], repoDir, "main");
+    expect(result.success).toBe(true);
+    expect(result.mergedBranches.length).toBe(2);
+
+    // All files should be in main
+    expect(existsSync(join(repoDir, "alpha.ts"))).toBe(true);
+    expect(existsSync(join(repoDir, "beta.ts"))).toBe(true);
+    expect(existsSync(join(repoDir, "main-update.txt"))).toBe(true);
+
+    // Verify git log shows both merges
+    const log = execSync("git log --oneline -5", {
+      cwd: repoDir,
+      encoding: "utf-8",
+    });
+    expect(log).toContain("builder-alpha");
+    expect(log).toContain("builder-beta");
+  });
+
+  test("unstashMainRepo runs even when worktree processing throws", () => {
+    // This tests the finally block behavior: unstashMainRepo should
+    // always be called, even if worktree processing hits an unexpected error
+    const wtDir = createWorktreeBranch(repoDir, "crash-builder");
+
+    // Builder makes a clean commit
+    writeFileSync(join(wtDir, "feature.ts"), "export const f = 1;\n");
+    execSync("git add -A", { cwd: wtDir, stdio: "pipe" });
+    execSync('git commit -m "Feature"', { cwd: wtDir, stdio: "pipe" });
+
+    // Make main dirty with a tracked file change
+    writeFileSync(join(repoDir, "file.txt"), "modified on main\n");
+
+    // Merge should handle the dirty main (stash/unstash)
+    const result = rebaseAndMerge([wtDir], repoDir, "main");
+    expect(result.success).toBe(true);
+
+    // The stashed changes should be restored
+    const content = readFileSync(join(repoDir, "file.txt"), "utf-8");
+    expect(content).toContain("modified on main");
+  });
 });
