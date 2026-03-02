@@ -1,59 +1,41 @@
 ---
 name: agent-show-detail
 type: functional
-spec_id: run_01KJQERB5P8DCWZJXCZR5Z64BW
-created_by: agt_01KJQERB5RN11QM94PWHDCE5WH
+spec_id: run_01KJR3DRQJPAE01XP0BJ0TGM1E
+created_by: agt_01KJR3DRQKZK8N369V2TJZ66EJ
 ---
 
-SCENARIO: 'dark agent show <id>' displays full agent detail including mail history and events.
+Test: 'dark agent show <id>' displays full agent detail including mail history and events.
 
 SETUP:
-1. Initialize dark factory project
-2. Run a build to completion (or at least through build phase)
-3. Identify a builder agent ID that has: cost_usd > 0, tokens_used > 0, at least 1 heartbeat event, at least 1 message received, a worktree_path set
+1. Initialize in-memory DB
+2. Create a run record (run_01TEST) with spec_id=spec_01TEST
+3. Create an agent (agt_01TEST) with: role=builder, name=builder-auth, status=running, pid=12345, module_id=mod-auth, worktree_path=/tmp/wt-auth, cost_usd=1.50, tokens_used=50000, created_at=15 minutes ago, last_heartbeat=2 minutes ago
+4. Create 2 messages TO this agent (from orchestrator)
+5. Create 3 events for this agent (agent-spawned, agent-heartbeat, agent-heartbeat)
 
-TEST STEPS:
-1. Run 'dark agent show <agent-id>' with a known agent ID
-2. Verify all expected fields are present in output
+EXECUTE:
+Run 'dark agent show agt_01TEST'
 
-EXPECTED OUTPUT (all fields present):
-  Agent: agt_01XXXXX
-  Name:       builder-foo
-  Role:       builder
-  Status:     running
-  PID:        12345
-  Module:     some-module-id
-  Worktree:   /var/folders/.../foo-mm8abc
-  Cost:       $0.62
-  Tokens:     15,234
-  Files:      3 changed
-  Created:    2024-01-01T00:00:00Z
-  Heartbeat:  2m ago
-  Elapsed:    12m 34s
-  Error:      (none or error text if failed)
-
-  Recent Messages (last 10):
-    2024-01-01T00:00:00Z from=orchestrator: Build module foo...
-    ...
-
-  Events (last 20):
-    2024-01-01T00:00:00Z agent-spawned
-    2024-01-01T00:00:05Z agent-heartbeat
-    ...
+EXPECTED OUTPUT must include ALL of:
+- Agent ID: agt_01TEST
+- Role: builder
+- Name: builder-auth
+- Status: running
+- PID: 12345
+- Module: mod-auth
+- Worktree: /tmp/wt-auth
+- Cost: $1.50
+- Tokens: 50,000 (or 50000)
+- Created: (timestamp or relative time)
+- Last heartbeat: (relative time like '2m ago')
+- Elapsed: ~15m (or similar human-readable)
+- Mail history section with at least 2 messages
+- Events section with at least 3 events
 
 PASS CRITERIA:
-- Command 'dark agent show <id>' is recognized and executes without error
-- All fields listed above are present in output (id, name, role, status, pid, module, worktree, cost, tokens, files, created_at, heartbeat relative time, elapsed time, error)
-- Mail/message history section is shown with recent messages
-- Events section is shown with agent lifecycle events
-- Cost is formatted with dollar sign
-- Tokens are formatted with comma separators
-- Heartbeat shows relative time ('2m ago') not raw ISO timestamp
-- If agent ID doesn't exist, shows a clear error message (not a crash)
-- Works with --json flag for machine-readable output
-
-FAIL CRITERIA:
-- Command not found / not registered
-- Missing any of the required fields
-- Crash on non-existent agent ID
-- Messages or events sections missing
+- The command 'dark agent show' exists and is registered
+- All listed fields appear in output
+- Mail messages show sender and body excerpt
+- Events show type and timestamp
+- If agent not found, outputs error 'Agent not found: <id>'
