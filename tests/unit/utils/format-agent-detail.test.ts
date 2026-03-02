@@ -14,6 +14,7 @@ function makeAgent(overrides: Partial<AgentRecord> = {}): AgentRecord {
     buildplan_id: "plan_01XYZ",
     worktree_path: "/var/folders/.../foo-mm8abc",
     branch_name: "df-build/run_01KJ/foo-mm8abc",
+    session_id: null,
     system_prompt: "You are a builder.",
     tdd_phase: "green",
     tdd_cycles: 3,

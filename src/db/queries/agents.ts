@@ -58,6 +58,12 @@ export function updateAgentPid(db: SqliteDb, id: string, pid: number): void {
   ).run(pid, now(), id);
 }
 
+export function updateAgentSessionId(db: SqliteDb, id: string, sessionId: string): void {
+  db.prepare(
+    "UPDATE agents SET session_id = ?, updated_at = ? WHERE id = ?"
+  ).run(sessionId, now(), id);
+}
+
 export function updateAgentHeartbeat(db: SqliteDb, id: string): void {
   const ts = now();
   db.prepare(

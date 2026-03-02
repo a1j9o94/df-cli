@@ -56,7 +56,7 @@ export const architectAnalyzeCommand = new Command("analyze")
     createEvent(db, runId, "agent-spawned", { role: "architect" }, agent.id);
 
     const logsDir = join(dfDir, "logs");
-    const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary, logsDir);
+    const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary);
     const handle = await runtime.spawn({
       agent_id: agent.id,
       run_id: runId,

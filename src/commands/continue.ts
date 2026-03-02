@@ -70,7 +70,7 @@ export const continueCommand = new Command("continue")
       }
 
       const logsDir = join(dfDir, "logs");
-      const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary, logsDir);
+      const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary);
       const engine = new PipelineEngine(db, runtime, config);
 
       console.log(`[dark] Resuming pipeline run ${runId}...`);

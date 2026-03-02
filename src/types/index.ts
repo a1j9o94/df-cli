@@ -8,6 +8,7 @@ export type {
   AgentSpawnConfig,
   AgentHandle,
   AgentMessage,
+  ClaudeResult,
 } from "./agent.js";
 
 export type { RunStatus, RunRecord, RunCreateInput } from "./run.js";

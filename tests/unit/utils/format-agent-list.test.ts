@@ -13,7 +13,7 @@ function makeAgent(overrides: Partial<AgentRecord> = {}): AgentRecord {
     module_id: "foo",
     buildplan_id: null,
     worktree_path: "/var/folders/.../foo-mm8abc",
-    branch_name: null,
+    branch_name: null, session_id: null,
     system_prompt: null,
     tdd_phase: null,
     tdd_cycles: 0,

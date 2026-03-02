@@ -7,7 +7,8 @@
 
 import type { SqliteDb } from "../db/index.js";
 import type { AgentRuntime } from "../runtime/interface.js";
-import { createAgent, getAgent, updateAgentPid, updateAgentStatus } from "../db/queries/agents.js";
+import type { ClaudeResult } from "../types/index.js";
+import { createAgent, getAgent, updateAgentPid, updateAgentStatus, updateAgentSessionId } from "../db/queries/agents.js";
 import { createEvent } from "../db/queries/events.js";
 import { recordCost } from "./budget.js";
 
@@ -43,18 +44,20 @@ export async function waitForAgent(
   db: SqliteDb,
   runtime: AgentRuntime,
   agentId: string,
-  pid?: number,
+  handle?: { result?: Promise<ClaudeResult | null> },
   pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
   options?: WaitForAgentOptions,
-): Promise<void> {
+): Promise<ClaudeResult | null> {
   while (true) {
     await sleep(pollIntervalMs);
 
-    // Check DB status first
+    // Check DB status first (agent may have called `dark agent complete` or `dark agent fail`)
     const agentRecord = getAgent(db, agentId);
     if (agentRecord) {
       if (agentRecord.status === "completed") {
-        return;
+        // Get result if available
+        const result = handle?.result ? await handle.result : null;
+        return result;
       }
       if (agentRecord.status === "failed") {
         throw new Error(`Agent failed: ${agentRecord.error ?? "unknown error"}`);
@@ -66,32 +69,59 @@ export async function waitForAgent(
     if (runtimeStatus === "stopped" || runtimeStatus === "unknown") {
       // PID is dead — check DB one more time
       const finalCheck = getAgent(db, agentId);
-      if (finalCheck?.status === "completed") return;
+      if (finalCheck?.status === "completed") {
+        return handle?.result ? await handle.result : null;
+      }
       if (finalCheck?.status === "failed") {
         throw new Error(`Agent failed: ${finalCheck.error ?? "unknown error"}`);
       }
 
-      // Process exited without updating DB — determine if incomplete or failed
-      const hasCommits = options?.checkWorktreeCommits?.(agentId) ?? false;
+      // Process exited without calling complete or fail.
+      // Check the JSON result to understand why.
+      const result = handle?.result ? await handle.result : null;
 
-      if (hasCommits) {
-        // Agent did work but didn't call complete — mark as incomplete
-        const errorMsg = "Process exited without completing — commits exist, work preserved for retry";
-        updateAgentStatus(db, agentId, "incomplete", errorMsg);
-
-        // Emit agent-incomplete event so dashboard/retry can find it
-        const agent = getAgent(db, agentId);
-        if (agent) {
-          createEvent(db, agent.run_id, "agent-incomplete", {
-            agentId,
-            hasCommits: true,
-          }, agentId);
+      if (result) {
+        // Store session_id for potential resume
+        if (result.session_id) {
+          updateAgentSessionId(db, agentId, result.session_id);
         }
-
-        throw new Error(`Agent incomplete: ${errorMsg}`);
+        // Record real cost from Claude
+        if (result.total_cost_usd > 0) {
+          const agent = getAgent(db, agentId);
+          if (agent) {
+            recordCost(db, agent.run_id, agentId, result.total_cost_usd, 0);
+          }
+        }
       }
 
-      // No commits — genuinely failed
+      if (result?.subtype === "success") {
+        // Claude chose to stop — it thinks it's done but didn't call complete.
+        // Mark as incomplete so the engine can resume and tell it to call complete.
+        const errorMsg = `Agent finished (${result.num_turns} turns, $${result.total_cost_usd.toFixed(2)}) but didn't call dark agent complete. Will resume to finalize.`;
+        updateAgentStatus(db, agentId, "incomplete", errorMsg);
+        createEvent(db, agentId ? getAgent(db, agentId)?.run_id ?? "" : "", "agent-incomplete", {
+          agentId, subtype: result.subtype, num_turns: result.num_turns,
+          session_id: result.session_id, cost: result.total_cost_usd,
+        }, agentId);
+
+        // Return the result — the caller (executeAgentPhase/executeBuildPhase)
+        // can decide to resume with --resume
+        return result;
+      }
+
+      if (result?.subtype === "error_max_turns") {
+        const errorMsg = `Hit max turns (${result.num_turns}). Session preserved for resume.`;
+        updateAgentStatus(db, agentId, "incomplete", errorMsg);
+        return result;
+      }
+
+      // Other errors or no result
+      const hasCommits = options?.checkWorktreeCommits?.(agentId) ?? false;
+      if (hasCommits) {
+        updateAgentStatus(db, agentId, "incomplete", "Process exited — commits preserved");
+        return result;
+      }
+
       updateAgentStatus(db, agentId, "failed", "Process exited without completing");
       throw new Error("Agent process exited without completing");
     }
@@ -143,8 +173,10 @@ export async function executeAgentPhase(
   ) => void,
   pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
 ): Promise<void> {
+  const MAX_RESUME_ATTEMPTS = 3;
+
   const agent = createAgent(db, {
-    agent_id: "", // Will be overwritten — createAgent generates its own ID
+    agent_id: "",
     run_id: runId,
     role,
     name: `${role}-${Date.now()}`,
@@ -152,7 +184,6 @@ export async function executeAgentPhase(
   });
 
   const prompt = getPrompt(agent.id);
-  // Update system prompt after we have the agent ID
   db.prepare("UPDATE agents SET system_prompt = ? WHERE id = ?").run(prompt, agent.id);
 
   // Send actionable instructions via mail before spawning
@@ -161,25 +192,65 @@ export async function executeAgentPhase(
   createEvent(db, runId, "agent-spawned", { role }, agent.id);
   console.log(`[dark] Phase ${role}: spawning agent...`);
 
-  const handle = await runtime.spawn({
-    agent_id: agent.id,
-    run_id: runId,
-    role,
-    name: agent.name,
-    system_prompt: prompt,
-  });
+  let sessionId: string | undefined;
+  let attempt = 0;
 
-  updateAgentPid(db, agent.id, handle.pid);
-  console.log(`[dark] Phase ${role}: agent spawned (PID ${handle.pid})... waiting for completion`);
+  while (attempt < MAX_RESUME_ATTEMPTS) {
+    attempt++;
 
-  // Poll until agent completes (DB-based)
-  await waitForAgent(db, runtime, agent.id, handle.pid, pollIntervalMs);
+    const handle = await runtime.spawn({
+      agent_id: agent.id,
+      run_id: runId,
+      role,
+      name: agent.name,
+      system_prompt: prompt,
+      resume_session_id: sessionId,
+    });
 
-  const finalAgent = getAgent(db, agent.id);
-  if (finalAgent) {
-    estimateCostIfMissing(db, finalAgent);
-    console.log(`[dark] Agent ${finalAgent.name} completed. Cost: $${finalAgent.cost_usd.toFixed(2)}`);
+    updateAgentPid(db, agent.id, handle.pid);
+    // Reset status to running for resume attempts
+    if (attempt > 1) {
+      updateAgentStatus(db, agent.id, "running");
+    }
+    console.log(`[dark] Phase ${role}: agent spawned (PID ${handle.pid})${attempt > 1 ? ` [resume attempt ${attempt}]` : ""}... waiting for completion`);
+
+    const result = await waitForAgent(db, runtime, agent.id, handle, pollIntervalMs);
+
+    // Check if agent called complete (DB status)
+    const finalAgent = getAgent(db, agent.id);
+    if (finalAgent?.status === "completed") {
+      estimateCostIfMissing(db, finalAgent);
+      console.log(`[dark] Agent ${finalAgent.name} completed. Cost: $${finalAgent.cost_usd.toFixed(2)}`);
+      return;
+    }
+
+    // Agent didn't call complete — check if we can resume
+    if (result?.session_id) {
+      sessionId = result.session_id;
+    }
+
+    if (result?.subtype === "success" && sessionId) {
+      // Claude thinks it's done but didn't call complete — resume and ask it to call complete
+      console.log(`[dark] Agent finished but didn't call complete. Resuming session to finalize (attempt ${attempt + 1})...`);
+      // Reset status for next attempt
+      updateAgentStatus(db, agent.id, "running");
+      continue;
+    }
+
+    if (result?.subtype === "error_max_turns" && sessionId) {
+      console.log(`[dark] Agent hit max turns (${result.num_turns}). Resuming session (attempt ${attempt + 1})...`);
+      updateAgentStatus(db, agent.id, "running");
+      continue;
+    }
+
+    // Can't resume — genuinely failed or no session to resume
+    if (finalAgent?.status === "incomplete") {
+      throw new Error(`Agent incomplete after ${attempt} attempt(s). Session: ${sessionId ?? "unknown"}`);
+    }
+    throw new Error(`Agent failed: ${finalAgent?.error ?? "unknown error"}`);
   }
+
+  throw new Error(`Agent failed to call complete after ${MAX_RESUME_ATTEMPTS} resume attempts`);
 }
 
 /**

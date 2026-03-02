@@ -30,7 +30,7 @@ export const integrateRunCommand = new Command("run")
     }
 
     const logsDir = join(dfDir, "logs");
-    const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary, logsDir);
+    const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary);
     const phase = options.phase ? parseInt(options.phase, 10) : undefined;
 
     const result = await runIntegration(db, runtime, runId, phase);

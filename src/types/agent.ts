@@ -26,6 +26,7 @@ export interface AgentRecord {
   buildplan_id: string | null;
   worktree_path: string | null;
   branch_name: string | null;
+  session_id: string | null;
   system_prompt: string | null;
   tdd_phase: string | null;
   tdd_cycles: number;
@@ -48,6 +49,7 @@ export interface AgentSpawnConfig {
   buildplan_id?: string;
   worktree_path?: string;
   system_prompt: string;
+  resume_session_id?: string;
 }
 
 export interface AgentHandle {
@@ -55,6 +57,19 @@ export interface AgentHandle {
   pid: number;
   role: AgentRole;
   kill: () => Promise<void>;
+  /** Resolves when the process exits with the parsed JSON result (if --output-format json) */
+  result?: Promise<ClaudeResult | null>;
+}
+
+/** Parsed result from claude --print --output-format json */
+export interface ClaudeResult {
+  subtype: "success" | "error_max_turns" | "error_during_execution" | "error_max_budget_usd";
+  session_id: string;
+  is_error: boolean;
+  num_turns: number;
+  total_cost_usd: number;
+  duration_ms: number;
+  result?: string;
 }
 
 export interface AgentMessage {
