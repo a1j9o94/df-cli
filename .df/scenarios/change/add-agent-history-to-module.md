@@ -1,33 +1,38 @@
 ---
 name: add-agent-history-to-module
 type: change
-spec_id: run_01KJNH14DGMNSTJH5EJVY17TQ9
-created_by: agt_01KJNH14DHP9J33BQJ5KW6S6ZM
+spec_id: run_01KJRD336D6QVSH0Z3P60Y3QA3
+created_by: agt_01KJRD336E2WR8VT2VHPW6XR1E
 ---
 
-Changeability test: It should be straightforward to extend the modules API to show all agent attempts for a module.
+CHANGEABILITY SCENARIO: Add agent history to module card (show all attempts, not just latest).
 
-MODIFICATION:
-Add an 'attempts' array to the ModuleStatus interface and response, showing all agents that have been assigned to a module (ordered by created_at ASC), each with their status, cost, elapsed time, and error (if failed).
+MODIFICATION DESCRIPTION:
+Extend the /api/runs/:id/modules endpoint to optionally return the full agent history for each module, showing all attempts (e.g., 'Attempt 1: failed, Attempt 2: running').
 
-EXPECTED CHANGES:
-1. Add 'attempts' field to ModuleStatus interface in src/dashboard/server.ts
-2. In handleGetModules(), change the single agent lookup to a multi-row query:
+CHANGE REQUIRED:
+1. In handleGetModules() in src/dashboard/server.ts, change the agent query from:
+   SELECT * FROM agents WHERE run_id = ? AND module_id = ? ORDER BY created_at DESC LIMIT 1
+   To a query that returns ALL agents for the module:
    SELECT * FROM agents WHERE run_id = ? AND module_id = ? ORDER BY created_at ASC
-3. Map each row to a lightweight attempt summary: { id, status, cost, tokens, elapsed, error? }
-4. The existing agentStatus/cost/tokens/tddPhase fields continue to reflect the LATEST agent
+2. Add an optional 'agentHistory' field to the ModuleStatus interface:
+   agentHistory?: Array<{ id: string; status: string; cost: number; elapsed: string; createdAt: string; error?: string }>
+3. Map all agent rows into the agentHistory array
+4. Keep using the first row (most recent via DESC, or last via ASC) for the primary agentStatus/cost/tokens fields
 
 AFFECTED AREAS:
-- src/dashboard/server.ts: ModuleStatus interface + handleGetModules()
-- tests/unit/dashboard/server.test.ts: Add test for attempts array
+- src/dashboard/server.ts: ModuleStatus interface, handleGetModules() function
+- tests/unit/dashboard/server.test.ts: Add test for agentHistory field
+- Dashboard UI (src/dashboard/index.ts): Would need UI update to render history (not in scope of this change assessment)
 
 EXPECTED EFFORT:
-- Should be achievable by changing ~15-25 lines of code
-- No new files needed
-- No schema changes needed (agents table already has all required columns)
-- The query change is a relaxation (remove LIMIT 1, keep ORDER BY created_at)
+- Low (~30 minutes): The data is already in the DB, just needs a query change from LIMIT 1 to returning all rows
+- The existing ORDER BY created_at DESC pattern (from the primary fix) makes this trivial
+- Interface change is additive (optional field), so backward compatible
 
-VERIFICATION:
-- The change should NOT break existing fields on ModuleStatus
-- Existing tests should still pass (agentStatus etc. still reflect latest)
-- New test: verify attempts array has correct length and order for a module with 2 agents
+ASSESSMENT CRITERIA:
+- Can this change be made by modifying only handleGetModules() and the ModuleStatus interface?
+- Does the existing code structure (module-agent lookup pattern) support this without refactoring?
+- Is the change backward compatible (existing consumers still work)?
+
+EXPECTED ANSWER: Yes to all three. The fix in this spec (adding ORDER BY created_at DESC) naturally sets up for this extension by making the query pattern explicit about ordering.
