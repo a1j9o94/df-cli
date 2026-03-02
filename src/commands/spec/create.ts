@@ -8,6 +8,7 @@ import { newSpecId } from "../../utils/id.js";
 import { serializeFrontmatter } from "../../utils/frontmatter.js";
 import { autoCommitFile } from "../../pipeline/auto-commit.js";
 import { log } from "../../utils/logger.js";
+import { gitCommitFile } from "../../utils/git-persistence.js";
 
 export const specCreateCommand = new Command("create")
   .description("Create a new specification")
@@ -41,6 +42,7 @@ export const specCreateCommand = new Command("create")
     writeFileSync(absPath, content);
     createSpec(db, id, title, filePath);
 
+<<<<<<< HEAD
     // Auto-commit spec file to git (belt-and-suspenders: specs in both DB and git)
     const projectRoot = dirname(dfDir);
     const gitRelativePath = join(".df", filePath);
@@ -48,6 +50,11 @@ export const specCreateCommand = new Command("create")
     if (commitResult.success) {
       log.info("  Spec committed to git history");
     }
+=======
+    // Guard 5: Commit spec file to git immediately (belt-and-suspenders)
+    const repoRoot = dirname(dfDir);
+    gitCommitFile(repoRoot, join(".df", filePath), `df: track spec ${id}`);
+>>>>>>> df-build/run_01KJ/git-commit-on-create-mm92zb2z
 
     log.success(`Created spec: ${id}`);
     log.info(`  File: ${absPath}`);

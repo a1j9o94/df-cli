@@ -1,12 +1,13 @@
 import { Command } from "commander";
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, relative } from "node:path";
 import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getAgent } from "../../db/queries/agents.js";
 import { createEvent } from "../../db/queries/events.js";
 import { autoCommitFile } from "../../pipeline/auto-commit.js";
 import { log } from "../../utils/logger.js";
+import { gitCommitFile } from "../../utils/git-persistence.js";
 
 export const scenarioCreateCommand = new Command("create")
   .description("Create a holdout test scenario (called by Architect agent)")
