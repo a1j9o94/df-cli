@@ -1,8 +1,31 @@
 ---
 name: protected-files-removed
 type: functional
-spec_id: run_01KJQQT8BDGGZEKPZN2WEF41K9
-created_by: agt_01KJQQT8BFH68W87KWNKGGES7S
+spec_id: run_01KJR7MBQFPM5ZN5Z78QJSBMQ9
+created_by: agt_01KJR7MBQH86Y3MMHWHQY1KCZS
 ---
 
-PRECONDITION: A git repo with main branch and a worktree branch. The worktree has .df/state.db-wal committed (tracked by git). STEPS: (1) Create main repo with initial commit. (2) Create worktree branch. (3) In worktree: create .df/ directory and write .df/state.db-wal file. git add .df/state.db-wal and commit. (4) Call sanitizeWorktree(worktreePath). (5) Call rebaseWorktreeBranch(worktreePath, 'main'). (6) Merge the worktree branch into main via rebaseAndMerge(). EXPECTED: sanitizeWorktree runs git rm --cached on .df/state.db-wal (removing from tracking). Creates a sanitize commit. After merge into main, .df/state.db-wal does NOT appear in main's tracked files (git ls-files should not include it). PASS CRITERIA: After full rebaseAndMerge, running 'git ls-files' on main repo does NOT list .df/state.db-wal. MergeResult.success === true. FAIL CRITERIA: .df/state.db-wal appears in main's tracked files after merge.
+SCENARIO: Worktree has .df/state.db-wal committed. Sanitization removes it before rebase. Merge doesn't corrupt main DB.
+
+SETUP:
+1. Create a git repo with an initial commit on main.
+2. Create a worktree branch (e.g., 'has-protected') from main.
+3. In the worktree, create a feature file: feature.ts with content 'export function feature() {}'
+4. In the worktree, create .df/state.db-wal with content 'stale wal data'
+5. Force-add all files: git add -f -A
+6. Commit: git commit -m 'Feature with state.db'
+
+EXECUTION:
+7. Call rebaseAndMerge([worktreePath], mainRepoPath, 'main')
+
+EXPECTED RESULTS:
+- result.success === true
+- feature.ts exists on main (real work preserved)
+- .df/state.db-wal does NOT exist on main (protected file removed)
+- .df/state.db-wal is NOT in git ls-files on main (not tracked)
+
+PASS CRITERIA:
+- The sanitization step removed .df/state.db-wal from git tracking before rebase
+- The feature file was preserved through the merge
+- No protected files leaked into the main branch
+- Verify by running: git ls-files on main should not contain any .df/state.db* files
