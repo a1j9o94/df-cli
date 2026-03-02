@@ -14,6 +14,8 @@ export type EventType =
   | "agent-completed"
   | "agent-failed"
   | "agent-killed"
+  | "agent-incomplete"
+  | "agent-branch-promoted"
   | "buildplan-submitted"
   | "buildplan-approved"
   | "buildplan-rejected"
