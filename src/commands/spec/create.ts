@@ -1,12 +1,13 @@
 import { Command } from "commander";
 import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { createSpec } from "../../db/queries/specs.js";
 import { newSpecId } from "../../utils/id.js";
 import { serializeFrontmatter } from "../../utils/frontmatter.js";
 import { log } from "../../utils/logger.js";
+import { gitCommitFile } from "../../utils/git-persistence.js";
 
 export const specCreateCommand = new Command("create")
   .description("Create a new specification")
@@ -39,6 +40,10 @@ export const specCreateCommand = new Command("create")
 
     writeFileSync(absPath, content);
     createSpec(db, id, title, filePath);
+
+    // Guard 5: Commit spec file to git immediately (belt-and-suspenders)
+    const repoRoot = dirname(dfDir);
+    gitCommitFile(repoRoot, join(".df", filePath), `df: track spec ${id}`);
 
     log.success(`Created spec: ${id}`);
     log.info(`  File: ${absPath}`);

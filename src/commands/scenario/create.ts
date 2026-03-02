@@ -1,11 +1,12 @@
 import { Command } from "commander";
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname, relative } from "node:path";
 import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getAgent } from "../../db/queries/agents.js";
 import { createEvent } from "../../db/queries/events.js";
 import { log } from "../../utils/logger.js";
+import { gitCommitFile } from "../../utils/git-persistence.js";
 
 export const scenarioCreateCommand = new Command("create")
   .description("Create a holdout test scenario (called by Architect agent)")
@@ -64,6 +65,11 @@ export const scenarioCreateCommand = new Command("create")
       scenario_type: options.type,
       scenario_path: filePath,
     }, agentId);
+
+    // Guard 5: Commit scenario file to git immediately (belt-and-suspenders)
+    const repoRoot = dirname(dfDir);
+    const relPath = relative(repoRoot, filePath);
+    gitCommitFile(repoRoot, relPath, `df: track scenario ${options.name}`);
 
     log.success(`Scenario created: ${filePath}`);
     log.info(`  Name: ${options.name}`);
