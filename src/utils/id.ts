@@ -39,3 +39,7 @@ export function newDepId(): string {
 export function newResourceId(): string {
   return `res_${ulid()}`;
 }
+
+export function newMergeQueueId(): string {
+  return `mq_${ulid()}`;
+}

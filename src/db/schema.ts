@@ -175,6 +175,21 @@ CREATE TABLE IF NOT EXISTS resources (
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
+-- Merge Queue
+CREATE TABLE IF NOT EXISTS merge_queue (
+  id              TEXT PRIMARY KEY,
+  run_id          TEXT NOT NULL REFERENCES runs(id),
+  position        INTEGER NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'waiting',
+  enqueued_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  started_at      TEXT,
+  completed_at    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_merge_queue_run ON merge_queue(run_id);
+CREATE INDEX IF NOT EXISTS idx_merge_queue_status ON merge_queue(status);
+CREATE INDEX IF NOT EXISTS idx_merge_queue_position ON merge_queue(position);
+
 -- Parallel Build Progress View
 CREATE VIEW IF NOT EXISTS parallel_build_progress AS
 SELECT
