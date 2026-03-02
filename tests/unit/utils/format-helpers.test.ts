@@ -57,6 +57,30 @@ describe("formatElapsed", () => {
     const result = formatElapsed(exactlyOneHour);
     expect(result).toMatch(/^1h 0m$/);
   });
+
+  // Overloaded: accepts milliseconds as number
+  test("accepts milliseconds as number input", () => {
+    const result = formatElapsed(30_000); // 30 seconds
+    expect(result).toBe("30s");
+  });
+
+  test("accepts large ms number for minutes", () => {
+    const result = formatElapsed(12 * 60_000 + 34_000); // 12m 34s
+    expect(result).toBe("12m 34s");
+  });
+
+  test("accepts large ms number for hours", () => {
+    const result = formatElapsed(90 * 60_000); // 1h 30m
+    expect(result).toBe("1h 30m");
+  });
+
+  test("accepts 0ms", () => {
+    expect(formatElapsed(0)).toBe("0s");
+  });
+
+  test("treats negative ms as 0s", () => {
+    expect(formatElapsed(-5000)).toBe("0s");
+  });
 });
 
 describe("formatRelativeTime", () => {
@@ -116,6 +140,18 @@ describe("formatCost", () => {
 
   test("rounds to 2 decimal places", () => {
     expect(formatCost(1.999)).toBe("$2.00");
+  });
+
+  test("prefixes with ~ when isEstimate is true", () => {
+    expect(formatCost(0.62, true)).toBe("~$0.62");
+  });
+
+  test("no ~ prefix when isEstimate is false", () => {
+    expect(formatCost(0.62, false)).toBe("$0.62");
+  });
+
+  test("no ~ prefix when isEstimate is not provided", () => {
+    expect(formatCost(0.62)).toBe("$0.62");
   });
 });
 

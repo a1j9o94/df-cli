@@ -83,12 +83,21 @@ function stripAnsi(str: string): string {
 }
 
 /**
- * Format elapsed time from a created_at ISO timestamp to now.
- * Returns human-readable: '5s', '12m 34s', '1h 2m'
+ * Format elapsed time as human-readable: '5s', '12m 34s', '1h 2m'.
+ *
+ * Accepts either:
+ * - An ISO timestamp string (computes elapsed from that time to now)
+ * - A number of milliseconds (formats that duration directly)
  */
-export function formatElapsed(createdAt: string): string {
-  const elapsed = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
-  const secs = Math.max(0, elapsed);
+export function formatElapsed(input: string | number): string {
+  let totalMs: number;
+  if (typeof input === "number") {
+    totalMs = input;
+  } else {
+    totalMs = Date.now() - new Date(input).getTime();
+  }
+
+  const secs = Math.max(0, Math.floor(totalMs / 1000));
 
   if (secs < 60) {
     return `${secs}s`;
@@ -130,10 +139,12 @@ export function formatRelativeTime(isoDate: string | null): string {
 
 /**
  * Format USD cost with dollar sign.
- * Returns: '$0.00' for 0, '$0.62', '$1.33'. No ~ prefix (caller adds if estimated).
+ * Returns: '$0.00' for 0, '$0.62', '$1.33'.
+ * When isEstimate is true, prefixes with '~': '~$0.62'
  */
-export function formatCost(costUsd: number): string {
-  return `$${costUsd.toFixed(2)}`;
+export function formatCost(costUsd: number, isEstimate?: boolean): string {
+  const prefix = isEstimate ? "~" : "";
+  return `${prefix}$${costUsd.toFixed(2)}`;
 }
 
 /**
