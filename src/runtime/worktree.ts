@@ -83,6 +83,91 @@ export function listWorktrees(basePath?: string): WorktreeInfo[] {
   return worktrees;
 }
 
+/**
+ * Info about a single commit in a worktree.
+ */
+export interface WorktreeCommit {
+  hash: string;
+  message: string;
+}
+
+/**
+ * Returns commits made in a worktree since it was branched from its parent.
+ * Uses `git log` from HEAD back to the fork point (where the worktree branch
+ * diverged from the commit it was created at).
+ *
+ * Returns commits in chronological order (oldest first).
+ * Returns an empty array if no commits have been made or the path doesn't exist.
+ */
+export function getWorktreeCommits(worktreePath: string): WorktreeCommit[] {
+  if (!existsSync(worktreePath)) return [];
+
+  try {
+    // Find the commit the worktree was branched from (main repo's HEAD),
+    // then list all commits since that point.
+    const mainBranch = getMainBranchFromWorktree(worktreePath);
+
+    const output = execSync(
+      `git log --format="%H %s" --reverse ${mainBranch}..HEAD`,
+      { cwd: worktreePath, encoding: "utf-8" },
+    ).trim();
+
+    if (!output) return [];
+
+    return output.split("\n").map((line) => {
+      const spaceIdx = line.indexOf(" ");
+      return {
+        hash: line.slice(0, spaceIdx),
+        message: line.slice(spaceIdx + 1),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Returns true if the worktree has any commits since it was created.
+ * Returns false for nonexistent paths or worktrees with no new commits.
+ */
+export function worktreeHasCommits(worktreePath: string): boolean {
+  if (!existsSync(worktreePath)) return false;
+  try {
+    const commits = getWorktreeCommits(worktreePath);
+    return commits.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get the "main" branch (or the branch the worktree was forked from)
+ * by looking at the common git directory's HEAD.
+ */
+function getMainBranchFromWorktree(worktreePath: string): string {
+  try {
+    // The common git dir points to the parent repo's .git
+    const commonDir = execSync(
+      "git rev-parse --path-format=absolute --git-common-dir",
+      { cwd: worktreePath, encoding: "utf-8" },
+    ).trim();
+
+    // Read what HEAD points to in the main repo
+    const mainHead = execSync("git rev-parse HEAD", {
+      cwd: commonDir.replace(/\/.git$/, ""),
+      encoding: "utf-8",
+    }).trim();
+
+    return mainHead;
+  } catch {
+    // Fallback: use the initial commit of the repo
+    return execSync("git rev-list --max-parents=0 HEAD", {
+      cwd: worktreePath,
+      encoding: "utf-8",
+    }).trim();
+  }
+}
+
 export function mergeWorktree(worktreePath: string, targetBranch: string): void {
   // Get the branch name of the worktree
   const branch = execSync("git rev-parse --abbrev-ref HEAD", {

@@ -25,8 +25,10 @@ import { getReadyModules } from "./scheduler.js";
 import { checkBudget, recordCost } from "./budget.js";
 import { log } from "../utils/logger.js";
 import { getBuilderPrompt } from "../agents/prompts/builder.js";
-import { createWorktree, removeWorktree } from "../runtime/worktree.js";
+import { createWorktree, removeWorktree, getWorktreeCommits, worktreeHasCommits } from "../runtime/worktree.js";
+import { getFailedBuilderWorktree } from "./resume.js";
 import { findDfDir } from "../utils/config.js";
+import { existsSync } from "node:fs";
 
 /** Default poll interval (5s). Can be overridden via options for testing. */
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
@@ -99,6 +101,8 @@ function estimateCostIfMissing(
 
 /**
  * Send builder-specific instructions via the mail system.
+ * If previousCommits is provided, includes them in the instructions
+ * so the builder knows what was already done by a previous attempt.
  */
 function sendBuilderInstructions(
   db: SqliteDb,
@@ -110,8 +114,9 @@ function sendBuilderInstructions(
   const worktreePath = context.worktreePath as string;
   const contracts = context.contracts as string[] | undefined;
   const scope = context.scope as { creates?: string[]; modifies?: string[]; test_files?: string[] } | undefined;
+  const previousCommits = context.previousCommits as { hash: string; message: string }[] | undefined;
 
-  const body = [
+  const lines = [
     "# Builder Instructions",
     "",
     `## Module: ${moduleId}`,
@@ -121,19 +126,42 @@ function sendBuilderInstructions(
     scope?.modifies?.length ? `- Modifies: ${scope.modifies.join(", ")}` : "",
     scope?.test_files?.length ? `- Tests: ${scope.test_files.join(", ")}` : "",
     contracts?.length ? `## Contracts: ${contracts.join(", ")}` : "",
-    "",
-    "## Steps",
-    "1. Read this assignment and understand your module scope",
-    "2. Follow TDD: write a failing test, make it pass, refactor",
-    "3. Implement all functionality defined in your module scope",
-    "4. Commit your work in the worktree",
-    `5. Mark yourself complete: dark agent complete ${agentId}`,
-    "",
-    "If you cannot complete this work, call:",
-    `dark agent fail ${agentId} --error "<description>"`,
-  ].join("\n");
+  ];
 
-  createMessage(db, runId, "orchestrator", body, { toAgentId: agentId });
+  // Include previous attempt's commits if worktree was reused
+  if (previousCommits && previousCommits.length > 0) {
+    lines.push("");
+    lines.push("## Previous Attempt");
+    lines.push("A previous builder made the following commits before it crashed.");
+    lines.push("These commits are already in your worktree. Continue from where it left off.");
+    lines.push("");
+    for (const commit of previousCommits) {
+      lines.push(`- ${commit.hash.slice(0, 8)} ${commit.message}`);
+    }
+  }
+
+  lines.push("");
+  lines.push("## Steps");
+  if (previousCommits && previousCommits.length > 0) {
+    lines.push("1. Review the previous commits in this worktree (they are already applied)");
+    lines.push("2. Determine what remains to be implemented");
+    lines.push("3. Follow TDD: write a failing test, make it pass, refactor");
+    lines.push("4. Implement remaining functionality defined in your module scope");
+    lines.push("5. Commit your work in the worktree");
+    lines.push(`6. Mark yourself complete: dark agent complete ${agentId}`);
+  } else {
+    lines.push("1. Read this assignment and understand your module scope");
+    lines.push("2. Follow TDD: write a failing test, make it pass, refactor");
+    lines.push("3. Implement all functionality defined in your module scope");
+    lines.push("4. Commit your work in the worktree");
+    lines.push(`5. Mark yourself complete: dark agent complete ${agentId}`);
+  }
+
+  lines.push("");
+  lines.push("If you cannot complete this work, call:");
+  lines.push(`dark agent fail ${agentId} --error "<description>"`);
+
+  createMessage(db, runId, "orchestrator", lines.join("\n"), { toAgentId: agentId });
 }
 
 // ---------------------------------------------------------------------------
@@ -325,9 +353,11 @@ export async function executeBuildPhase(
         }, agentId);
         log.error(`Builder failed for ${info.moduleId}: ${agentRecord.error}`);
 
-        // Clean up worktree
+        // Preserve worktree for retry — do NOT remove it.
+        // The worktree may contain partial commits from this attempt.
+        // On resume, the next builder will inherit this worktree.
         if (info.worktreePath && info.worktreePath !== projectRoot) {
-          try { removeWorktree(info.worktreePath); } catch { /* ignore */ }
+          log.info(`Preserving worktree for ${info.moduleId}: ${info.worktreePath}`);
         }
 
         throw new Error(`Builder failed for module "${info.moduleId}": ${agentRecord.error ?? "unknown error"}`);
@@ -344,8 +374,9 @@ export async function executeBuildPhase(
         }, agentId);
         log.error(`Builder crashed for ${info.moduleId}: process exited without completing`);
 
+        // Preserve worktree for retry — do NOT remove it.
         if (info.worktreePath && info.worktreePath !== projectRoot) {
-          try { removeWorktree(info.worktreePath); } catch { /* ignore */ }
+          log.info(`Preserving worktree for ${info.moduleId}: ${info.worktreePath}`);
         }
 
         throw new Error(`Builder crashed for module "${info.moduleId}": process exited without completing`);
@@ -442,20 +473,35 @@ export async function executeResumeBuildPhase(
     for (const moduleId of ready.slice(0, slotsAvailable)) {
       const mod = plan.modules.find((m) => m.id === moduleId)!;
 
-      // Create worktree
-      const runShort = runId.slice(0, 8);
-      const suffix = Date.now().toString(36);
-      const branchName = `df-build/${runShort}/${moduleId}-${suffix}`;
-      const worktreeDir = join(tmpdir(), "df-worktrees", `${moduleId}-${suffix}`);
+      // Try to reuse worktree from a previous failed builder for this module
       let worktreePath: string | null = null;
+      let previousCommits: { hash: string; message: string }[] = [];
+      const previousWorktree = getFailedBuilderWorktree(db, runId, moduleId);
 
-      try {
-        const wt = createWorktree(projectRoot, branchName, worktreeDir);
-        worktreePath = wt.path;
-        log.info(`Worktree created for ${moduleId}: ${worktreePath}`);
-      } catch (err) {
-        log.warn(`Failed to create worktree for ${moduleId}, using project root: ${err}`);
-        worktreePath = projectRoot;
+      if (previousWorktree && existsSync(previousWorktree)) {
+        // Reuse the existing worktree — it may contain partial work (commits)
+        worktreePath = previousWorktree;
+        previousCommits = getWorktreeCommits(previousWorktree);
+        if (previousCommits.length > 0) {
+          log.info(`Reusing worktree for ${moduleId} with ${previousCommits.length} previous commits: ${worktreePath}`);
+        } else {
+          log.info(`Reusing worktree for ${moduleId} (no previous commits): ${worktreePath}`);
+        }
+      } else {
+        // Create a fresh worktree
+        const runShort = runId.slice(0, 8);
+        const suffix = Date.now().toString(36);
+        const branchName = `df-build/${runShort}/${moduleId}-${suffix}`;
+        const worktreeDir = join(tmpdir(), "df-worktrees", `${moduleId}-${suffix}`);
+
+        try {
+          const wt = createWorktree(projectRoot, branchName, worktreeDir);
+          worktreePath = wt.path;
+          log.info(`Worktree created for ${moduleId}: ${worktreePath}`);
+        } catch (err) {
+          log.warn(`Failed to create worktree for ${moduleId}, using project root: ${err}`);
+          worktreePath = projectRoot;
+        }
       }
 
       const moduleContracts = listContracts(db, runId, bp.id)
@@ -496,15 +542,17 @@ export async function executeResumeBuildPhase(
         createDependency(db, runId, agent.id, dep.to, dep.type);
       }
 
+      // Send instructions, including previous commit info if this is a reused worktree
       sendBuilderInstructions(db, runId, agent.id, {
         moduleId,
         worktreePath: worktreePath ?? ".",
         contracts: contractNames,
         scope: mod.scope,
+        previousCommits,
       });
 
-      createEvent(db, runId, "builder-started", { moduleId }, agent.id);
-      console.log(`[dark] Build phase (resume): spawning builder for module "${moduleId}"`);
+      createEvent(db, runId, "builder-started", { moduleId, reusedWorktree: previousCommits.length > 0 }, agent.id);
+      console.log(`[dark] Build phase (resume): spawning builder for module "${moduleId}"${previousCommits.length > 0 ? ` (reusing worktree with ${previousCommits.length} commits)` : ""}`);
 
       const handle = await runtime.spawn({
         agent_id: agent.id,
@@ -552,8 +600,9 @@ export async function executeResumeBuildPhase(
         }, agentId);
         log.error(`Builder failed for ${info.moduleId}: ${agentRecord.error}`);
 
+        // Preserve worktree for next retry
         if (info.worktreePath && info.worktreePath !== projectRoot) {
-          try { removeWorktree(info.worktreePath); } catch { /* ignore */ }
+          log.info(`Preserving worktree for ${info.moduleId}: ${info.worktreePath}`);
         }
 
         throw new Error(`Builder failed for module "${info.moduleId}": ${agentRecord.error ?? "unknown error"}`);
@@ -568,8 +617,9 @@ export async function executeResumeBuildPhase(
           error: "Process exited without completing",
         }, agentId);
 
+        // Preserve worktree for next retry
         if (info.worktreePath && info.worktreePath !== projectRoot) {
-          try { removeWorktree(info.worktreePath); } catch { /* ignore */ }
+          log.info(`Preserving worktree for ${info.moduleId}: ${info.worktreePath}`);
         }
 
         throw new Error(`Builder crashed for module "${info.moduleId}": process exited without completing`);
