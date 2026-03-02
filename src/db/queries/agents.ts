@@ -77,6 +77,12 @@ export function updateAgentTdd(db: SqliteDb, id: string, phase: string, cycles: 
   ).run(phase, cycles, now(), id);
 }
 
+export function updateAgentBranchName(db: SqliteDb, id: string, branchName: string): void {
+  db.prepare(
+    "UPDATE agents SET branch_name = ?, updated_at = ? WHERE id = ?"
+  ).run(branchName, now(), id);
+}
+
 export function getActiveAgents(db: SqliteDb, runId: string): AgentRecord[] {
   return db.prepare(
     "SELECT * FROM agents WHERE run_id = ? AND status IN ('pending', 'spawning', 'running') ORDER BY created_at"
