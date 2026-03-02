@@ -30,7 +30,11 @@ ${context.contracts.length > 0 ? `- Contracts: ${context.contracts.join(", ")}` 
 1. RED: Write a failing test for the next piece of functionality
 2. GREEN: Write minimal code to make the test pass
 3. REFACTOR: Clean up while keeping tests green
-4. Repeat until the module is complete
+4. COMMIT: After each passing test, commit your progress:
+   \`git add -A && git commit -m 'feat: <describe what you just implemented>'\`
+5. Repeat until the module is complete
+
+IMPORTANT: Committing after each successful TDD cycle preserves your progress. If the process crashes, completed work survives in the worktree and the next attempt can continue from where you left off.
 
 ## Contract Compliance
 - Acknowledge contracts: dark contract acknowledge <contract-id> --agent ${context.agentId}
