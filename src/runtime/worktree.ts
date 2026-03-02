@@ -1,5 +1,7 @@
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { generateWorktreeGitignore } from "./protected-paths.js";
 
 export interface WorktreeInfo {
   path: string;
@@ -18,6 +20,10 @@ export function createWorktree(
     cwd: basePath,
     stdio: "pipe",
   });
+
+  // Inject .gitignore with protected paths to prevent state.db, .claude/, .letta/ from being committed
+  const gitignoreContent = generateWorktreeGitignore();
+  writeFileSync(join(dir, ".gitignore"), gitignoreContent);
 
   const head = execSync("git rev-parse HEAD", {
     cwd: dir,

@@ -1,4 +1,7 @@
 import { execSync } from "node:child_process";
+import { existsSync, unlinkSync, rmSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { isProtectedPath, getProtectedFiles } from "../runtime/protected-paths.js";
 
 export interface RebaseResult {
   success: boolean;
@@ -131,9 +134,66 @@ export function rebaseAndMerge(
       continue;
     }
 
-    // Step 2: Merge the rebased branch into target
+    // Step 2: Merge the rebased branch into target using --no-commit for sanitization
     try {
-      execSync(`git merge ${branch} --no-edit`, {
+      // Use --no-commit so we can inspect and sanitize staged files before committing
+      execSync(`git merge ${branch} --no-commit --no-ff`, {
+        cwd: mainRepoPath,
+        stdio: "pipe",
+        env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
+      });
+
+      // Step 3: Sanitize — remove any protected files from the staged merge
+      const stagedFiles = execSync("git diff --cached --name-only HEAD", {
+        cwd: mainRepoPath,
+        encoding: "utf-8",
+      }).trim().split("\n").filter(Boolean);
+
+      const protectedFiles = getProtectedFiles(stagedFiles);
+
+      if (protectedFiles.length > 0) {
+        // Unstage and remove protected files from the merge
+        for (const pf of protectedFiles) {
+          try {
+            // Reset the file to the pre-merge state (HEAD version, or remove if new)
+            execSync(`git reset HEAD -- "${pf}"`, {
+              cwd: mainRepoPath,
+              stdio: "pipe",
+            });
+            // Remove the file from the working directory if it was added by the merge
+            const fullPath = join(mainRepoPath, pf);
+            if (existsSync(fullPath)) {
+              // Check if this file existed before the merge on the target branch
+              try {
+                execSync(`git show HEAD:"${pf}"`, {
+                  cwd: mainRepoPath,
+                  stdio: "pipe",
+                });
+                // File existed before — restore it to its pre-merge state
+                execSync(`git checkout HEAD -- "${pf}"`, {
+                  cwd: mainRepoPath,
+                  stdio: "pipe",
+                });
+              } catch {
+                // File did not exist before — remove it from working tree
+                unlinkSync(fullPath);
+                // Try to remove empty parent directories
+                try {
+                  const dir = dirname(fullPath);
+                  rmSync(dir, { recursive: true });
+                } catch {
+                  // ignore — directory may not be empty
+                }
+              }
+            }
+          } catch {
+            // If individual file cleanup fails, continue with others
+          }
+        }
+      }
+
+      // Step 4: Commit the sanitized merge
+      execSync(`git commit --no-edit -m "Merge branch '${branch}'"`, {
         cwd: mainRepoPath,
         stdio: "pipe",
         env: { ...process.env, GIT_WORK_TREE: mainRepoPath },

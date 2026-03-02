@@ -5,8 +5,15 @@ build/
 
 # Dark Factory state (local, not committed)
 .df/state.db
+.df/state.db-shm
+.df/state.db-wal
+.df/state.db-journal
+.df/state.db.backup
 .df/worktrees/
 .df/logs/
+
+# Claude Code agent state
+.claude/
 
 # Environment
 .env
