@@ -97,32 +97,8 @@ export function getWorktreeCommits(worktreePath: string): WorktreeCommit[] {
   if (!existsSync(worktreePath)) return [];
 
   try {
-    // git merge-base --fork-point finds where this branch diverged.
-    // Alternatively, we find the common ancestor with the main branch.
-    // Since worktrees are created with `git worktree add -b <branch> <dir> HEAD`,
-    // the fork point is the HEAD of main at creation time.
-    // We can use `git log --oneline HEAD ^<fork-point>` to get new commits.
-    // To find the fork point, we check the reflog for the branch creation point,
-    // or more reliably, use `git merge-base HEAD @{u}` — but there's no upstream.
-    //
-    // Simplest reliable approach: the worktree branch was created at a specific commit.
-    // git log <branch> --not --remotes --not <all-other-local-branches> is complex.
-    // Instead: count commits on this branch that aren't on any other branch.
-    //
-    // Most reliable for our use case: the branch was created from HEAD of main.
-    // `git rev-list HEAD ^<merge-base>` gives us the commits.
-    //
-    // Actually simplest: worktrees are created at HEAD of the main repo.
-    // The first commit of the branch IS the HEAD at creation time.
-    // So: `git log --oneline <branch> ^<first-parent-of-branch>` or use reflog.
-    //
-    // Even simpler: `git log --oneline @{u}..HEAD` fails (no upstream).
-    // Use: `git log --format=... $(git rev-list --max-parents=0 HEAD)..HEAD`
-    // No — that includes the initial commit.
-    //
-    // Best approach: find the merge-base with the main worktree's HEAD.
-    // Get the common git dir, find the main branch, compute merge-base.
-
+    // Find the commit the worktree was branched from (main repo's HEAD),
+    // then list all commits since that point.
     const mainBranch = getMainBranchFromWorktree(worktreePath);
 
     const output = execSync(

@@ -78,7 +78,7 @@ export function getFailedBuilderWorktree(db: SqliteDb, runId: string, moduleId: 
     `SELECT worktree_path FROM agents
      WHERE run_id = ? AND role = 'builder' AND module_id = ? AND status = 'failed'
        AND worktree_path IS NOT NULL
-     ORDER BY id DESC
+     ORDER BY rowid DESC
      LIMIT 1`
   ).get(runId, moduleId) as { worktree_path: string } | undefined;
 
