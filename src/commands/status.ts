@@ -6,6 +6,7 @@ import { listAgents } from "../db/queries/agents.js";
 import { formatJson, formatStatus } from "../utils/format.js";
 import { log } from "../utils/logger.js";
 import { join } from "node:path";
+import { getRunQueueInfo, formatQueueStatus } from "../pipeline/queue-visibility.js";
 
 export const statusCommand = new Command("status")
   .description("Show current pipeline status")
@@ -39,16 +40,19 @@ export const statusCommand = new Command("status")
       }
 
       const agents = listAgents(db, run.id);
+      const queueInfo = getRunQueueInfo(db, run.id);
 
       if (options.json) {
-        console.log(formatJson({ run, agents }));
+        console.log(formatJson({ run, agents, mergeQueue: queueInfo }));
         return;
       }
 
       console.log(`Run: ${run.id}`);
       console.log(`  Spec:      ${run.spec_id}`);
       console.log(`  Status:    ${formatStatus(run.status)}`);
-      console.log(`  Phase:     ${run.current_phase ?? "(none)"}`);
+      const queueStr = formatQueueStatus(queueInfo);
+      const phaseDisplay = run.current_phase ?? "(none)";
+      console.log(`  Phase:     ${phaseDisplay}${queueStr ? ` ${queueStr}` : ""}`);
       console.log(`  Mode:      ${run.mode}`);
       console.log(`  Iteration: ${run.iteration}/${run.max_iterations}`);
       console.log(`  Cost:      $${run.cost_usd.toFixed(2)} / $${run.budget_usd.toFixed(2)}`);
@@ -75,6 +79,9 @@ export const statusCommand = new Command("status")
     for (const run of runs) {
       const agents = listAgents(db, run.id);
       const activeCount = agents.filter((a) => ["pending", "spawning", "running"].includes(a.status)).length;
-      console.log(`  ${run.id}  ${formatStatus(run.status)}  spec=${run.spec_id}  phase=${run.current_phase ?? "-"}  agents=${activeCount}/${agents.length}  $${run.cost_usd.toFixed(2)}/$${run.budget_usd.toFixed(2)}`);
+      const queueInfo = getRunQueueInfo(db, run.id);
+      const queueStr = formatQueueStatus(queueInfo);
+      const phaseDisplay = run.current_phase ?? "-";
+      console.log(`  ${run.id}  ${formatStatus(run.status)}  spec=${run.spec_id}  phase=${phaseDisplay}${queueStr ? ` ${queueStr}` : ""}  agents=${activeCount}/${agents.length}  $${run.cost_usd.toFixed(2)}/$${run.budget_usd.toFixed(2)}`);
     }
   });

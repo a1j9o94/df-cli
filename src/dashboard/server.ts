@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { SCHEMA_SQL } from "../db/schema.js";
 import { findDfDir } from "../utils/config.js";
 import { generateDashboardHtml } from "./index.js";
+import { getRunQueueInfo, type RunQueueInfo } from "../pipeline/queue-visibility.js";
 
 // --- Contract: ServerExport ---
 
@@ -19,7 +20,7 @@ export interface ServerHandle {
   stop: () => void;
 }
 
-// --- Contract: RunSummary ---
+// --- Contract: RunSummary (extended with RunSummaryQueueExtension) ---
 
 interface RunSummary {
   id: string;
@@ -34,6 +35,12 @@ interface RunSummary {
   error?: string;
   createdAt: string;
   tokensUsed: number;
+  /** Present only when the run is in the merge queue */
+  mergeQueue?: {
+    position: number;
+    ahead: number;
+    total: number;
+  };
 }
 
 // --- Contract: AgentSummary ---
@@ -192,6 +199,16 @@ function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unkno
 
   if (r.error) {
     summary.error = r.error as string;
+  }
+
+  // Add merge queue info if the run is in the queue
+  const queueInfo = getRunQueueInfo(db, runId);
+  if (queueInfo) {
+    summary.mergeQueue = {
+      position: queueInfo.position,
+      ahead: queueInfo.ahead,
+      total: queueInfo.total,
+    };
   }
 
   return summary;
