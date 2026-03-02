@@ -1,22 +1,33 @@
 ---
 name: add-new-protected-pattern
 type: change
-spec_id: run_01KJR06QZXWJ6N1KB7X9XGPP1X
-created_by: agt_01KJR06R00KR48KRNSS5DJPVBF
+spec_id: run_01KJR7MBQFPM5ZN5Z78QJSBMQ9
+created_by: agt_01KJR7MBQH86Y3MMHWHQY1KCZS
 ---
 
-Modification: Add a new protected path pattern (e.g., '.vscode/') to PROTECTED_PATTERNS in src/runtime/protected-paths.ts.
+CHANGEABILITY SCENARIO: Adding a new protected pattern should be automatically honored by both worktree sanitization and merge sanitization with no code changes beyond protected-paths.ts.
 
-Expected behavior after change:
-- A worktree with .vscode/ files committed should have them removed during pre-rebase sanitization automatically
-- No code changes needed outside protected-paths.ts — the sanitization function should consume PROTECTED_PATTERNS dynamically
-- The merge sanitization in rebase-merge.ts (post-merge) should also automatically exclude .vscode/ files
+MODIFICATION:
+1. Add a new pattern '.secrets/' to PROTECTED_PATTERNS in src/runtime/protected-paths.ts
+2. No other code changes needed
 
-Affected areas:
-- src/runtime/protected-paths.ts (add pattern)
-- Sanitization function in rebase-merge.ts (should use PROTECTED_PATTERNS, not hardcoded list)
-- Pre-rebase sanitization (new function) should use PROTECTED_PATTERNS
+VERIFICATION:
+1. Create a worktree with a .secrets/api-key.txt file committed
+2. Run sanitizeWorktree() on it
+3. The .secrets/api-key.txt should be removed from git tracking
+4. The file should not appear in main after rebaseAndMerge()
 
-Expected effort: 1 line change (add pattern to array). Zero changes to sanitization logic if implemented correctly.
+AFFECTED AREAS:
+- src/runtime/protected-paths.ts (single-line addition to PROTECTED_PATTERNS array)
+- Worktree .gitignore generation (automatic via generateWorktreeGitignore)
+- Worktree pre-rebase sanitization (automatic via isProtectedPath)
+- Post-merge sanitization in rebase-merge.ts (automatic via getProtectedFiles)
 
-Pass/fail: PASS if adding the pattern to PROTECTED_PATTERNS is sufficient. FAIL if sanitization functions use hardcoded paths instead of consuming the pattern list.
+EXPECTED EFFORT:
+- 1 line of code changed
+- 0 files structurally modified beyond protected-paths.ts
+- All sanitization functions should automatically respect the new pattern because they call isProtectedPath() or getProtectedFiles() from the single source of truth
+
+PASS CRITERIA:
+- The new pattern is honored without touching worktree-sanitization.ts, rebase-merge.ts, or merge-sanitization.ts
+- The single-source-of-truth contract (ProtectedPathsAPI) is maintained
