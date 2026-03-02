@@ -15,10 +15,29 @@ import { recordCost } from "./budget.js";
 export const DEFAULT_POLL_INTERVAL_MS = 5_000;
 
 /**
+ * Options for waitForAgent to support incomplete status detection.
+ */
+export interface WaitForAgentOptions {
+  /**
+   * Callback to check if the agent's worktree has commits.
+   * When provided and the process exits without completing:
+   * - If returns true → agent is marked "incomplete" (has work, didn't call complete)
+   * - If returns false → agent is marked "failed" (no work done)
+   * When not provided, the agent is always marked "failed" (backward compatible).
+   */
+  checkWorktreeCommits?: (agentId: string) => boolean;
+}
+
+/**
  * Poll until an agent reaches a terminal state (completed or failed).
  *
  * Checks DB status first, then falls back to PID liveness via the runtime.
- * If the process exits without updating its DB status, marks the agent as failed.
+ * If the process exits without updating its DB status:
+ * - With checkWorktreeCommits and commits exist: marks as "incomplete"
+ * - Otherwise: marks as "failed"
+ *
+ * "incomplete" means the agent did real work (commits exist) but didn't call
+ * `dark agent complete`. The work is preserved for retry via `dark continue`.
  */
 export async function waitForAgent(
   db: SqliteDb,
@@ -26,6 +45,7 @@ export async function waitForAgent(
   agentId: string,
   pid?: number,
   pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
+  options?: WaitForAgentOptions,
 ): Promise<void> {
   while (true) {
     await sleep(pollIntervalMs);
@@ -51,7 +71,27 @@ export async function waitForAgent(
         throw new Error(`Agent failed: ${finalCheck.error ?? "unknown error"}`);
       }
 
-      // Process exited without updating DB — mark as failed
+      // Process exited without updating DB — determine if incomplete or failed
+      const hasCommits = options?.checkWorktreeCommits?.(agentId) ?? false;
+
+      if (hasCommits) {
+        // Agent did work but didn't call complete — mark as incomplete
+        const errorMsg = "Process exited without completing — commits exist, work preserved for retry";
+        updateAgentStatus(db, agentId, "incomplete", errorMsg);
+
+        // Emit agent-incomplete event so dashboard/retry can find it
+        const agent = getAgent(db, agentId);
+        if (agent) {
+          createEvent(db, agent.run_id, "agent-incomplete", {
+            agentId,
+            hasCommits: true,
+          }, agentId);
+        }
+
+        throw new Error(`Agent incomplete: ${errorMsg}`);
+      }
+
+      // No commits — genuinely failed
       updateAgentStatus(db, agentId, "failed", "Process exited without completing");
       throw new Error("Agent process exited without completing");
     }
