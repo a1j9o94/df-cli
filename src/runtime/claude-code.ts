@@ -1,65 +1,155 @@
 import type { AgentHandle, AgentSpawnConfig } from "../types/index.js";
+import { AgentLogWriter } from "./agent-log.js";
 import type { AgentRuntime } from "./interface.js";
-import { spawnProcess, killProcess } from "./process.js";
+import { killProcess, spawnProcess } from "./process.js";
 import type { ProcessHandle } from "./process.js";
 
 interface InternalHandle extends AgentHandle {
   pid: number;
   proc: ProcessHandle;
+  logWriter?: AgentLogWriter;
 }
 
 export class ClaudeCodeRuntime implements AgentRuntime {
   private handles = new Map<string, InternalHandle>();
   private binary: string;
+  private logsDir?: string;
 
-  constructor(binary = "claude") {
+  constructor(binary = "claude", logsDir?: string) {
     this.binary = binary;
+    this.logsDir = logsDir;
+  }
+
+  /**
+   * Get the configured logs directory, if any.
+   */
+  getLogsDir(): string | undefined {
+    return this.logsDir;
+  }
+
+  /**
+   * Create an AgentLogWriter for the given agent ID, if logging is enabled.
+   */
+  getLogWriter(agentId: string): AgentLogWriter | undefined {
+    if (!this.logsDir) return undefined;
+    return new AgentLogWriter(this.logsDir, agentId);
+  }
+
+  /**
+   * Build the CLI arguments for spawning a Claude process.
+   * Extracted as a public method for testability.
+   */
+  buildSpawnArgs(config: AgentSpawnConfig): string[] {
+    const args = ["--print", "--dangerously-skip-permissions"];
+
+    // When logging is enabled, use stream-json output format for structured logs
+    if (this.logsDir) {
+      args.push("--output-format", "stream-json");
+    }
+
+    args.push("--system-prompt", config.system_prompt, this.buildInitialMessage(config));
+
+    return args;
+  }
+
+  /**
+   * Build the initial message that tells the agent who it is and how to communicate.
+   */
+  private buildInitialMessage(config: AgentSpawnConfig): string {
+    return [
+      `You are agent ${config.agent_id} (role: ${config.role}) in run ${config.run_id}.`,
+      `Check your mail for instructions: dark mail check --agent ${config.agent_id}`,
+      `When finished, call: dark agent complete ${config.agent_id}`,
+      `If you cannot complete your work, call: dark agent fail ${config.agent_id} --error "<description>"`,
+    ].join("\n");
   }
 
   async spawn(config: AgentSpawnConfig): Promise<AgentHandle> {
     const agentId = config.agent_id;
+    const args = this.buildSpawnArgs(config);
 
-    const initialMessage = [
-      `You are agent ${agentId} (role: ${config.role}) in run ${config.run_id}.`,
-      `Check your mail for instructions: dark mail check --agent ${agentId}`,
-      `When finished, call: dark agent complete ${agentId}`,
-      `If you cannot complete your work, call: dark agent fail ${agentId} --error "<description>"`,
-    ].join("\n");
+    // Set up log writer if logging is enabled
+    const logWriter = this.getLogWriter(agentId);
 
-    const proc = spawnProcess(
-      this.binary,
-      [
-        "--print",
-        "--dangerously-skip-permissions",
-        "--system-prompt", config.system_prompt,
-        initialMessage,
-      ],
-      {
-        cwd: config.worktree_path,
-        env: {
-          CLAUDECODE: "",
-          DF_AGENT_ID: agentId,
-          DF_RUN_ID: config.run_id,
-          DF_ROLE: config.role,
-        },
-        stdout: "ignore",
-        stderr: "ignore",
+    // When logging is enabled, pipe stdout so we can capture stream-json output.
+    // Otherwise, ignore stdout as before.
+    const stdoutMode = logWriter ? ("pipe" as const) : ("ignore" as const);
+
+    const proc = spawnProcess(this.binary, args, {
+      cwd: config.worktree_path,
+      env: {
+        CLAUDECODE: "",
+        DF_AGENT_ID: agentId,
+        DF_RUN_ID: config.run_id,
+        DF_ROLE: config.role,
       },
-    );
+      stdout: stdoutMode,
+      stderr: "ignore",
+    });
+
+    // If logging, pipe stdout lines to the log writer
+    const stdout = proc.process.stdout;
+    if (logWriter && stdout && typeof stdout !== "number") {
+      this.pipeStdoutToLog(stdout, logWriter);
+    }
 
     const handle: InternalHandle = {
       id: agentId,
       pid: proc.pid,
       role: config.role,
       proc,
+      logWriter,
       kill: async () => {
         killProcess(proc.pid);
+        logWriter?.close();
         this.handles.delete(agentId);
       },
     };
 
     this.handles.set(agentId, handle);
     return handle;
+  }
+
+  /**
+   * Read lines from a readable stream and write them to the log file.
+   * Each line from stream-json is a complete JSON object.
+   */
+  private async pipeStdoutToLog(
+    stdout: ReadableStream<Uint8Array>,
+    writer: AgentLogWriter,
+  ): Promise<void> {
+    const reader = stdout.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete lines
+        const lines = buffer.split("\n");
+        // Keep the last incomplete line in the buffer
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (line.trim()) {
+            writer.writeLine(line);
+          }
+        }
+      }
+
+      // Flush any remaining content
+      if (buffer.trim()) {
+        writer.writeLine(buffer);
+      }
+    } catch {
+      // Process may have been killed — that's fine, we still have what we captured
+    } finally {
+      writer.close();
+    }
   }
 
   async send(_agentId: string, _message: string): Promise<void> {
