@@ -1,0 +1,8 @@
+---
+name: human-readable-names-throughout
+type: functional
+spec_id: run_01KJNFM10CHHWZV5TVPXKE50XR
+created_by: agt_01KJNFM10EV9BXZCJNZKFZEN7F
+---
+
+SETUP: Start dashboard with a database containing: a run with a ULID-style id (e.g. run_01KJNF64GVR4...), a spec with ULID-style id, agents with timestamp-based names (e.g. 'architect-1772394582557'), and phases stored as 'evaluate-functional'. STEPS: 1. GET / (HTML root) — render the full dashboard. 2. Scan the default view (sidebar + overview tab) for: a) Raw ULIDs — no full ULID strings should appear as primary text. Run IDs like 'run_01KJNF64GVR4BXWM...' should be truncated or replaced with the spec title. b) Timestamp-as-names — agent names like 'architect-1772394582557' should be shown as 'Architect' or 'Builder: data-layer'. c) Snake_case IDs — module IDs like 'mod_api_server' should display as titles like 'HTTP API Server'. d) Raw phase names — 'evaluate-functional' should display as 'Evaluate' or 'Evaluating'. e) ISO timestamps — ' 2026-03-01T19:02:20Z' should display as relative time like '3m ago'. 3. Verify that IDs are still accessible (hover tooltips or collapsed sections) but not the default headline text. PASS CRITERIA: - No raw ULID strings visible as primary/headline text in default view - Agent names show role + module (not timestamps) - Phase names are human-readable - Timestamps show relative time format - Module names show titles not IDs - IDs available via tooltips or secondary text
