@@ -40,12 +40,16 @@ export class ClaudeCodeRuntime implements AgentRuntime {
    * Extracted as a public method for testability.
    */
   buildSpawnArgs(config: AgentSpawnConfig): string[] {
-    const args = ["--print", "--dangerously-skip-permissions"];
+    const args = [
+      "--print",
+      "--dangerously-skip-permissions",
+    ];
 
-    // When logging is enabled, use stream-json output format for structured logs
-    if (this.logsDir) {
-      args.push("--output-format", "stream-json");
-    }
+    // NOTE: --output-format stream-json disabled for now.
+    // It was causing agents to exit immediately. Needs investigation.
+    // if (this.logsDir) {
+    //   args.push("--output-format", "stream-json");
+    // }
 
     args.push("--system-prompt", config.system_prompt, this.buildInitialMessage(config));
 
@@ -75,8 +79,18 @@ export class ClaudeCodeRuntime implements AgentRuntime {
     // Otherwise, ignore stdout as before.
     const stdoutMode = logWriter ? ("pipe" as const) : ("ignore" as const);
 
+    // If no worktree_path, use a temp directory as cwd to avoid loading
+    // project-level .claude/CLAUDE.md (which can be 50KB+ and exhaust context)
+    let cwd = config.worktree_path;
+    if (!cwd) {
+      const { mkdtempSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      cwd = mkdtempSync(join(tmpdir(), "df-agent-cwd-"));
+    }
+
     const proc = spawnProcess(this.binary, args, {
-      cwd: config.worktree_path,
+      cwd,
       env: {
         CLAUDECODE: "",
         DF_AGENT_ID: agentId,
