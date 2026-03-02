@@ -39,7 +39,10 @@ describe("ClaudeCodeRuntime", () => {
   });
 
   describe("buildSpawnArgs", () => {
-    it("adds --output-format stream-json when logsDir is set", () => {
+    it("does NOT add --output-format stream-json (disabled: causes early exit)", () => {
+      // NOTE: --output-format stream-json is intentionally disabled in the runtime
+      // because it was causing agents to exit immediately. When re-enabled, update
+      // this test to assert the flags are present.
       const runtime = new ClaudeCodeRuntime("claude", logsDir);
       const args = runtime.buildSpawnArgs({
         agent_id: "agt_test",
@@ -49,8 +52,8 @@ describe("ClaudeCodeRuntime", () => {
         system_prompt: "You are a test builder.",
       });
 
-      expect(args).toContain("--output-format");
-      expect(args).toContain("stream-json");
+      expect(args).not.toContain("--output-format");
+      expect(args).not.toContain("stream-json");
       expect(args).toContain("--print");
     });
 
