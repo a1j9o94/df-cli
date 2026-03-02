@@ -204,7 +204,7 @@ export function sanitizeMainRepo(mainRepoPath: string): SanitizeMainRepoResult {
     // Step 1: Stash uncommitted changes if any
     const dirtyFiles = getDirtyFiles(mainRepoPath);
     if (dirtyFiles.length > 0) {
-      execSync('git stash push -m "df: pre-merge stash"', {
+      execSync('git stash push -u -m "df: pre-merge stash"', {
         cwd: mainRepoPath,
         stdio: "pipe",
       });
