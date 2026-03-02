@@ -1,25 +1,34 @@
 ---
 name: clean-worktree-passthrough
 type: functional
-spec_id: run_01KJR06QZXWJ6N1KB7X9XGPP1X
-created_by: agt_01KJR06R00KR48KRNSS5DJPVBF
+spec_id: run_01KJR7MBQFPM5ZN5Z78QJSBMQ9
+created_by: agt_01KJR7MBQH86Y3MMHWHQY1KCZS
 ---
 
-Setup: Create a git repo with initial commit. Create a worktree branch. In the worktree, add a new file (feature.ts), stage it, and commit it properly. The worktree has a clean working tree (git status --porcelain returns empty). Advance main with a separate commit.
+SCENARIO: Worktree is already clean (builder committed everything properly). Sanitization is a no-op. Rebase proceeds normally.
 
-Steps:
-1. Call the rebase-and-merge flow with this clean worktree.
-2. Pre-rebase sanitization should:
-   a. Detect that git status --porcelain is empty (no unstaged, no protected files in index)
-   b. Skip all cleanup steps (no-op)
-   c. NOT create any sanitization commit
-3. Rebase should succeed normally.
-4. Merge into main should succeed.
+SETUP:
+1. Create a git repo with an initial commit on main.
+2. Create a worktree branch (e.g., 'clean-builder') from main.
+3. In the worktree, create clean.ts with content: export const clean = true;
+4. git add -A and git commit -m 'Clean feature'
+5. Verify the worktree is clean: git status --porcelain should be empty
 
-Expected:
-- rebaseAndMerge returns success=true  
-- The feature.ts file appears on main
-- No extra 'sanitize worktree' commit in branch history
-- Sanitization was effectively a no-op
+EXECUTION:
+6. Call rebaseAndMerge([worktreePath], mainRepoPath, 'main')
 
-Pass/fail: PASS if merge succeeds normally without any sanitization commits. FAIL if unnecessary sanitization commits are created or if an error occurs on clean worktrees.
+EXPECTED RESULTS:
+- result.success === true
+- result.mergedBranches.length === 1
+- result.failedBranches.length === 0
+- clean.ts exists on main after merge
+
+ALSO VERIFY (if calling sanitizeWorktree directly):
+- sanitizeWorktree result.committed === false (no extra commit needed)
+- sanitizeWorktree result.removedProtectedFiles.length === 0
+- sanitizeWorktree result.removedNodeModules === false
+
+PASS CRITERIA:
+- The sanitization step is a no-op for already-clean worktrees
+- No unnecessary commits created
+- The rebase-merge proceeds identically to a non-sanitized path
