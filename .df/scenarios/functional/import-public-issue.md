@@ -1,0 +1,8 @@
+---
+name: import-public-issue
+type: functional
+spec_id: run_01KJSS4TD4WH5VKGWK6YWSWJZQ
+created_by: agt_01KJSS4TD5H3A6M3NHC0H95JFZ
+---
+
+Setup: A public GitHub repo with issue #123 that has title 'Fix authentication redirect loop', body with first paragraph 'Users are stuck in a redirect loop when logging in via SSO.' followed by a checkbox list: '- [ ] Detect redirect loops after 3 attempts\n- [ ] Show error page with retry button\n- [ ] Log redirect chain for debugging'. No labels, no acceptance criteria section, 0 comments.\n\nSteps:\n1. Run: dark spec create --from-github https://github.com/org/repo/issues/123\n2. Verify exit code is 0\n3. Verify a new spec file exists at .df/specs/spec_*.md\n4. Read the spec file and verify:\n   a. Frontmatter has title: 'Fix authentication redirect loop'\n   b. Frontmatter has status: draft\n   c. Frontmatter has type: feature (default when no label mapping)\n   d. Frontmatter has source_url: https://github.com/org/repo/issues/123\n   e. ## Goal section contains 'Users are stuck in a redirect loop when logging in via SSO.'\n   f. ## Requirements section contains 3 bullet items: 'Detect redirect loops after 3 attempts', 'Show error page with retry button', 'Log redirect chain for debugging'\n5. Verify stdout includes the spec file path, title, and 'Requirements: 3 extracted'\n\nPass criteria: Spec file created with correct frontmatter, goal extracted from first paragraph, 3 requirements extracted from checkboxes, summary printed to stdout.
