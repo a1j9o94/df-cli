@@ -2,7 +2,7 @@ import type { SqliteDb } from "../db/index.js";
 import type { DfConfig, Buildplan } from "../types/index.js";
 import type { AgentRuntime } from "../runtime/interface.js";
 import { createRun, getRun, updateRunStatus, updateRunPhase, incrementRunIteration } from "../db/queries/runs.js";
-import { getSpec } from "../db/queries/specs.js";
+import { getSpec, updateSpecStatus, updateSpecHash } from "../db/queries/specs.js";
 import { getActiveAgents } from "../db/queries/agents.js";
 import { getActiveBuildplan } from "../db/queries/buildplans.js";
 import { createEvent } from "../db/queries/events.js";
@@ -21,6 +21,7 @@ import { executeAgentPhase } from "./agent-lifecycle.js";
 import { sendInstructions as sendInstructionsFn } from "./instructions.js";
 import { executeBuildPhase, executeResumeBuildPhase } from "./build-phase.js";
 import { executeMergePhase } from "./merge-phase.js";
+import { preBuildValidation, updateSpecStatusChecked, computeContentHash } from "./build-guards.js";
 
 export class PipelineEngine {
   constructor(
@@ -33,9 +34,32 @@ export class PipelineEngine {
    * Execute the full pipeline for a spec.
    * Creates a run, walks through phases, spawns agents, polls for completion.
    */
-  async execute(specId: string, options?: { mode?: string; budget?: number; skipArchitect?: boolean }): Promise<string> {
+  async execute(specId: string, options?: { mode?: string; budget?: number; skipArchitect?: boolean; force?: boolean }): Promise<string> {
     const spec = getSpec(this.db, specId);
     if (!spec) throw new Error(`Spec not found: ${specId}`);
+
+    // Pre-build validation: status check and content hash check
+    const validation = preBuildValidation(this.db, specId, spec.file_path, options?.force ?? false);
+    if (!validation.allowed) {
+      throw new Error(validation.error ?? validation.warning ?? "Build validation failed");
+    }
+
+    // Store content hash before build starts
+    try {
+      const hash = computeContentHash(spec.file_path);
+      updateSpecHash(this.db, specId, hash);
+    } catch {
+      // If file can't be read for hashing, continue anyway
+    }
+
+    // Transition spec to building status (if not already building)
+    if (spec.status !== "building") {
+      try {
+        updateSpecStatusChecked(this.db, specId, "building");
+      } catch {
+        // If transition fails (e.g., already building from retry), continue
+      }
+    }
 
     const mode = (options?.mode ?? this.config.build.default_mode) as "quick" | "thorough";
     const budget = options?.budget ?? this.config.build.budget_usd;
@@ -100,12 +124,28 @@ export class PipelineEngine {
       ).get(run.id) as { cnt: number };
 
       updateRunStatus(this.db, run.id, "completed");
+
+      // Transition spec to completed on successful pipeline
+      try {
+        updateSpecStatusChecked(this.db, specId, "completed");
+      } catch {
+        // Non-fatal: spec status update failure shouldn't break the pipeline
+      }
+
       createEvent(this.db, run.id, "run-completed");
       log.success(`Pipeline completed: ${run.id}`);
       console.log(`[dark] Pipeline complete. ${completedCount.cnt} agents finished. Review with: git diff`);
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       updateRunStatus(this.db, run.id, "failed", error);
+
+      // Roll back spec status to draft on pipeline failure
+      try {
+        updateSpecStatusChecked(this.db, specId, "draft");
+      } catch {
+        // Non-fatal: spec status rollback failure shouldn't mask the original error
+      }
+
       createEvent(this.db, run.id, "run-failed", { error });
       log.error(`Pipeline failed: ${error}`);
       console.log(`[dark] Pipeline failed: ${error}. Check details: dark status --run-id ${run.id}. Do NOT attempt manual implementation.`);
