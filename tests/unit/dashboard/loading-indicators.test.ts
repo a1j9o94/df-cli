@@ -352,3 +352,355 @@ describe("Loading clears on success and error", () => {
     expect(modulesSection).toContain("error-text");
   });
 });
+
+// ====================================================================
+// Phase Timeline Tests
+// ====================================================================
+
+describe("Phase Timeline CSS", () => {
+  const html = generateDashboardHtml();
+
+  it("contains phase-timeline CSS class", () => {
+    expect(html).toContain(".phase-timeline");
+  });
+
+  it("contains phase-step CSS class for individual phases", () => {
+    expect(html).toContain(".phase-step");
+  });
+
+  it("contains phase-completed CSS class", () => {
+    expect(html).toContain(".phase-completed");
+  });
+
+  it("contains phase-active CSS class", () => {
+    expect(html).toContain(".phase-active");
+  });
+
+  it("contains phase-pending CSS class", () => {
+    expect(html).toContain(".phase-pending");
+  });
+
+  it("contains phase-skipped CSS class", () => {
+    expect(html).toContain(".phase-skipped");
+  });
+
+  it("phase-active has animation", () => {
+    expect(html).toMatch(/\.phase-active[^{]*\{[^}]*animation/);
+  });
+
+  it("phase-completed has no animation", () => {
+    const completedMatch = html.match(/\.phase-completed\s*\{([^}]*)\}/);
+    expect(completedMatch).toBeTruthy();
+    expect(completedMatch![1]).not.toContain("animation");
+  });
+
+  it("phase-pending has no animation", () => {
+    const pendingMatch = html.match(/\.phase-pending\s*\{([^}]*)\}/);
+    expect(pendingMatch).toBeTruthy();
+    expect(pendingMatch![1]).not.toContain("animation");
+  });
+
+  it("phase-skipped has distinct styling from pending", () => {
+    // Skipped should have visual distinction (opacity, text-decoration, etc.)
+    expect(html).toMatch(/\.phase-skipped\s*\{[^}]*(opacity|text-decoration|color)/);
+  });
+});
+
+describe("Phase Timeline JS - PHASE_ORDER", () => {
+  const html = generateDashboardHtml();
+
+  it("defines PHASE_ORDER array in JavaScript", () => {
+    expect(html).toContain("PHASE_ORDER");
+  });
+
+  it("PHASE_ORDER contains all 8 pipeline phases", () => {
+    const phases = ["scout", "architect", "plan-review", "build", "integrate", "evaluate-functional", "evaluate-change", "merge"];
+    for (const phase of phases) {
+      expect(html).toContain(`"${phase}"`);
+    }
+  });
+
+  it("PHASE_ORDER is an array", () => {
+    expect(html).toMatch(/PHASE_ORDER\s*=\s*\[/);
+  });
+});
+
+describe("Phase Timeline JS - renderPhaseTimeline function", () => {
+  const html = generateDashboardHtml();
+
+  it("defines a renderPhaseTimeline function", () => {
+    expect(html).toContain("function renderPhaseTimeline");
+  });
+
+  it("renderPhaseTimeline uses PHASE_ORDER to iterate phases", () => {
+    const fnStart = html.indexOf("function renderPhaseTimeline");
+    const section = html.substring(fnStart, fnStart + 2000);
+    expect(section).toContain("PHASE_ORDER");
+  });
+
+  it("renderPhaseTimeline assigns phase-completed class to completed phases", () => {
+    const fnStart = html.indexOf("function renderPhaseTimeline");
+    const section = html.substring(fnStart, fnStart + 2000);
+    expect(section).toContain("phase-completed");
+  });
+
+  it("renderPhaseTimeline assigns phase-active class to current phase", () => {
+    const fnStart = html.indexOf("function renderPhaseTimeline");
+    const section = html.substring(fnStart, fnStart + 2000);
+    expect(section).toContain("phase-active");
+  });
+
+  it("renderPhaseTimeline assigns phase-pending class to future phases", () => {
+    const fnStart = html.indexOf("function renderPhaseTimeline");
+    const section = html.substring(fnStart, fnStart + 2000);
+    expect(section).toContain("phase-pending");
+  });
+
+  it("renderPhaseTimeline handles skipped phases", () => {
+    const fnStart = html.indexOf("function renderPhaseTimeline");
+    const section = html.substring(fnStart, fnStart + 2000);
+    expect(section).toContain("phase-skipped");
+  });
+});
+
+describe("Phase Timeline JS - loadPhases function", () => {
+  const html = generateDashboardHtml();
+
+  it("defines a loadPhases function", () => {
+    expect(html).toContain("function loadPhases");
+  });
+
+  it("loadPhases fetches from /api/runs/:id/phases", () => {
+    const fnStart = html.indexOf("function loadPhases");
+    const section = html.substring(fnStart, fnStart + 1000);
+    expect(section).toContain("/phases");
+  });
+
+  it("loadPhases accepts a showSpinner parameter", () => {
+    const fnDef = html.match(/function loadPhases\([^)]*\)/);
+    expect(fnDef).toBeTruthy();
+    expect(fnDef![0]).toMatch(/function loadPhases\(\s*runId\s*,/);
+  });
+
+  it("loadPhases calls renderPhaseTimeline on success", () => {
+    const fnStart = html.indexOf("function loadPhases");
+    const section = html.substring(fnStart, fnStart + 1000);
+    expect(section).toContain("renderPhaseTimeline");
+  });
+});
+
+describe("Phase Timeline - Integration with selectRun and refresh", () => {
+  const html = generateDashboardHtml();
+
+  it("selectRun calls loadPhases with showSpinner=true", () => {
+    const selectRunSection = html.substring(html.indexOf("async function selectRun"));
+    expect(selectRunSection).toMatch(/loadPhases\(runId\s*,\s*true\)/);
+  });
+
+  it("refresh calls loadPhases with showSpinner=false", () => {
+    const refreshSection = html.substring(html.indexOf("async function refresh"));
+    const refreshEnd = refreshSection.indexOf("}\n");
+    const refreshBody = refreshSection.substring(0, refreshEnd);
+    expect(refreshBody).toMatch(/loadPhases\(selectedRunId\s*,\s*false\)/);
+  });
+});
+
+describe("Phase Timeline - HTML container", () => {
+  const html = generateDashboardHtml();
+
+  it("has a phases-container div in the run detail area", () => {
+    expect(html).toContain('id="phases-container"');
+  });
+
+  it("phases-container is within the detail-panels section", () => {
+    const detailStart = html.indexOf('id="detail-panels"');
+    const phasesStart = html.indexOf('id="phases-container"');
+    expect(detailStart).toBeGreaterThan(-1);
+    expect(phasesStart).toBeGreaterThan(-1);
+    expect(phasesStart).toBeGreaterThan(detailStart);
+  });
+
+  it("phases-container is before the tab-bar (between run-header and tabs)", () => {
+    const phasesIdx = html.indexOf('id="phases-container"');
+    const tabBarIdx = html.indexOf('id="tab-bar"');
+    expect(phasesIdx).toBeGreaterThan(-1);
+    expect(tabBarIdx).toBeGreaterThan(-1);
+    expect(phasesIdx).toBeLessThan(tabBarIdx);
+  });
+});
+
+describe("Agent Spinner - Enhanced Indicator for Active Agents", () => {
+  const html = generateDashboardHtml();
+
+  it("contains agent-spinner CSS class", () => {
+    expect(html).toContain(".agent-spinner");
+  });
+
+  it("agent-spinner has a rotating animation", () => {
+    expect(html).toMatch(/\.agent-spinner[^{]*\{[^}]*animation/);
+  });
+
+  it("agent-spinner is visually distinct from the 8px status dot (larger)", () => {
+    // The agent-spinner should be larger than 8px
+    const spinnerMatch = html.match(/\.agent-spinner\s*\{([^}]*)\}/);
+    expect(spinnerMatch).toBeTruthy();
+    expect(spinnerMatch![1]).toMatch(/width:\s*(1[0-9]|2[0-9]|[3-9][0-9])px/);
+  });
+
+  it("renderAgents adds agent-spinner for running agents", () => {
+    const renderSection = html.substring(html.indexOf("function renderAgents"));
+    expect(renderSection).toContain("agent-spinner");
+  });
+
+  it("agent-spinner only shows for running and spawning statuses", () => {
+    const renderSection = html.substring(html.indexOf("function renderAgents"));
+    // Should check status to conditionally add spinner
+    expect(renderSection).toMatch(/running|spawning/);
+    expect(renderSection).toContain("agent-spinner");
+  });
+
+  it("agent-spinner uses CSS-only animation (no external assets)", () => {
+    expect(html).not.toMatch(/agent-spinner.*\.(gif|svg|png)/);
+  });
+});
+
+describe("Agent Status Icon - Static Icons for Terminal States", () => {
+  const html = generateDashboardHtml();
+
+  it("contains agent-status-icon CSS class", () => {
+    expect(html).toContain(".agent-status-icon");
+  });
+
+  it("agent-status-icon.completed has green color", () => {
+    expect(html).toMatch(/\.agent-status-icon\.completed\s*\{[^}]*accent-green/);
+  });
+
+  it("agent-status-icon.failed has red color", () => {
+    expect(html).toMatch(/\.agent-status-icon\.failed\s*\{[^}]*accent-red/);
+  });
+
+  it("renderAgents uses agent-status-icon for terminal states", () => {
+    const renderSection = html.substring(html.indexOf("function renderAgents"));
+    expect(renderSection).toContain("agent-status-icon");
+  });
+});
+
+describe("Agent Status Indicator - Paused state", () => {
+  const html = generateDashboardHtml();
+
+  it("paused agents have static indicator with yellow color", () => {
+    expect(html).toContain(".agent-status-indicator.paused");
+    const pausedMatch = html.match(/\.agent-status-indicator\.paused\s*\{([^}]*)\}/);
+    expect(pausedMatch).toBeTruthy();
+    expect(pausedMatch![1]).not.toContain("animation");
+    expect(pausedMatch![1]).toContain("accent-yellow");
+  });
+});
+
+describe("Phase Timeline - Data-driven rendering", () => {
+  const html = generateDashboardHtml();
+
+  it("phases are rendered from an array, not hardcoded HTML elements", () => {
+    // The renderPhaseTimeline function should iterate over phases data
+    const fnStart = html.indexOf("function renderPhaseTimeline");
+    const section = html.substring(fnStart, fnStart + 2000);
+    // Should use map or forEach to iterate, not hardcoded phase names in HTML
+    expect(section).toMatch(/\.map\(|forEach\(/);
+  });
+
+  it("phase labels are derived from phase data, not hardcoded", () => {
+    // The JS should use phase.id or phase.label to render labels
+    const fnStart = html.indexOf("function renderPhaseTimeline");
+    const section = html.substring(fnStart, fnStart + 2000);
+    expect(section).toMatch(/\.id|\.label|\.name/);
+  });
+});
+
+describe("Phase Timeline - Spinner suppression on loadPhases", () => {
+  const html = generateDashboardHtml();
+
+  it("loadPhases shows loading-spinner when showSpinner is true", () => {
+    const fnStart = html.indexOf("function loadPhases");
+    const section = html.substring(fnStart, fnStart + 500);
+    expect(section).toContain("loading-spinner");
+    expect(section).toMatch(/Loading phases/);
+  });
+
+  it("loadPhases sets spinner before fetchJson", () => {
+    const fnStart = html.indexOf("function loadPhases");
+    const section = html.substring(fnStart, fnStart + 500);
+    const spinnerIdx = section.indexOf("loading-spinner");
+    const fetchIdx = section.indexOf("fetchJson");
+    expect(spinnerIdx).toBeGreaterThan(-1);
+    expect(fetchIdx).toBeGreaterThan(-1);
+    expect(spinnerIdx).toBeLessThan(fetchIdx);
+  });
+
+  it("loadPhases has error handling (catch)", () => {
+    const fnStart = html.indexOf("function loadPhases");
+    const section = html.substring(fnStart, fnStart + 1000);
+    expect(section).toContain("catch");
+  });
+
+  it("loadPhases has a fallback when API is unavailable", () => {
+    const fnStart = html.indexOf("function loadPhases");
+    const section = html.substring(fnStart, fnStart + 1000);
+    expect(section).toContain("renderPhaseTimelineFallback");
+  });
+});
+
+describe("Phase Timeline - All 8 phases in PHASE_ORDER", () => {
+  const html = generateDashboardHtml();
+
+  it("PHASE_ORDER has exactly 8 phases", () => {
+    // Find PHASE_ORDER definition and count elements
+    const match = html.match(/PHASE_ORDER\s*=\s*\[([^\]]+)\]/);
+    expect(match).toBeTruthy();
+    const elements = match![1].split(",").filter((s: string) => s.trim().length > 0);
+    expect(elements.length).toBe(8);
+  });
+
+  it("PHASE_ORDER contains scout as first phase", () => {
+    const match = html.match(/PHASE_ORDER\s*=\s*\[([^\]]+)\]/);
+    expect(match).toBeTruthy();
+    const firstElement = match![1].split(",")[0].trim();
+    expect(firstElement).toContain("scout");
+  });
+
+  it("PHASE_ORDER contains merge as last phase", () => {
+    const match = html.match(/PHASE_ORDER\s*=\s*\[([^\]]+)\]/);
+    expect(match).toBeTruthy();
+    const elements = match![1].split(",").filter((s: string) => s.trim().length > 0);
+    const lastElement = elements[elements.length - 1].trim();
+    expect(lastElement).toContain("merge");
+  });
+});
+
+describe("Phase Timeline - Phase step connectors", () => {
+  const html = generateDashboardHtml();
+
+  it("phase-step-connector CSS class exists", () => {
+    expect(html).toContain(".phase-step-connector");
+  });
+
+  it("renderPhaseTimeline adds connectors between phases", () => {
+    const fnStart = html.indexOf("function renderPhaseTimeline");
+    const section = html.substring(fnStart, fnStart + 2000);
+    expect(section).toContain("phase-step-connector");
+  });
+
+  it("last phase does not have a connector", () => {
+    // The connector should only be added for i < phases.length - 1
+    const fnStart = html.indexOf("function renderPhaseTimeline");
+    const section = html.substring(fnStart, fnStart + 2000);
+    expect(section).toMatch(/phases\.length\s*-\s*1/);
+  });
+});
+
+describe("Phase Timeline - Completed connector styling", () => {
+  const html = generateDashboardHtml();
+
+  it("completed phase connector has green color", () => {
+    expect(html).toMatch(/\.phase-completed\s+\.phase-step-connector[^{]*\{[^}]*accent-green/);
+  });
+});

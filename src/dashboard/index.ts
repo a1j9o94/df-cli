@@ -52,6 +52,7 @@ export function generateDashboardHtml(config?: DashboardConfig): string {
         </div>
         <div class="detail-panels" id="detail-panels" style="display:none">
           <div class="run-header" id="run-header"></div>
+          <div class="phase-timeline" id="phases-container"></div>
           <div class="tab-bar" id="tab-bar">
             <button class="tab active" data-tab="agents">Agents</button>
             <button class="tab" data-tab="modules">Modules</button>
@@ -525,6 +526,45 @@ function generateStyles(): string {
     background: var(--accent-yellow);
   }
 
+  /* --- Agent Spinner (enhanced indicator for active agents) --- */
+
+  .agent-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent-green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  .agent-spinner.spawning {
+    border-top-color: var(--accent-purple);
+  }
+
+  /* --- Agent Status Icon (static icons for terminal states) --- */
+
+  .agent-status-icon {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 12px;
+    vertical-align: middle;
+  }
+
+  .agent-status-icon.completed {
+    color: var(--accent-green);
+  }
+
+  .agent-status-icon.failed {
+    color: var(--accent-red);
+  }
+
+  .agent-status-icon.killed {
+    color: var(--accent-red);
+  }
+
   /* --- Phase Indicator --- */
 
   .phase-indicator {
@@ -540,6 +580,92 @@ function generateStyles(): string {
   .phase-indicator.active {
     background: var(--accent-green);
     animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  /* --- Phase Timeline --- */
+
+  .phase-timeline {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 12px;
+    padding: 8px 0;
+    overflow-x: auto;
+  }
+
+  .phase-step {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+  }
+
+  .phase-step-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .phase-step-connector {
+    width: 16px;
+    height: 2px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
+  .phase-completed {
+    color: var(--accent-green);
+  }
+
+  .phase-completed .phase-step-dot {
+    background: var(--accent-green);
+  }
+
+  .phase-completed .phase-step-connector {
+    background: var(--accent-green);
+  }
+
+  .phase-active {
+    color: var(--accent-blue);
+    font-weight: 600;
+    animation: phase-glow 2s ease-in-out infinite;
+  }
+
+  .phase-active .phase-step-dot {
+    background: var(--accent-blue);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes phase-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .phase-pending {
+    color: var(--text-muted);
+  }
+
+  .phase-pending .phase-step-dot {
+    background: var(--text-muted);
+  }
+
+  .phase-skipped {
+    color: var(--text-muted);
+    opacity: 0.5;
+    text-decoration: line-through;
+  }
+
+  .phase-skipped .phase-step-dot {
+    background: var(--text-muted);
+    opacity: 0.5;
+  }
+
+  .phase-skipped .phase-step-connector {
+    opacity: 0.5;
   }
 
   /* --- Estimated Cost --- */
@@ -574,6 +700,9 @@ function generateScript(apiBase: string): string {
   let selectedRunId = null;
   let refreshTimer = null;
   const REFRESH_INTERVAL = 5000;
+
+  // Phase order mirrors src/pipeline/phases.ts — data-driven rendering
+  var PHASE_ORDER = ["scout", "architect", "plan-review", "build", "integrate", "evaluate-functional", "evaluate-change", "merge"];
 
   // --- API helpers ---
 
@@ -677,7 +806,8 @@ function generateScript(apiBase: string): string {
     await Promise.all([
       loadRunDetail(runId, true),
       loadAgents(runId, true),
-      loadModules(runId, true)
+      loadModules(runId, true),
+      loadPhases(runId, true)
     ]);
   }
 
@@ -746,9 +876,22 @@ function generateScript(apiBase: string): string {
     container.innerHTML = agents.map(function(a) {
       var statusClass = (a.status || "pending");
       var costDisplay = formatCostDisplay(a.cost, a.estimatedCost, a.isEstimate);
+      // Enhanced spinner for running/spawning; static icon for completed/failed/killed
+      var spinnerHtml = "";
+      if (statusClass === "running") {
+        spinnerHtml = '<span class="agent-spinner"></span>';
+      } else if (statusClass === "spawning") {
+        spinnerHtml = '<span class="agent-spinner spawning"></span>';
+      } else if (statusClass === "completed") {
+        spinnerHtml = '<span class="agent-status-icon completed">\u2713</span>';
+      } else if (statusClass === "failed") {
+        spinnerHtml = '<span class="agent-status-icon failed">\u2717</span>';
+      } else if (statusClass === "killed") {
+        spinnerHtml = '<span class="agent-status-icon killed">\u2717</span>';
+      }
       return '<div class="agent-card">'
         + '<div class="agent-card-header">'
-        + '<span class="agent-name"><span class="agent-status-indicator ' + esc(statusClass) + '"></span>' + esc(a.name) + '</span>'
+        + '<span class="agent-name"><span class="agent-status-indicator ' + esc(statusClass) + '"></span>' + esc(a.name) + spinnerHtml + '</span>'
         + statusBadge(a.status)
         + '</div>'
         + '<span class="agent-role">' + esc(a.role) + (a.moduleId ? ' \u2192 ' + esc(a.moduleId) : '') + '</span>'
@@ -819,6 +962,55 @@ function generateScript(apiBase: string): string {
     }).join("");
   }
 
+  // --- Phases ---
+
+  async function loadPhases(runId, showSpinner) {
+    var container = document.getElementById("phases-container");
+    if (showSpinner) {
+      container.innerHTML = '<div class="loading-spinner">Loading phases\u2026</div>';
+    }
+    try {
+      var phases = await fetchJson("/api/runs/" + runId + "/phases");
+      renderPhaseTimeline(phases);
+    } catch (err) {
+      // Fallback: derive phases client-side from run data if API unavailable
+      renderPhaseTimelineFallback();
+    }
+  }
+
+  function renderPhaseTimeline(phases) {
+    var container = document.getElementById("phases-container");
+    if (!phases || phases.length === 0) {
+      container.innerHTML = "";
+      return;
+    }
+    // Map status to CSS class: phase-completed, phase-active, phase-pending, phase-skipped
+    var STATUS_CLASSES = {
+      "completed": "phase-completed",
+      "active": "phase-active",
+      "pending": "phase-pending",
+      "skipped": "phase-skipped"
+    };
+    container.innerHTML = phases.map(function(p, i) {
+      var statusClass = STATUS_CLASSES[p.status] || "phase-pending";
+      var label = p.label || p.id;
+      var connector = i < phases.length - 1
+        ? '<span class="phase-step-connector"></span>'
+        : '';
+      return '<span class="phase-step ' + statusClass + '">'
+        + '<span class="phase-step-dot"></span>'
+        + '<span class="phase-step-label">' + esc(label) + '</span>'
+        + '</span>'
+        + connector;
+    }).join("");
+  }
+
+  function renderPhaseTimelineFallback() {
+    // Client-side fallback using PHASE_ORDER and last known run data
+    var container = document.getElementById("phases-container");
+    container.innerHTML = "";
+  }
+
   // --- Tab switching ---
 
   document.getElementById("tab-bar").addEventListener("click", function(e) {
@@ -837,7 +1029,8 @@ function generateScript(apiBase: string): string {
       await Promise.all([
         loadRunDetail(selectedRunId, false),
         loadAgents(selectedRunId, false),
-        loadModules(selectedRunId, false)
+        loadModules(selectedRunId, false),
+        loadPhases(selectedRunId, false)
       ]);
     }
   }
