@@ -54,17 +54,30 @@ export function generateDashboardHtml(config?: DashboardConfig): string {
           <div class="run-header" id="run-header"></div>
           <div class="phase-timeline" id="phases-container"></div>
           <div class="tab-bar" id="tab-bar">
-            <button class="tab active" data-tab="agents">Agents</button>
+            <button class="tab active" data-tab="overview">Overview</button>
             <button class="tab" data-tab="modules">Modules</button>
+            <button class="tab" data-tab="validation">Validation</button>
           </div>
           <div class="tab-content" id="tab-content">
-            <div class="tab-panel active" id="agents-panel">
-              <h3 class="panel-title">Agents</h3>
-              <div id="agents-container"></div>
+            <div class="tab-panel active" id="overview-panel">
+              <div id="spec-goal-container"></div>
+              <div id="architecture-container"></div>
+              <div id="risks-container"></div>
+              <div class="agents-collapsible collapsed" id="agents-collapsible">
+                <div class="collapsible-header" id="agents-toggle">
+                  <span class="collapsible-title">Agents</span>
+                  <span class="collapsible-arrow">&#x25B6;</span>
+                </div>
+                <div class="collapsible-content" id="agents-container"></div>
+              </div>
             </div>
             <div class="tab-panel" id="modules-panel">
               <h3 class="panel-title">Modules</h3>
               <div id="modules-container"></div>
+            </div>
+            <div class="tab-panel" id="validation-panel">
+              <h3 class="panel-title">Validation</h3>
+              <div id="validation-container"></div>
             </div>
           </div>
         </div>
@@ -675,6 +688,178 @@ function generateStyles(): string {
     font-style: italic;
   }
 
+  /* --- Run Card Title (spec title as primary) --- */
+
+  .run-card-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .run-card-phase {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+  }
+
+  .run-card-progress {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+  }
+
+  /* --- Collapsible Agents Section --- */
+
+  .agents-collapsible {
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .collapsible-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .collapsible-header:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .collapsible-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-secondary);
+  }
+
+  .collapsible-arrow {
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+  }
+
+  .agents-collapsible.collapsed .collapsible-content {
+    display: none;
+  }
+
+  .agents-collapsible:not(.collapsed) .collapsible-arrow {
+    transform: rotate(90deg);
+  }
+
+  .collapsible-content {
+    padding: 8px;
+  }
+
+  /* --- Architecture Summary --- */
+
+  .arch-summary {
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 12px;
+  }
+
+  .arch-summary h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .arch-flow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent-blue);
+    padding: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+
+  .risk-card {
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent-yellow);
+    border-radius: 4px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+
+  .risk-description {
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .risk-mitigation {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  /* --- Spec Goal --- */
+
+  .spec-goal {
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .spec-goal h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  /* --- Validation --- */
+
+  .scenario-card {
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 6px;
+  }
+
+  .scenario-card.passed {
+    border-left: 3px solid var(--accent-green);
+  }
+
+  .scenario-card.failed {
+    border-left: 3px solid var(--accent-red);
+  }
+
+  .scenario-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .scenario-detail {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
   @media (max-width: 768px) {
     .main {
       flex-direction: column;
@@ -700,6 +885,13 @@ function generateScript(apiBase: string): string {
   let selectedRunId = null;
   let refreshTimer = null;
   const REFRESH_INTERVAL = 5000;
+
+  // Data-driven tab definitions — to add a new tab, add an entry here
+  var TAB_DEFS = [
+    { id: "overview", label: "Overview", panel: "overview-panel" },
+    { id: "modules", label: "Modules", panel: "modules-panel" },
+    { id: "validation", label: "Validation", panel: "validation-panel" }
+  ];
 
   // Phase order mirrors src/pipeline/phases.ts — data-driven rendering
   var PHASE_ORDER = ["scout", "architect", "plan-review", "build", "integrate", "evaluate-functional", "evaluate-change", "merge"];
@@ -757,6 +949,22 @@ function generateScript(apiBase: string): string {
     }
   }
 
+  // Phase label mapping for sidebar
+  var PHASE_LABEL_MAP = {
+    "scout": "Scout",
+    "architect": "Architect",
+    "plan-review": "Plan Review",
+    "build": "Build",
+    "integrate": "Integrate",
+    "evaluate-functional": "Evaluate",
+    "evaluate-change": "Change Eval",
+    "merge": "Merge"
+  };
+
+  function friendlyPhase(phase) {
+    return PHASE_LABEL_MAP[phase] || phase || "—";
+  }
+
   function renderRunsList(runs) {
     const container = document.getElementById("runs-container");
     if (!runs || runs.length === 0) {
@@ -770,15 +978,12 @@ function generateScript(apiBase: string): string {
         ? Math.round((run.completedCount / run.moduleCount) * 100) : 0;
       return '<div class="run-card' + isActive + isAlive + '" data-run-id="' + esc(run.id) + '">'
         + '<div class="run-card-header">'
-        + '<span class="run-card-id">' + esc(run.id.slice(0, 16)) + '…</span>'
         + statusBadge(run.status)
+        + '<span class="run-card-id" title="' + esc(run.id) + '">' + esc(run.elapsed) + '</span>'
         + '</div>'
-        + '<div class="run-card-spec">' + esc(run.specId) + '</div>'
-        + '<div class="run-card-meta">'
-        + '<span>' + esc(run.phase || "—") + '</span>'
-        + '<span>' + esc(run.elapsed) + '</span>'
-        + '<span>' + esc(run.completedCount) + '/' + esc(run.moduleCount) + '</span>'
-        + '</div>'
+        + '<div class="run-card-title" title="' + esc(run.specId) + '">' + esc(run.specTitle || run.specId) + '</div>'
+        + '<div class="run-card-phase">' + friendlyPhase(run.phase) + '</div>'
+        + '<div class="run-card-progress">' + esc(run.completedCount) + '/' + esc(run.moduleCount) + ' modules</div>'
         + '<div class="progress-bar"><div class="progress-fill" style="width:' + progress + '%"></div></div>'
         + '</div>';
     }).join("");
@@ -807,7 +1012,9 @@ function generateScript(apiBase: string): string {
       loadRunDetail(runId, true),
       loadAgents(runId, true),
       loadModules(runId, true),
-      loadPhases(runId, true)
+      loadPhases(runId, true),
+      loadOverview(runId, true),
+      loadValidation(runId, true)
     ]);
   }
 
@@ -837,7 +1044,7 @@ function generateScript(apiBase: string): string {
 
     document.getElementById("run-header").innerHTML =
       '<div class="run-header-title">'
-      + '<h2>' + esc(run.specId) + '</h2>'
+      + '<h2>' + esc(run.specTitle || run.specId) + '</h2>'
       + statusBadge(run.status)
       + '</div>'
       + '<div class="run-stats">'
@@ -1020,6 +1227,96 @@ function generateScript(apiBase: string): string {
     container.innerHTML = "";
   }
 
+  // --- Overview (spec goal, architecture, risks) ---
+
+  async function loadOverview(runId, showSpinner) {
+    var goalContainer = document.getElementById("spec-goal-container");
+    var archContainer = document.getElementById("architecture-container");
+    var riskContainer = document.getElementById("risks-container");
+
+    if (showSpinner) {
+      goalContainer.innerHTML = '<div class="loading-spinner">Loading spec\u2026</div>';
+    }
+
+    // Load spec content
+    try {
+      var specData = await fetchJson("/api/runs/" + runId + "/spec");
+      goalContainer.innerHTML = '<div class="spec-goal"><h4>Spec Goal</h4><p>' + esc(specData.title || "—") + '</p></div>';
+    } catch (err) {
+      goalContainer.innerHTML = '';
+    }
+
+    // Load buildplan for architecture + risks
+    try {
+      var bp = await fetchJson("/api/runs/" + runId + "/buildplan");
+      // Render architecture summary
+      if (bp.modules && bp.modules.length > 0) {
+        var flow = bp.modules.map(function(m) { return esc(m.title || m.id); }).join(' \u2192 ');
+        archContainer.innerHTML = '<div class="arch-summary"><h4>Architecture</h4>'
+          + '<div class="arch-flow">' + flow + '</div></div>';
+      } else {
+        archContainer.innerHTML = '';
+      }
+      // Render risks
+      if (bp.risks && bp.risks.length > 0) {
+        riskContainer.innerHTML = bp.risks.map(function(r) {
+          return '<div class="risk-card">'
+            + '<div class="risk-description">\u26A0 ' + esc(r.description) + '</div>'
+            + (r.mitigation ? '<div class="risk-mitigation">Mitigation: ' + esc(r.mitigation) + '</div>' : '')
+            + '</div>';
+        }).join('');
+      } else {
+        riskContainer.innerHTML = '';
+      }
+    } catch (err) {
+      archContainer.innerHTML = '';
+      riskContainer.innerHTML = '';
+    }
+  }
+
+  // --- Validation (scenarios) ---
+
+  async function loadValidation(runId, showSpinner) {
+    var container = document.getElementById("validation-container");
+    if (showSpinner) {
+      container.innerHTML = '<div class="loading-spinner">Loading scenarios\u2026</div>';
+    }
+    try {
+      var scenarios = await fetchJson("/api/runs/" + runId + "/scenarios");
+      renderValidation(scenarios);
+    } catch (err) {
+      container.innerHTML = '<div class="error-text">Error: ' + esc(err.message) + '</div>';
+    }
+  }
+
+  function renderValidation(scenarios) {
+    var container = document.getElementById("validation-container");
+    if (!scenarios || scenarios.length === 0) {
+      container.innerHTML = '<div class="loading">No validation results yet</div>';
+      return;
+    }
+    container.innerHTML = scenarios.map(function(s) {
+      var isPassed = s.type === "evaluation-passed";
+      var statusClass = isPassed ? "passed" : "failed";
+      var icon = isPassed ? "\u2713" : "\u2717";
+      var name = (s.data && s.data.scenario) || s.type;
+      var detail = (s.data && s.data.description) || "";
+      var errorMsg = (s.data && s.data.error) || "";
+      return '<div class="scenario-card ' + statusClass + '">'
+        + '<div class="scenario-name">' + icon + ' ' + esc(name) + '</div>'
+        + (detail ? '<div class="scenario-detail">' + esc(detail) + '</div>' : '')
+        + (errorMsg ? '<div class="error-text">' + esc(errorMsg) + '</div>' : '')
+        + '</div>';
+    }).join('');
+  }
+
+  // --- Collapsible agents toggle ---
+
+  document.getElementById("agents-toggle").addEventListener("click", function() {
+    var section = document.getElementById("agents-collapsible");
+    section.classList.toggle("collapsed");
+  });
+
   // --- Tab switching ---
 
   document.getElementById("tab-bar").addEventListener("click", function(e) {
@@ -1039,7 +1336,9 @@ function generateScript(apiBase: string): string {
         loadRunDetail(selectedRunId, false),
         loadAgents(selectedRunId, false),
         loadModules(selectedRunId, false),
-        loadPhases(selectedRunId, false)
+        loadPhases(selectedRunId, false),
+        loadOverview(selectedRunId, false),
+        loadValidation(selectedRunId, false)
       ]);
     }
   }

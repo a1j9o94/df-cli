@@ -574,9 +574,10 @@ describe("Dashboard Server", () => {
       expect(html).toContain("agent-card");
       // Module cards in detail panel
       expect(html).toContain("module-card");
-      // Tab switching for agents/modules
-      expect(html).toContain('data-tab="agents"');
+      // Tab switching for overview/modules/validation (redesigned from agents/modules)
+      expect(html).toContain('data-tab="overview"');
       expect(html).toContain('data-tab="modules"');
+      expect(html).toContain('data-tab="validation"');
     });
 
     test("dashboard auto-refresh polls every 5 seconds", async () => {
