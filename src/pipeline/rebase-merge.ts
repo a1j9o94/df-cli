@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { existsSync, unlinkSync, rmSync, readdirSync } from "node:fs";
+import { existsSync, unlinkSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { isProtectedPath, getProtectedFiles } from "../runtime/protected-paths.js";
 import { sanitizeWorktree, sanitizeMainRepo, unstashMainRepo } from "./worktree-sanitization.js";
@@ -16,40 +16,30 @@ export interface MergeResult {
   mergedBranches: string[];
   failedBranches: string[];
   errors: string[];
-  /** Per-branch results with conflict details (available when using mergeSingleBranch internally) */
-  branchResults?: MergeBranchResult[];
 }
 
 /**
+ * Result of attempting to merge a single branch into the target.
+ *
  * Contract: MergeBranchResult
  *
- * Result of attempting to merge a single branch into the target.
- * When conflicted=true, conflict markers are left on disk for the merger agent to resolve.
+ * - status "clean": merge succeeded without conflicts, commit was made
+ * - status "conflicted": merge had conflicts; conflict markers are on disk,
+ *   merge is in progress (not committed, not aborted)
+ * - status "error": merge failed for a non-conflict reason
  */
 export interface MergeBranchResult {
-  /** Whether the merge completed successfully (clean merge, committed) */
+  /** Whether the merge completed successfully (clean merge committed) */
   success: boolean;
-  /** Whether the merge had conflicts (conflict markers left on disk) */
-  conflicted: boolean;
-  /** The branch name that was being merged */
+  /** The merge outcome: "clean", "conflicted", or "error" */
+  status: "clean" | "conflicted" | "error";
+  /** The branch name that was merged */
   branch: string;
-  /** List of files with conflicts (only when conflicted=true) */
-  conflictedFiles?: string[];
-  /** Error message if the merge failed for a non-conflict reason */
+  /** Conflicted files with their paths and content (only when status is "conflicted") */
+  conflictedFiles?: { path: string; content: string }[];
+  /** Error message (only when status is "error") */
   error?: string;
 }
-
-/**
- * Contract: MergeSingleBranchFunction
- *
- * Type signature for the function that merges a single branch into the target.
- * The merge strategy (git merge, git rebase, etc.) is isolated inside this function.
- * Conflict detection, agent handoff, and prompt generation are separate concerns.
- */
-export type MergeSingleBranchFunction = (
-  mainRepoPath: string,
-  branch: string,
-) => MergeBranchResult;
 
 /**
  * Get the branch name of a worktree.
@@ -132,143 +122,13 @@ export function rebaseWorktreeBranch(
 }
 
 /**
- * Merge a single branch into the current HEAD of the main repo.
- *
- * This is the isolated merge strategy function. The git merge command lives here
- * and ONLY here. Changing from `git merge` to `git rebase` (or any other strategy)
- * should only require modifying this one function.
- *
- * Behavior:
- * - If the merge is clean: commits the merge and returns success=true.
- * - If the merge has conflicts: leaves conflict markers on disk, does NOT commit,
- *   and returns conflicted=true with the list of conflicted files.
- * - If the merge fails for a non-conflict reason: returns success=false with error.
- *
- * @param mainRepoPath - Path to the main repository (where the merge happens)
- * @param branch - The branch name to merge into current HEAD
- * @returns MergeBranchResult with conflict details if applicable
- */
-export function mergeSingleBranch(
-  mainRepoPath: string,
-  branch: string,
-): MergeBranchResult {
-  try {
-    // Attempt git merge --no-commit to allow inspection before committing
-    execSync(`git merge ${branch} --no-commit --no-ff`, {
-      cwd: mainRepoPath,
-      stdio: "pipe",
-      env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
-    });
-
-    // Merge succeeded cleanly — sanitize protected files and commit
-    const stagedFiles = execSync("git diff --cached --name-only HEAD", {
-      cwd: mainRepoPath,
-      encoding: "utf-8",
-    }).trim().split("\n").filter(Boolean);
-
-    const protectedFiles = getProtectedFiles(stagedFiles);
-
-    if (protectedFiles.length > 0) {
-      for (const pf of protectedFiles) {
-        try {
-          execSync(`git reset HEAD -- "${pf}"`, {
-            cwd: mainRepoPath,
-            stdio: "pipe",
-          });
-          const fullPath = join(mainRepoPath, pf);
-          if (existsSync(fullPath)) {
-            try {
-              execSync(`git show HEAD:"${pf}"`, {
-                cwd: mainRepoPath,
-                stdio: "pipe",
-              });
-              execSync(`git checkout HEAD -- "${pf}"`, {
-                cwd: mainRepoPath,
-                stdio: "pipe",
-              });
-            } catch {
-              unlinkSync(fullPath);
-              try {
-                const dir = dirname(fullPath);
-                if (readdirSync(dir).length === 0) {
-                  rmSync(dir);
-                }
-              } catch {
-                // ignore
-              }
-            }
-          }
-        } catch {
-          // Best effort
-        }
-      }
-    }
-
-    // Commit the clean merge
-    execSync(`git commit --no-edit -m "Merge branch '${branch}'"`, {
-      cwd: mainRepoPath,
-      stdio: "pipe",
-      env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
-    });
-
-    return {
-      success: true,
-      conflicted: false,
-      branch,
-    };
-  } catch (err) {
-    // Check if this is a conflict (merge in progress with conflicted files)
-    try {
-      const conflictedOutput = execSync(
-        "git diff --name-only --diff-filter=U",
-        {
-          cwd: mainRepoPath,
-          encoding: "utf-8",
-        },
-      ).trim();
-
-      if (conflictedOutput.length > 0) {
-        const conflictedFiles = conflictedOutput.split("\n").filter(Boolean);
-        return {
-          success: false,
-          conflicted: true,
-          branch,
-          conflictedFiles,
-        };
-      }
-    } catch {
-      // Could not determine conflict status — fall through to generic error
-    }
-
-    // Non-conflict failure — abort any in-progress merge and return error
-    try {
-      execSync("git merge --abort", {
-        cwd: mainRepoPath,
-        stdio: "pipe",
-      });
-    } catch {
-      // May not be in a merge state
-    }
-
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    return {
-      success: false,
-      conflicted: false,
-      branch,
-      error: `Merge of ${branch} failed: ${errorMsg}`,
-    };
-  }
-}
-
-/**
  * Rebase and merge multiple worktree branches into the target branch sequentially.
  *
  * For each worktree:
  * 0. Sanitize the worktree (remove protected files, node_modules, commit uncommitted work)
  * 1. Rebase the worktree branch onto the current HEAD of the target branch
- * 2. If rebase succeeds, merge into the target using mergeSingleBranch()
- * 3. If merge has conflicts, record the failure with conflict details
- * 4. If merge succeeds, continue with the next branch
+ * 2. If rebase succeeds, merge into the target branch
+ * 3. If rebase fails (conflicts), record the failure and continue with remaining branches
  *
  * Before any worktree processing:
  * - Sanitize the main repo (stash uncommitted changes, remove node_modules from tracking)
@@ -282,7 +142,7 @@ export function mergeSingleBranch(
  * @param worktreePaths - Paths to worktree directories to merge
  * @param mainRepoPath - Path to the main repository
  * @param targetBranch - The branch to merge into (e.g., "main")
- * @returns MergeResult with details of merged and failed branches, plus per-branch results
+ * @returns MergeResult with details of merged and failed branches
  */
 export function rebaseAndMerge(
   worktreePaths: string[],
@@ -292,7 +152,6 @@ export function rebaseAndMerge(
   const mergedBranches: string[] = [];
   const failedBranches: string[] = [];
   const errors: string[] = [];
-  const branchResults: MergeBranchResult[] = [];
 
   // Pre-merge: Sanitize the main repo (stash uncommitted changes)
   const mainSanitize = sanitizeMainRepo(mainRepoPath);
@@ -304,7 +163,6 @@ export function rebaseAndMerge(
         try { return getWorktreeBranch(p); } catch { return p; }
       }),
       errors: [`Main repo sanitization failed: ${mainSanitize.error}`],
-      branchResults: [],
     };
   }
 
@@ -315,44 +173,98 @@ export function rebaseAndMerge(
       // Step 0: Sanitize the worktree before rebase
       const sanitizeResult = sanitizeWorktree(wtPath);
       if (!sanitizeResult.success) {
+        failedBranches.push(branch);
         const dirtyInfo = sanitizeResult.remainingDirtyFiles?.length
           ? `: dirty files: ${sanitizeResult.remainingDirtyFiles.join(", ")}`
           : "";
-        const errorMsg = sanitizeResult.error ??
-          `Worktree sanitization failed for ${branch}${dirtyInfo}`;
-        failedBranches.push(branch);
-        errors.push(errorMsg);
-        branchResults.push({
-          success: false,
-          conflicted: false,
-          branch,
-          error: errorMsg,
-        });
+        errors.push(
+          sanitizeResult.error ??
+            `Worktree sanitization failed for ${branch}${dirtyInfo}`,
+        );
         continue;
       }
 
-      // Step 1: Try rebasing onto current target HEAD for a clean linear history.
-      // If rebase fails (conflicts), fall back to direct merge which handles
-      // 3-way conflicts better and leaves conflict markers on disk.
+      // Step 1: Rebase onto current target HEAD
       const rebaseResult = rebaseWorktreeBranch(wtPath, targetBranch);
 
-      // Step 2: Merge the branch into target using the isolated merge strategy.
-      // If rebase succeeded, this will be a clean fast-forward-like merge.
-      // If rebase failed, we skip it and try a direct 3-way merge instead,
-      // which can detect and report conflicts properly.
-      const mergeResult = mergeSingleBranch(mainRepoPath, branch);
-      branchResults.push(mergeResult);
-
-      if (mergeResult.success) {
-        mergedBranches.push(branch);
-      } else {
+      if (!rebaseResult.success) {
         failedBranches.push(branch);
-        if (mergeResult.conflicted) {
-          const conflictFiles = mergeResult.conflictedFiles?.join(", ") ?? "unknown files";
-          errors.push(`Merge of ${branch} has conflicts in: ${conflictFiles}`);
-        } else {
-          errors.push(mergeResult.error ?? `Merge of ${branch} failed`);
+        errors.push(rebaseResult.error ?? `Rebase of ${branch} failed`);
+        continue;
+      }
+
+      // Step 2: Merge the rebased branch into target using --no-commit for sanitization
+      try {
+        // Use --no-commit so we can inspect and sanitize staged files before committing
+        execSync(`git merge ${branch} --no-commit --no-ff`, {
+          cwd: mainRepoPath,
+          stdio: "pipe",
+          env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
+        });
+
+        // Step 3: Sanitize — remove any protected files from the staged merge
+        const stagedFiles = execSync("git diff --cached --name-only HEAD", {
+          cwd: mainRepoPath,
+          encoding: "utf-8",
+        }).trim().split("\n").filter(Boolean);
+
+        const protectedFiles = getProtectedFiles(stagedFiles);
+
+        if (protectedFiles.length > 0) {
+          // Unstage and remove protected files from the merge
+          for (const pf of protectedFiles) {
+            try {
+              // Reset the file to the pre-merge state (HEAD version, or remove if new)
+              execSync(`git reset HEAD -- "${pf}"`, {
+                cwd: mainRepoPath,
+                stdio: "pipe",
+              });
+              // Remove the file from the working directory if it was added by the merge
+              const fullPath = join(mainRepoPath, pf);
+              if (existsSync(fullPath)) {
+                // Check if this file existed before the merge on the target branch
+                try {
+                  execSync(`git show HEAD:"${pf}"`, {
+                    cwd: mainRepoPath,
+                    stdio: "pipe",
+                  });
+                  // File existed before — restore it to its pre-merge state
+                  execSync(`git checkout HEAD -- "${pf}"`, {
+                    cwd: mainRepoPath,
+                    stdio: "pipe",
+                  });
+                } catch {
+                  // File did not exist before — remove it from working tree
+                  unlinkSync(fullPath);
+                  // Try to remove empty parent directories (non-recursive to avoid
+                  // accidentally deleting directories that contain other files)
+                  try {
+                    const dir = dirname(fullPath);
+                    // Only remove if directory is empty — non-recursive rmSync
+                    if (readdirSync(dir).length === 0) {
+                      rmSync(dir);
+                    }
+                  } catch {
+                    // ignore — directory may not be empty or may not exist
+                  }
+                }
+              }
+            } catch {
+              // If individual file cleanup fails, continue with others
+            }
+          }
         }
+
+        // Step 4: Commit the sanitized merge
+        execSync(`git commit --no-edit -m "Merge branch '${branch}'"`, {
+          cwd: mainRepoPath,
+          stdio: "pipe",
+          env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
+        });
+        mergedBranches.push(branch);
+      } catch (err) {
+        failedBranches.push(branch);
+        errors.push(err instanceof Error ? err.message : `Merge of ${branch} into ${targetBranch} failed`);
       }
     }
   } finally {
@@ -367,43 +279,96 @@ export function rebaseAndMerge(
     mergedBranches,
     failedBranches,
     errors,
-    branchResults,
   };
 }
 
 /**
- * Scan all tracked files in a repository for conflict markers.
+ * Merge a single worktree branch into the target branch using `git merge --no-commit`.
  *
- * Checks for `<<<<<<<`, `=======`, and `>>>>>>>` patterns in tracked files.
- * Used after agent conflict resolution to verify no markers remain.
+ * Contract: MergeSingleBranchFunction
  *
- * @param repoPath - Path to the repository to scan
- * @returns Object with `found` boolean and `files` array of paths containing markers
+ * This function implements the conflict-detection-and-handoff strategy:
+ * 1. Attempt `git merge --no-commit` for the branch
+ * 2. If merge succeeds cleanly: commit and return status "clean"
+ * 3. If merge has conflicts: list conflicted files with their content,
+ *    leave the merge in progress (not committed, not aborted),
+ *    and return status "conflicted"
+ *
+ * When status is "conflicted", the caller is responsible for either:
+ * - Spawning a merger agent to resolve the conflicts, then committing
+ * - Aborting the merge with `git merge --abort`
+ *
+ * @param worktreePath - Path to the worktree directory whose branch is being merged
+ * @param mainRepoPath - Path to the main repository
+ * @param targetBranch - The branch to merge into (e.g., "main")
+ * @returns MergeBranchResult indicating clean merge, conflict, or error
  */
-export function scanConflictMarkers(repoPath: string): {
-  found: boolean;
-  files: string[];
-} {
-  try {
-    // Use git grep to find conflict markers in tracked files
-    // git grep returns exit code 1 when no matches found, 0 when matches found
-    const output = execSync(
-      'git grep -l "^<<<<<<<\\|^=======\\|^>>>>>>>" -- ":(exclude).df/"',
-      {
-        cwd: repoPath,
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      },
-    ).trim();
+export function mergeSingleBranch(
+  worktreePath: string,
+  mainRepoPath: string,
+  targetBranch: string,
+): MergeBranchResult {
+  const branch = getWorktreeBranch(worktreePath);
 
-    if (output.length === 0) {
-      return { found: false, files: [] };
+  try {
+    // Attempt merge with --no-commit so we can inspect before committing
+    execSync(`git merge ${branch} --no-commit --no-ff`, {
+      cwd: mainRepoPath,
+      stdio: "pipe",
+      env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
+    });
+
+    // Merge succeeded cleanly — commit it
+    execSync(`git commit --no-edit -m "Merge branch '${branch}'"`, {
+      cwd: mainRepoPath,
+      stdio: "pipe",
+      env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
+    });
+
+    return {
+      success: true,
+      status: "clean",
+      branch,
+    };
+  } catch (err) {
+    // Check if this is a conflict (merge in progress with unmerged files)
+    try {
+      const unmergedOutput = execSync("git diff --name-only --diff-filter=U", {
+        cwd: mainRepoPath,
+        encoding: "utf-8",
+      }).trim();
+
+      if (unmergedOutput.length > 0) {
+        // There are unmerged (conflicted) files — read their content
+        const conflictedPaths = unmergedOutput.split("\n").filter(Boolean);
+        const conflictedFiles = conflictedPaths.map((filePath) => {
+          let content = "";
+          try {
+            content = readFileSync(join(mainRepoPath, filePath), "utf-8");
+          } catch {
+            content = `(Could not read file: ${filePath})`;
+          }
+          return { path: filePath, content };
+        });
+
+        return {
+          success: false,
+          status: "conflicted",
+          branch,
+          conflictedFiles,
+        };
+      }
+    } catch {
+      // If we can't even check for unmerged files, it's a general error
     }
 
-    const files = output.split("\n").filter(Boolean);
-    return { found: files.length > 0, files };
-  } catch {
-    // git grep returns exit code 1 when no matches found — that's the happy path
-    return { found: false, files: [] };
+    // Non-conflict error
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      status: "error",
+      branch,
+      error: `Merge of ${branch} into ${targetBranch} failed: ${errorMsg}`,
+    };
   }
 }
