@@ -1,8 +1,34 @@
 ---
 name: validation-tab-shows-scenarios
 type: functional
-spec_id: run_01KJNFM10CHHWZV5TVPXKE50XR
-created_by: agt_01KJNFM10EV9BXZCJNZKFZEN7F
+spec_id: run_01KJT1DSECDSZP9V2JPPS48CRC
+created_by: agt_01KJT1DSEEGBAKZSDD5AYGA6XR
 ---
 
-SETUP: Start dashboard with a database containing a run that has evaluation events (types: evaluation-started, evaluation-passed, evaluation-failed). Insert at least one evaluation-passed and one evaluation-failed event with data containing scenario names and results. STEPS: 1. GET / (HTML) and select the run. 2. Click the 'Validation' tab (this is a NEW tab — previously only Agents and Modules existed). 3. Verify the Validation tab panel shows: a) A list of holdout scenarios. b) Each scenario has a pass/fail indicator (visual: green check or red X, or text-based). c) If evaluation failed, the failing scenario details are shown prominently. 4. GET /api/runs/:id/scenarios — verify the endpoint returns evaluation event data. PASS CRITERIA: - A 'Validation' tab button exists in the tab bar - Clicking it shows a panel with scenario results - Pass/fail indicators are visible for each scenario - Failing scenarios are visually prominent
+SCENARIO: Validation tab shows holdout scenarios with pass/fail indicators.
+
+PRECONDITIONS:
+- Database has a run that has evaluation events (evaluation-passed or evaluation-failed)
+- Scenarios endpoint GET /api/runs/:id/scenarios returns evaluation event data
+- Dashboard server is running
+
+TEST STEPS:
+1. Fetch GET / (HTML dashboard)
+2. Verify the tab bar contains a 'Validation' tab button
+3. Verify a validation panel exists (id containing 'validation')
+4. Inspect the JavaScript for a validation/scenarios rendering function
+5. Verify it fetches GET /api/runs/:id/scenarios
+6. Verify the validation panel renders scenario entries with pass/fail indicators
+7. If evaluation failed, verify failing scenario details are shown prominently
+
+EXPECTED RESULTS:
+- Tab bar has a Validation tab
+- Validation panel exists with scenario list rendering
+- JavaScript fetches /scenarios endpoint and renders results
+- Pass/fail indicators are visually distinct (green checkmark vs red X, or similar)
+- Integration test results section exists
+
+PASS CRITERIA:
+- HTML contains a Validation tab button
+- JavaScript contains fetch logic for /scenarios endpoint
+- Rendering function displays scenario results with visual pass/fail indicators
