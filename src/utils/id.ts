@@ -43,3 +43,7 @@ export function newResourceId(): string {
 export function newMergeQueueId(): string {
   return `mq_${ulid()}`;
 }
+
+export function newResearchId(): string {
+  return `rsch_${ulid()}`;
+}

@@ -15,6 +15,7 @@ import { mailCommand } from "./commands/mail/index.js";
 import { resourceCommand } from "./commands/resource/index.js";
 import { expertiseCommand } from "./commands/expertise/index.js";
 import { scenarioCommand } from "./commands/scenario/index.js";
+import { researchCommand } from "./commands/research/index.js";
 import { dashCommand } from "./commands/dash.js";
 
 program
@@ -56,6 +57,7 @@ Command groups:
   Scenarios       scenario create/list — holdout test scenarios (created by architect)
   Testing         integrate — verify modules compose correctly
   Agents          agent, mail — lifecycle management and inter-agent messaging
+  Research        research add/list/show — save and share findings across agents
   Infrastructure  resource, expertise — capacity limits and codebase indexing
 
 Examples:
@@ -88,6 +90,7 @@ program.addCommand(mailCommand);
 program.addCommand(resourceCommand);
 program.addCommand(expertiseCommand);
 program.addCommand(scenarioCommand);
+program.addCommand(researchCommand);
 program.addCommand(dashCommand);
 
 program.parse();
