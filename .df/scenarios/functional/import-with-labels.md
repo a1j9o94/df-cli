@@ -1,0 +1,8 @@
+---
+name: import-with-labels
+type: functional
+spec_id: run_01KJSS4TD4WH5VKGWK6YWSWJZQ
+created_by: agt_01KJSS4TD5H3A6M3NHC0H95JFZ
+---
+
+Setup: GitHub issue with labels ['bug', 'p0']. Title: 'Login crashes on mobile'. Body: 'App crashes when tapping login button on iOS 17.'\n\nSteps:\n1. Run: dark spec create --from-github https://github.com/org/repo/issues/456\n2. Verify the generated spec frontmatter contains:\n   a. type: bug (mapped from label 'bug')\n   b. priority: critical (mapped from label 'p0')\n   c. source_url: https://github.com/org/repo/issues/456\n3. Verify stdout mentions: 'Type: bug (from label: bug)' and 'Priority: critical (from label: p0)'\n\nAdditional label mapping tests:\n- Labels ['enhancement'] should produce type: feature\n- Labels ['feature-request'] should produce type: feature\n- Labels ['bugfix'] should produce type: bug\n- Labels ['defect'] should produce type: bug\n- Labels ['p1', 'high'] should produce priority: high\n- Labels ['p2', 'medium'] should produce priority: medium\n- Labels ['p3', 'low'] should produce priority: low\n- Labels ['critical', 'urgent'] should produce priority: critical\n- Labels ['unknown-label'] should be silently ignored\n- Labels [] (empty) should produce defaults: type: feature, priority: medium\n\nPass criteria: Label-to-type and label-to-priority mapping works correctly for all recognized labels. Unrecognized labels are ignored without error.
