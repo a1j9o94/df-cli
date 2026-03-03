@@ -44,7 +44,8 @@ export type EventType =
   | "merge-branch-error"
   | "state-db-backed-up"
   | "state-db-restored"
-  | "state-db-backup-removed";
+  | "state-db-backup-removed"
+  | "module-redecomposed";
 
 export interface EventRecord {
   id: string;
