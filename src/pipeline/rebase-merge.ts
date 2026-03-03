@@ -19,6 +19,37 @@ export interface MergeResult {
 }
 
 /**
+ * Contract: MergeBranchResult
+ *
+ * Result of attempting to merge a single branch into the target.
+ * When conflicted=true, conflict markers are left on disk for the merger agent to resolve.
+ */
+export interface MergeBranchResult {
+  /** Whether the merge completed successfully (clean merge, committed) */
+  success: boolean;
+  /** Whether the merge had conflicts (conflict markers left on disk) */
+  conflicted: boolean;
+  /** The branch name that was being merged */
+  branch: string;
+  /** List of files with conflicts (only when conflicted=true) */
+  conflictedFiles?: string[];
+  /** Error message if the merge failed for a non-conflict reason */
+  error?: string;
+}
+
+/**
+ * Contract: MergeSingleBranchFunction
+ *
+ * Type signature for the function that merges a single branch into the target.
+ * The merge strategy (git merge, git rebase, etc.) is isolated inside this function.
+ * Conflict detection, agent handoff, and prompt generation are separate concerns.
+ */
+export type MergeSingleBranchFunction = (
+  mainRepoPath: string,
+  branch: string,
+) => MergeBranchResult;
+
+/**
  * Get the branch name of a worktree.
  */
 function getWorktreeBranch(worktreePath: string): string {
@@ -94,6 +125,135 @@ export function rebaseWorktreeBranch(
       conflicted: true,
       branch,
       error: `Rebase of ${branch} onto ${targetBranch} failed: ${errorMsg}`,
+    };
+  }
+}
+
+/**
+ * Merge a single branch into the current HEAD of the main repo.
+ *
+ * This is the isolated merge strategy function. The git merge command lives here
+ * and ONLY here. Changing from `git merge` to `git rebase` (or any other strategy)
+ * should only require modifying this one function.
+ *
+ * Behavior:
+ * - If the merge is clean: commits the merge and returns success=true.
+ * - If the merge has conflicts: leaves conflict markers on disk, does NOT commit,
+ *   and returns conflicted=true with the list of conflicted files.
+ * - If the merge fails for a non-conflict reason: returns success=false with error.
+ *
+ * @param mainRepoPath - Path to the main repository (where the merge happens)
+ * @param branch - The branch name to merge into current HEAD
+ * @returns MergeBranchResult with conflict details if applicable
+ */
+export function mergeSingleBranch(
+  mainRepoPath: string,
+  branch: string,
+): MergeBranchResult {
+  try {
+    // Attempt git merge --no-commit to allow inspection before committing
+    execSync(`git merge ${branch} --no-commit --no-ff`, {
+      cwd: mainRepoPath,
+      stdio: "pipe",
+      env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
+    });
+
+    // Merge succeeded cleanly — sanitize protected files and commit
+    const stagedFiles = execSync("git diff --cached --name-only HEAD", {
+      cwd: mainRepoPath,
+      encoding: "utf-8",
+    }).trim().split("\n").filter(Boolean);
+
+    const protectedFiles = getProtectedFiles(stagedFiles);
+
+    if (protectedFiles.length > 0) {
+      for (const pf of protectedFiles) {
+        try {
+          execSync(`git reset HEAD -- "${pf}"`, {
+            cwd: mainRepoPath,
+            stdio: "pipe",
+          });
+          const fullPath = join(mainRepoPath, pf);
+          if (existsSync(fullPath)) {
+            try {
+              execSync(`git show HEAD:"${pf}"`, {
+                cwd: mainRepoPath,
+                stdio: "pipe",
+              });
+              execSync(`git checkout HEAD -- "${pf}"`, {
+                cwd: mainRepoPath,
+                stdio: "pipe",
+              });
+            } catch {
+              unlinkSync(fullPath);
+              try {
+                const dir = dirname(fullPath);
+                if (readdirSync(dir).length === 0) {
+                  rmSync(dir);
+                }
+              } catch {
+                // ignore
+              }
+            }
+          }
+        } catch {
+          // Best effort
+        }
+      }
+    }
+
+    // Commit the clean merge
+    execSync(`git commit --no-edit -m "Merge branch '${branch}'"`, {
+      cwd: mainRepoPath,
+      stdio: "pipe",
+      env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
+    });
+
+    return {
+      success: true,
+      conflicted: false,
+      branch,
+    };
+  } catch (err) {
+    // Check if this is a conflict (merge in progress with conflicted files)
+    try {
+      const conflictedOutput = execSync(
+        "git diff --name-only --diff-filter=U",
+        {
+          cwd: mainRepoPath,
+          encoding: "utf-8",
+        },
+      ).trim();
+
+      if (conflictedOutput.length > 0) {
+        const conflictedFiles = conflictedOutput.split("\n").filter(Boolean);
+        return {
+          success: false,
+          conflicted: true,
+          branch,
+          conflictedFiles,
+        };
+      }
+    } catch {
+      // Could not determine conflict status — fall through to generic error
+    }
+
+    // Non-conflict failure — abort any in-progress merge and return error
+    try {
+      execSync("git merge --abort", {
+        cwd: mainRepoPath,
+        stdio: "pipe",
+      });
+    } catch {
+      // May not be in a merge state
+    }
+
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      conflicted: false,
+      branch,
+      error: `Merge of ${branch} failed: ${errorMsg}`,
     };
   }
 }
