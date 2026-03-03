@@ -202,6 +202,30 @@ describe("No Animation on Completed Runs", () => {
   });
 });
 
+describe("Module Card Estimated Cost Display", () => {
+  const html = generateDashboardHtml();
+
+  it("renderModules JS checks isEstimate for module cost display", () => {
+    const renderModulesSection = html.substring(html.indexOf("function renderModules"));
+    expect(renderModulesSection).toContain("isEstimate");
+    expect(renderModulesSection).toContain("estimatedCost");
+  });
+
+  it("module card shows estimated cost with tilde prefix and cost-estimated class", () => {
+    const renderModulesSection = html.substring(html.indexOf("function renderModules"));
+    // Should use cost-estimated class for estimated costs
+    expect(renderModulesSection).toContain("cost-estimated");
+    // Should prefix with ~
+    expect(renderModulesSection).toMatch(/~.*formatCost/);
+  });
+
+  it("module card shows actual cost normally when not estimated", () => {
+    const renderModulesSection = html.substring(html.indexOf("function renderModules"));
+    // Should still use formatCost for non-estimated cost
+    expect(renderModulesSection).toContain("formatCost");
+  });
+});
+
 describe("Loading indicators are CSS-only (no external deps)", () => {
   const html = generateDashboardHtml();
 

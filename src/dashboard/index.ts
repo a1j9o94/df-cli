@@ -786,6 +786,10 @@ function generateScript(apiBase: string): string {
         ? Math.round((m.depsSatisfied / m.depsTotal) * 100) : 100;
       const contractPct = m.contractsTotal > 0
         ? Math.round((m.contractsAcknowledged / m.contractsTotal) * 100) : 100;
+      var isEstimate = m.isEstimate === true;
+      var costDisplay = isEstimate && m.estimatedCost > 0
+        ? '<span class="cost-estimated">~' + formatCost(m.estimatedCost) + '</span>'
+        : formatCost(m.cost);
 
       return '<div class="module-card">'
         + '<div class="module-card-header">'
@@ -793,7 +797,7 @@ function generateScript(apiBase: string): string {
         + statusBadge(m.agentStatus)
         + '</div>'
         + '<div class="module-meta">'
-        + '<span class="meta-item"><span class="meta-label">Cost:</span> ' + formatCost(m.cost) + '</span>'
+        + '<span class="meta-item"><span class="meta-label">Cost:</span> ' + costDisplay + '</span>'
         + '<span class="meta-item"><span class="meta-label">Tokens:</span> ' + formatTokens(m.tokens) + '</span>'
         + (m.tddPhase ? '<span class="meta-item"><span class="meta-label">TDD:</span> ' + esc(m.tddPhase) + ' (' + esc(m.tddCycles) + ' cycles)</span>' : '')
         + '<span class="meta-item"><span class="meta-label">Files:</span> ' + esc(m.filesChanged) + '</span>'
