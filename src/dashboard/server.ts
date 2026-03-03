@@ -57,6 +57,7 @@ interface AgentSummary {
   tokens: number;
   elapsed: string;
   estimatedCost: number;
+  isEstimate: boolean;
   moduleId?: string;
   tddPhase?: string;
   tddCycles?: number;
@@ -75,6 +76,8 @@ interface ModuleStatus {
   filesChanged: number;
   cost: number;
   tokens: number;
+  estimatedCost: number;
+  isEstimate: boolean;
   contractsAcknowledged: number;
   contractsTotal: number;
   depsSatisfied: number;
@@ -100,10 +103,12 @@ function computeElapsed(createdAt: string, updatedAt?: string): string {
 
 /**
  * Compute estimated cost for an agent based on elapsed time.
- * Only returns > 0 for active agents (pending/spawning/running) with no real cost yet.
+ * Only returns > 0 for running/spawning agents with no real cost yet.
+ * Pending agents have not started work, so their estimated cost is 0.
  */
 function computeAgentEstimatedCost(costUsd: number, createdAt: string, status: string): number {
   if (costUsd !== 0) return 0;
+  if (status !== "running" && status !== "spawning") return 0;
   const elapsedMs = computeElapsedMs(createdAt, status);
   return estimateCost(elapsedMs);
 }
@@ -259,6 +264,8 @@ function handleGetAgents(db: InstanceType<typeof Database>, runId: string): Resp
 
     const agentCost = a.cost_usd as number;
     const agentStatus = a.status as string;
+    const estCost = computeAgentEstimatedCost(agentCost, a.created_at as string, agentStatus);
+    const isEstimate = agentCost === 0 && estCost > 0;
 
     const summary: AgentSummary = {
       id: a.id as string,
@@ -269,7 +276,8 @@ function handleGetAgents(db: InstanceType<typeof Database>, runId: string): Resp
       cost: agentCost,
       tokens: a.tokens_used as number,
       elapsed: computeElapsed(a.created_at as string, updatedAt),
-      estimatedCost: computeAgentEstimatedCost(agentCost, a.created_at as string, agentStatus),
+      estimatedCost: estCost,
+      isEstimate,
     };
 
     if (a.module_id) summary.moduleId = a.module_id as string;
@@ -428,6 +436,12 @@ function handleGetModules(db: InstanceType<typeof Database>, runId: string): Res
     }
 
     const filesChanged = mod.scope?.creates?.length ?? 0;
+    const modCost = agent ? (agent.cost_usd as number) : 0;
+    const modStatus = agent ? (agent.status as string) : "";
+    const modEstCost = agent
+      ? computeAgentEstimatedCost(modCost, agent.created_at as string, modStatus)
+      : 0;
+    const modIsEstimate = modCost === 0 && modEstCost > 0;
 
     return {
       id: mod.id,
@@ -437,8 +451,10 @@ function handleGetModules(db: InstanceType<typeof Database>, runId: string): Res
       tddPhase: agent ? ((agent.tdd_phase as string) ?? null) : null,
       tddCycles: agent ? (agent.tdd_cycles as number) : 0,
       filesChanged,
-      cost: agent ? (agent.cost_usd as number) : 0,
+      cost: modCost,
       tokens: agent ? (agent.tokens_used as number) : 0,
+      estimatedCost: modEstCost,
+      isEstimate: modIsEstimate,
       contractsAcknowledged,
       contractsTotal,
       depsSatisfied,

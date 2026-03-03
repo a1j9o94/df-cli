@@ -447,6 +447,97 @@ function generateStyles(): string {
     white-space: nowrap;
   }
 
+  /* --- Loading Spinner --- */
+
+  .loading-spinner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 12px 4px;
+  }
+
+  .loading-spinner::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* --- Agent Status Indicator --- */
+
+  .agent-status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  .agent-status-indicator.running {
+    background: var(--accent-green);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  .agent-status-indicator.spawning {
+    background: var(--accent-purple);
+    animation: pulse 1s ease-in-out infinite;
+  }
+
+  .agent-status-indicator.pending {
+    background: var(--text-muted);
+  }
+
+  .agent-status-indicator.completed {
+    background: var(--accent-green);
+  }
+
+  .agent-status-indicator.failed {
+    background: var(--accent-red);
+  }
+
+  .agent-status-indicator.killed {
+    background: var(--accent-red);
+  }
+
+  .agent-status-indicator.paused {
+    background: var(--accent-yellow);
+  }
+
+  /* --- Phase Indicator --- */
+
+  .phase-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+    background: var(--text-muted);
+  }
+
+  .phase-indicator.active {
+    background: var(--accent-green);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  /* --- Estimated Cost --- */
+
+  .cost-estimated {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
   @media (max-width: 768px) {
     .main {
       flex-direction: column;
@@ -584,8 +675,12 @@ function generateScript(apiBase: string): string {
   function renderRunHeader(run) {
     const progress = run.moduleCount > 0
       ? Math.round((run.completedCount / run.moduleCount) * 100) : 0;
+    var totalCost = run.cost + (run.estimatedCost || 0);
     const budgetPct = run.budget > 0
-      ? Math.round((run.cost / run.budget) * 100) : 0;
+      ? Math.round((totalCost / run.budget) * 100) : 0;
+    var costDisplay = run.estimatedCost > 0
+      ? formatCost(run.cost) + ' + <span class="cost-estimated">~' + formatCost(run.estimatedCost) + '</span>'
+      : formatCost(run.cost);
 
     document.getElementById("run-header").innerHTML =
       '<div class="run-header-title">'
@@ -593,9 +688,9 @@ function generateScript(apiBase: string): string {
       + statusBadge(run.status)
       + '</div>'
       + '<div class="run-stats">'
-      + '<div class="stat"><span class="stat-label">Phase</span><span class="stat-value">' + esc(run.phase || "—") + '</span></div>'
+      + '<div class="stat"><span class="stat-label">Phase</span><span class="stat-value"><span class="phase-indicator' + (run.status === "running" ? ' active' : '') + '"></span>' + esc(run.phase || "—") + '</span></div>'
       + '<div class="stat"><span class="stat-label">Elapsed</span><span class="stat-value">' + esc(run.elapsed) + '</span></div>'
-      + '<div class="stat"><span class="stat-label">Cost</span><span class="stat-value">' + formatCost(run.cost) + ' / ' + formatCost(run.budget) + ' (' + budgetPct + '%)</span></div>'
+      + '<div class="stat"><span class="stat-label">Cost</span><span class="stat-value">' + costDisplay + ' / ' + formatCost(run.budget) + ' (' + budgetPct + '%)</span></div>'
       + '<div class="stat"><span class="stat-label">Tokens</span><span class="stat-value">' + formatTokens(run.tokensUsed) + '</span></div>'
       + '<div class="stat"><span class="stat-label">Modules</span><span class="stat-value">' + esc(run.completedCount) + ' / ' + esc(run.moduleCount) + '</span></div>'
       + '</div>'
@@ -606,11 +701,13 @@ function generateScript(apiBase: string): string {
   // --- Agents ---
 
   async function loadAgents(runId) {
+    var container = document.getElementById("agents-container");
+    container.innerHTML = '<div class="loading-spinner">Loading agents\u2026</div>';
     try {
       const agents = await fetchJson("/api/runs/" + runId + "/agents");
       renderAgents(agents);
     } catch (err) {
-      document.getElementById("agents-container").innerHTML =
+      container.innerHTML =
         '<div class="error-text">Error: ' + esc(err.message) + '</div>';
     }
   }
@@ -622,14 +719,19 @@ function generateScript(apiBase: string): string {
       return;
     }
     container.innerHTML = agents.map(function(a) {
+      var statusClass = (a.status || "pending");
+      var isEstimate = a.isEstimate === true;
+      var costDisplay = isEstimate && a.estimatedCost > 0
+        ? '<span class="cost-estimated">~' + formatCost(a.estimatedCost) + '</span>'
+        : formatCost(a.cost);
       return '<div class="agent-card">'
         + '<div class="agent-card-header">'
-        + '<span class="agent-name">' + esc(a.name) + '</span>'
+        + '<span class="agent-name"><span class="agent-status-indicator ' + esc(statusClass) + '"></span>' + esc(a.name) + '</span>'
         + statusBadge(a.status)
         + '</div>'
-        + '<span class="agent-role">' + esc(a.role) + (a.moduleId ? ' → ' + esc(a.moduleId) : '') + '</span>'
+        + '<span class="agent-role">' + esc(a.role) + (a.moduleId ? ' \u2192 ' + esc(a.moduleId) : '') + '</span>'
         + '<div class="agent-meta">'
-        + '<span class="meta-item"><span class="meta-label">Cost:</span> ' + formatCost(a.cost) + '</span>'
+        + '<span class="meta-item"><span class="meta-label">Cost:</span> ' + costDisplay + '</span>'
         + '<span class="meta-item"><span class="meta-label">Tokens:</span> ' + formatTokens(a.tokens) + '</span>'
         + '<span class="meta-item"><span class="meta-label">Elapsed:</span> ' + esc(a.elapsed) + '</span>'
         + (a.tddPhase ? '<span class="meta-item"><span class="meta-label">TDD:</span> ' + esc(a.tddPhase) + ' (' + esc(a.tddCycles) + ' cycles)</span>' : '')
@@ -642,11 +744,13 @@ function generateScript(apiBase: string): string {
   // --- Modules ---
 
   async function loadModules(runId) {
+    var container = document.getElementById("modules-container");
+    container.innerHTML = '<div class="loading-spinner">Loading modules\u2026</div>';
     try {
       const modules = await fetchJson("/api/runs/" + runId + "/modules");
       renderModules(modules);
     } catch (err) {
-      document.getElementById("modules-container").innerHTML =
+      container.innerHTML =
         '<div class="error-text">Error: ' + esc(err.message) + '</div>';
     }
   }

@@ -609,9 +609,9 @@ describe("Dashboard Server", () => {
   });
 
   describe("estimatedCost on AgentSummary", () => {
-    test("running agent with cost=0 has estimatedCost > 0", async () => {
-      // agt_build2 is pending with cost_usd=0, created 2026-03-01T11:05:00Z
-      // Since it's an active agent (pending), estimatedCost should be > 0
+    test("pending agent with cost=0 has estimatedCost = 0 (not started)", async () => {
+      // agt_build2 is pending with cost_usd=0 — has not started work yet
+      // Pending agents should have estimatedCost=0 (no elapsed time to estimate from)
       const res = await fetch(`${server?.url}/api/runs/run_test1/agents`);
       const data = await res.json();
       const pendingAgent = data.find((a: Record<string, unknown>) => a.id === "agt_build2");
@@ -620,7 +620,7 @@ describe("Dashboard Server", () => {
       expect(pendingAgent.status).toBe("pending");
       expect(pendingAgent.cost).toBe(0);
       expect(typeof pendingAgent.estimatedCost).toBe("number");
-      expect(pendingAgent.estimatedCost).toBeGreaterThan(0);
+      expect(pendingAgent.estimatedCost).toBe(0);
     });
 
     test("running agent with real cost has estimatedCost = 0", async () => {
@@ -662,8 +662,10 @@ describe("Dashboard Server", () => {
       const data = await res.json();
 
       expect(typeof data.estimatedCost).toBe("number");
-      // run_test1 has agt_build2 (pending, cost=0) which should contribute estimated cost
-      expect(data.estimatedCost).toBeGreaterThan(0);
+      // run_test1 only has agt_build2 (pending, cost=0) — pending agents don't contribute estimates
+      // agt_build1 (running) has cost=5.0 so estimatedCost=0 for it
+      // agt_arch1 (completed) has cost=2.0 so estimatedCost=0 for it
+      expect(data.estimatedCost).toBe(0);
     });
 
     test("completed run has estimatedCost = 0", async () => {

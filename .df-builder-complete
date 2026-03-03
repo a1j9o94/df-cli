@@ -1,4 +1,1 @@
-# fix-stale-agent-queries: 721 tests pass (717 existing + 4 new), both contracts satisfied
-# ModuleAgentLookup: ORDER BY created_at DESC added to handleGetModules
-# CompletedCountDistinct: COUNT(DISTINCT module_id) replaces COUNT(*) in toRunSummary
-
+# Loading logic module complete - 761 tests pass (126 dashboard), both isEstimate and loading indicators implemented
