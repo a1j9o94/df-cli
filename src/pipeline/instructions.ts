@@ -184,6 +184,19 @@ export function sendInstructions(
       break;
     }
 
+    case "conflict-resolution": {
+      body = buildConflictResolutionPrompt({
+        agentId,
+        runId,
+        targetBranch: (context.targetBranch as string) ?? "main",
+        headModuleName: (context.headModuleName as string) ?? "unknown",
+        incomingModuleName: (context.incomingModuleName as string) ?? "unknown",
+        incomingBranch: (context.incomingBranch as string) ?? "unknown",
+        conflictedFiles: (context.conflictedFiles as ConflictedFile[]) ?? [],
+      });
+      break;
+    }
+
     default:
       body = `Complete your ${role} task, then call: dark agent complete ${agentId}`;
   }
