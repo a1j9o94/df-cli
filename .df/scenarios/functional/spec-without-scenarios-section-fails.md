@@ -1,28 +1,30 @@
 ---
 name: spec-without-scenarios-section-fails
 type: functional
-spec_id: run_01KJNF64GVR41BMXTX31QTJNWM
-created_by: agt_01KJNF64GX2YYGE47G287VPZ1V
+spec_id: run_01KJSRR03H5TJJK751YJTQGN37
+created_by: agt_01KJSRR03JR60D5QRHPZKHDX69
 ---
 
-## Test: Spec with no ## Scenarios section causes clear failure
+## Scenario: Spec with no Scenarios section fails on skip-architect
 
 ### Preconditions
-- A spec file exists in .df/specs/ that has NO ## Scenarios section (the heading is completely absent)
-- .df/scenarios/functional/ is empty
-- .df/scenarios/change/ is empty
+- A Dark Factory project is initialized
+- A spec exists that has NO `## Scenarios` section at all
+- No scenario files exist in `.df/scenarios/`
 
 ### Steps
-1. Run `dark build --skip-architect` targeting this spec
-2. Observe what happens during the pre-build scenario extraction
+1. Create a spec markdown file with normal content but no `## Scenarios` heading
+2. Run the pipeline engine with `skipArchitect: true`
+3. The pre-build gate triggers and attempts to extract scenarios from the spec
 
 ### Expected Results
-- The extractScenariosFromSpec function returns 0 (no scenarios found)
-- Since --skip-architect was used AND extraction yielded 0 scenarios, the pipeline fails
-- Error message clearly tells the user to add scenarios to the spec, e.g.: 'No scenarios found in spec. Add a ## Scenarios section with test scenarios to your spec file.'
-- No builder agents are spawned
-- The run status is 'failed'
+- The `extractScenariosFromSpec()` function parses the spec and finds no `## Scenarios` section
+- It returns 0 scenarios extracted
+- The gate detects 0 scenarios after extraction attempt
+- The pipeline fails with a clear error message telling the user to add scenarios to the spec
+- Error message should indicate that the spec needs a `## Scenarios` section
+- No scenario files are created on disk
 
 ### Pass/Fail Criteria
-- PASS: Pipeline fails with a user-actionable error message mentioning the spec needs a ## Scenarios section
-- FAIL: Pipeline starts build without scenarios, or error message is cryptic/unhelpful
+- PASS: Pipeline fails with a clear, actionable error message about missing scenarios section in spec
+- FAIL: Pipeline proceeds without scenarios, OR error message is cryptic/unhelpful, OR an exception trace is shown without context
