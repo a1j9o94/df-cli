@@ -133,6 +133,34 @@ export function preBuildValidation(
 }
 
 /**
+ * Archive a spec. Uses validated transition (only draft, ready, completed can be archived).
+ * Throws if spec not found or transition is invalid.
+ */
+export function archiveSpec(db: SqliteDb, id: string): void {
+  updateSpecStatusChecked(db, id, "archived");
+}
+
+/**
+ * Get the lineage chain for a spec (oldest-first).
+ * Walks parent_spec_id links up to the root, returns the chain from root to the given spec.
+ * Returns empty array if spec not found.
+ */
+export function getSpecLineage(db: SqliteDb, specId: string): SpecRecord[] {
+  const chain: SpecRecord[] = [];
+  let currentId: string | null = specId;
+
+  // Walk up the parent chain
+  while (currentId) {
+    const spec = getSpec(db, currentId);
+    if (!spec) break;
+    chain.unshift(spec); // prepend to get oldest-first order
+    currentId = spec.parent_spec_id ?? null;
+  }
+
+  return chain;
+}
+
+/**
  * Helper: get valid next statuses from a given status.
  */
 function getValidNextStatuses(current: SpecStatus): SpecStatus[] {
