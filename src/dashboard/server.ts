@@ -29,13 +29,8 @@ export interface ServerHandle {
 interface RunSummary {
   id: string;
   specId: string;
-<<<<<<< HEAD
   /** Human-readable spec title from specs table, null if spec not found */
   specTitle: string | null;
-=======
-  /** Human-readable spec title, resolved from specs table. Falls back to specId if not found. */
-  specTitle: string;
->>>>>>> df-build/run_01KJ/mod_ui_redesign-mmapuau3
   status: string;
   phase: string | null;
   cost: number;
@@ -193,16 +188,12 @@ function resolveSpecTitle(db: InstanceType<typeof Database>, specId: string): st
 function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unknown>): RunSummary {
   const runId = r.id as string;
   const specId = r.spec_id as string;
-<<<<<<< HEAD
 
   // Look up spec title from specs table
   const specRow = db
     .prepare("SELECT title FROM specs WHERE id = ?")
     .get(specId) as { title: string } | null;
   const specTitle = specRow?.title ?? null;
-=======
-  const specTitle = resolveSpecTitle(db, specId);
->>>>>>> df-build/run_01KJ/mod_ui_redesign-mmapuau3
 
   // Compute moduleCount and completedCount from buildplan + agents
   let moduleCount = 0;
@@ -247,11 +238,7 @@ function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unkno
 
   const summary: RunSummary = {
     id: runId,
-<<<<<<< HEAD
     specId: specId,
-=======
-    specId,
->>>>>>> df-build/run_01KJ/mod_ui_redesign-mmapuau3
     specTitle,
     status: r.status as string,
     phase: (r.current_phase as string) ?? null,
