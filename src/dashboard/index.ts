@@ -662,12 +662,16 @@ function generateScript(apiBase: string): string {
     ]);
   }
 
-  async function loadRunDetail(runId) {
+  async function loadRunDetail(runId, skipSpinner) {
+    var container = document.getElementById("run-header");
+    if (!skipSpinner) {
+      container.innerHTML = '<div class="loading-spinner">Loading run\u2026</div>';
+    }
     try {
       const run = await fetchJson("/api/runs/" + runId);
       renderRunHeader(run);
     } catch (err) {
-      document.getElementById("run-header").innerHTML =
+      container.innerHTML =
         '<div class="error-text">Error: ' + esc(err.message) + '</div>';
     }
   }

@@ -180,6 +180,23 @@ describe("Loading indicators are CSS-only (no external deps)", () => {
   });
 });
 
+describe("Loading Spinner JS - Run Header", () => {
+  const html = generateDashboardHtml();
+
+  it("shows loading spinner before fetching run detail", () => {
+    expect(html).toContain("loading-spinner");
+    expect(html).toMatch(/Loading run/);
+  });
+
+  it("sets loading state before fetchJson call for run detail", () => {
+    const spinnerIdx = html.indexOf('loading-spinner">Loading run');
+    const fetchIdx = html.indexOf('fetchJson("/api/runs/" + runId)');
+    expect(spinnerIdx).toBeGreaterThan(-1);
+    expect(fetchIdx).toBeGreaterThan(-1);
+    expect(spinnerIdx).toBeLessThan(fetchIdx);
+  });
+});
+
 describe("Loading clears on success and error", () => {
   const html = generateDashboardHtml();
 
