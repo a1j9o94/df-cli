@@ -10,6 +10,139 @@ import type { SqliteDb } from "../db/index.js";
 import { createMessage } from "../db/queries/messages.js";
 import { extractFileContents, formatPreloadedFiles } from "./file-preload.js";
 
+// ============================================================
+// Conflict resolution prompt types and builder
+// ============================================================
+
+/**
+ * A file with git conflict markers that needs resolution.
+ */
+export interface ConflictedFile {
+  /** Relative file path (e.g. "src/shared/greet.ts") */
+  path: string;
+  /** Full file content including conflict markers (<<<<<<< / ======= / >>>>>>>) */
+  content: string;
+}
+
+/**
+ * Context for building a conflict resolution prompt.
+ */
+export interface ConflictPromptContext {
+  /** The merger agent ID that will resolve the conflicts */
+  agentId: string;
+  /** The current pipeline run ID */
+  runId: string;
+  /** The branch being merged into (e.g. "main") */
+  targetBranch: string;
+  /** Name of the module whose code is on the HEAD side (already merged) */
+  headModuleName: string;
+  /** Name of the module whose code is on the incoming side (being merged) */
+  incomingModuleName: string;
+  /** The branch name being merged in */
+  incomingBranch: string;
+  /** List of files with conflict markers */
+  conflictedFiles: ConflictedFile[];
+}
+
+/**
+ * Build a conflict resolution prompt for the merger agent.
+ *
+ * When a `git merge --no-commit` produces conflicts, the merge phase
+ * calls this function to construct instructions that tell the merger
+ * agent exactly what files are conflicted, which module produced each
+ * side of the conflict, and how to resolve and commit the result.
+ *
+ * @param context - Conflict details including files, module names, and agent info
+ * @returns A structured prompt string for the merger agent
+ */
+export function buildConflictResolutionPrompt(context: ConflictPromptContext): string {
+  const {
+    agentId,
+    runId,
+    targetBranch,
+    headModuleName,
+    incomingModuleName,
+    incomingBranch,
+    conflictedFiles,
+  } = context;
+
+  const fileCount = conflictedFiles.length;
+  const fileSummary = fileCount === 0
+    ? "No conflicted files detected."
+    : `${fileCount} file${fileCount === 1 ? "" : "s"} with conflicts:`;
+
+  // Build per-file sections with conflict content
+  const fileSections = conflictedFiles.map((file, index) => {
+    return [
+      `### File ${index + 1}: ${file.path}`,
+      "",
+      "```",
+      file.content,
+      "```",
+    ].join("\n");
+  }).join("\n\n");
+
+  return [
+    "# Conflict Resolution Instructions",
+    "",
+    "## Identity",
+    "You are a Merger agent resolving git merge conflicts between two modules in a Dark Factory pipeline.",
+    "Both sides of each conflict represent intentional changes from different builders — your job is to combine them correctly.",
+    "",
+    "## Assignment",
+    `- Run: ${runId}`,
+    `- Agent ID: ${agentId}`,
+    `- Target branch: ${targetBranch}`,
+    `- Incoming branch: ${incomingBranch}`,
+    `- HEAD side (already merged): **${headModuleName}**`,
+    `- Incoming side (being merged): **${incomingModuleName}**`,
+    "",
+    "## Context",
+    "",
+    `The HEAD side (\`<<<<<<< HEAD\`) contains code from module **${headModuleName}** which was already merged into \`${targetBranch}\`.`,
+    `The incoming side (\`>>>>>>>\`) contains code from module **${incomingModuleName}** which is being merged from branch \`${incomingBranch}\`.`,
+    "",
+    "**Both changes are intentional** — they come from separate builders working on different modules.",
+    "You must combine both sides into a coherent result. Do not drop or discard either side's changes.",
+    "Preserve both sides' intent: keep all new functions, imports, exports, and modifications from each module.",
+    "",
+    "## Conflicted Files",
+    "",
+    fileSummary,
+    "",
+    fileSections,
+    "",
+    "## Resolution Steps",
+    "",
+    "For each conflicted file above:",
+    "",
+    "1. **Read** the conflict markers carefully — understand what each side added or changed",
+    "2. **Resolve** the conflict by combining both sides. Remove all conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`)",
+    "3. **Verify** the resolved file is syntactically valid and logically coherent",
+    "4. **Stage** the resolved file: `git add <file-path>`",
+    "",
+    "After resolving ALL files:",
+    "",
+    `5. **Commit** the merge resolution: \`git commit -m "Merge ${incomingModuleName} into ${targetBranch}: resolve conflicts with ${headModuleName}"\``,
+    `6. **Verify** no conflict markers remain in any tracked file: \`git grep -l '<<<<<<<' || echo 'No conflict markers found'\``,
+    `7. Mark yourself complete: \`dark agent complete ${agentId}\``,
+    "",
+    "## IMPORTANT",
+    "",
+    "- **Do NOT drop either side's changes.** Both modules' changes are intentional and must be preserved.",
+    "- **Remove ALL conflict markers.** No `<<<<<<<`, `=======`, or `>>>>>>>` should remain in any file after resolution.",
+    "- If a conflict cannot be resolved automatically (e.g., contradictory logic), escalate via:",
+    `  \`dark mail send --to @orchestrator --body "Cannot resolve conflict in <file>: <reason>" --from ${agentId} --run-id ${runId}\``,
+    "",
+    "## Communication",
+    `- Check messages: dark mail check --agent ${agentId}`,
+    `- Send messages: dark mail send --to <target> --body "..." --from ${agentId} --run-id ${runId}`,
+    `- Heartbeat: dark agent heartbeat ${agentId}`,
+    `- Complete: dark agent complete ${agentId}`,
+    `- Fail: dark agent fail ${agentId} --error "<description>"`,
+  ].join("\n");
+}
+
 /**
  * Send actionable instructions to an agent via the mail system.
  *
@@ -48,6 +181,19 @@ export function sendInstructions(
 
     case "integration-tester": {
       body = buildIntegrationTesterBody(agentId);
+      break;
+    }
+
+    case "conflict-resolution": {
+      body = buildConflictResolutionPrompt({
+        agentId,
+        runId,
+        targetBranch: (context.targetBranch as string) ?? "main",
+        headModuleName: (context.headModuleName as string) ?? "unknown",
+        incomingModuleName: (context.incomingModuleName as string) ?? "unknown",
+        incomingBranch: (context.incomingBranch as string) ?? "unknown",
+        conflictedFiles: (context.conflictedFiles as ConflictedFile[]) ?? [],
+      });
       break;
     }
 

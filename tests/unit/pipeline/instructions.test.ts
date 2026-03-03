@@ -174,6 +174,42 @@ describe("sendInstructions", () => {
     expect(messages[0].body).toContain("# Merger Instructions");
     expect(messages[0].body).toContain("No worktrees specified");
   });
+
+  test("creates a message for conflict-resolution role with conflict context", () => {
+    sendInstructions(db, runId, agentId, "conflict-resolution", {
+      targetBranch: "main",
+      headModuleName: "module-x",
+      incomingModuleName: "module-y",
+      incomingBranch: "df-build/run_01/module-y-xyz",
+      conflictedFiles: [
+        { path: "src/shared.ts", content: "<<<<<<< HEAD\nhead code\n=======\nincoming code\n>>>>>>> incoming" },
+      ],
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages.length).toBe(1);
+    expect(messages[0].body).toContain("Conflict Resolution");
+    expect(messages[0].body).toContain("module-x");
+    expect(messages[0].body).toContain("module-y");
+    expect(messages[0].body).toContain("src/shared.ts");
+    expect(messages[0].body).toContain("head code");
+    expect(messages[0].body).toContain("incoming code");
+    expect(messages[0].body).toContain(agentId);
+  });
+
+  test("conflict-resolution role includes failure instructions", () => {
+    sendInstructions(db, runId, agentId, "conflict-resolution", {
+      targetBranch: "main",
+      headModuleName: "mod-a",
+      incomingModuleName: "mod-b",
+      incomingBranch: "branch-b",
+      conflictedFiles: [],
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("dark agent fail");
+    expect(messages[0].body).toContain(agentId);
+  });
 });
 
 // ============================================================
