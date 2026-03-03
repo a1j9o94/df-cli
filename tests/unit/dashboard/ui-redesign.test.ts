@@ -1,7 +1,12 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { startServer } from "../../../src/dashboard/server.js";
 import { SCHEMA_SQL } from "../../../src/db/schema.js";
+
+// Temp directory for spec files referenced by DB records
+const specTmpDir = join(import.meta.dir, "__tmp_ui_redesign_specs__");
 
 // Test helpers
 function createTestDb(): InstanceType<typeof Database> {
@@ -15,6 +20,19 @@ function createTestDb(): InstanceType<typeof Database> {
 function seedTestData(db: InstanceType<typeof Database>) {
   const now = "2026-03-01T12:00:00Z";
 
+  // Create spec files on disk so the spec content endpoint can read them
+  if (!existsSync(specTmpDir)) mkdirSync(specTmpDir, { recursive: true });
+  const specFile1 = join(specTmpDir, "spec_test1.md");
+  const specFile2 = join(specTmpDir, "spec_test2.md");
+  writeFileSync(
+    specFile1,
+    "---\ntitle: Redesign dashboard around the workplan\ntype: feature\nstatus: building\n---\n\nRedesign the dashboard UI around the workplan.\n",
+  );
+  writeFileSync(
+    specFile2,
+    "---\ntitle: Add holdout scenario validation\ntype: feature\nstatus: completed\n---\n\nAdd holdout scenario validation to the evaluator.\n",
+  );
+
   // Create specs with titles
   db.prepare(
     `INSERT INTO specs (id, title, status, file_path, content_hash, scenario_count, created_at, updated_at)
@@ -23,7 +41,7 @@ function seedTestData(db: InstanceType<typeof Database>) {
     "spec_test1",
     "Redesign dashboard around the workplan",
     "building",
-    ".df/specs/spec_test1.md",
+    specFile1,
     "abc123",
     3,
     "2026-03-01T10:00:00Z",
@@ -37,7 +55,7 @@ function seedTestData(db: InstanceType<typeof Database>) {
     "spec_test2",
     "Add holdout scenario validation",
     "completed",
-    ".df/specs/spec_test2.md",
+    specFile2,
     "def456",
     2,
     "2026-03-01T09:00:00Z",
@@ -46,13 +64,13 @@ function seedTestData(db: InstanceType<typeof Database>) {
 
   // Create runs
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     "run_test1",
     "spec_test1",
     "running",
-    "thorough",
+    0,
     4,
     50.0,
     12.5,
@@ -66,13 +84,13 @@ function seedTestData(db: InstanceType<typeof Database>) {
   );
 
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     "run_test2",
     "spec_test2",
     "completed",
-    "quick",
+    0,
     2,
     25.0,
     8.0,
@@ -355,6 +373,8 @@ describe("UI Redesign — Dashboard", () => {
       server = null;
     }
     db.close();
+    // Cleanup temp spec files
+    if (existsSync(specTmpDir)) rmSync(specTmpDir, { recursive: true });
   });
 
   // === Contract: EnrichedRunSummary ===
@@ -379,13 +399,13 @@ describe("UI Redesign — Dashboard", () => {
     test("specTitle falls back to specId when spec not found", async () => {
       // Create a run with a spec that doesn't exist in specs table
       db.prepare(
-        `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+        `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         "run_orphan",
         "spec_nonexistent",
         "pending",
-        "quick",
+        0,
         2,
         10.0,
         0,
@@ -419,12 +439,29 @@ describe("UI Redesign — Dashboard", () => {
 
   describe("SpecContentEndpoint — GET /api/runs/:id/spec", () => {
     test("returns spec metadata and goal text", async () => {
+      // Create a spec file on disk so the endpoint can read it
+      const { mkdirSync, writeFileSync, unlinkSync, rmdirSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const tmpDir = await import("node:os").then((os) => os.tmpdir());
+      const specDir = join(tmpDir, "df-test-ui-redesign-spec");
+      mkdirSync(specDir, { recursive: true });
+      const specPath = join(specDir, "spec_test1.md");
+      writeFileSync(
+        specPath,
+        `---\nid: spec_test1\ntitle: Redesign dashboard around the workplan\ntype: feature\nstatus: building\n---\n\n# Redesign dashboard\n\nGoal text here.\n`,
+      );
+      db.prepare("UPDATE specs SET file_path = ? WHERE id = ?").run(specPath, "spec_test1");
+
       const res = await fetch(`${server?.url}/api/runs/run_test1/spec`);
       expect(res.status).toBe(200);
       const data = await res.json();
 
-      expect(data.specId).toBe("spec_test1");
+      expect(data.id).toBe("spec_test1");
       expect(data.title).toBe("Redesign dashboard around the workplan");
+
+      // Clean up
+      unlinkSync(specPath);
+      rmdirSync(specDir);
     });
 
     test("returns 404 for nonexistent run", async () => {

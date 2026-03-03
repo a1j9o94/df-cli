@@ -189,11 +189,8 @@ function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unkno
   const runId = r.id as string;
   const specId = r.spec_id as string;
 
-  // Look up spec title from specs table
-  const specRow = db
-    .prepare("SELECT title FROM specs WHERE id = ?")
-    .get(specId) as { title: string } | null;
-  const specTitle = specRow?.title ?? null;
+  // Look up spec title from specs table, falling back to specId
+  const specTitle = resolveSpecTitle(db, specId);
 
   // Compute moduleCount and completedCount from buildplan + agents
   let moduleCount = 0;

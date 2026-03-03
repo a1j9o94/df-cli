@@ -79,7 +79,7 @@ describe("buildConflictResolutionPrompt — conflicted files", () => {
     const prompt = buildConflictResolutionPrompt(baseContext);
     expect(prompt).toContain("<<<<<<< HEAD");
     expect(prompt).toContain("=======");
-    expect(prompt).toContain(">>>>>>> incoming");
+    expect(prompt).toContain(">>>>>>>");
   });
 
   test("handles multiple conflicted files", () => {

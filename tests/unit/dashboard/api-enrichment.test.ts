@@ -46,13 +46,13 @@ function seedTestData(db: InstanceType<typeof Database>) {
 
   // Create runs referencing those specs
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     "run_test1",
     "spec_test1",
     "running",
-    "thorough",
+    0,
     4,
     50.0,
     12.5,
@@ -66,13 +66,13 @@ function seedTestData(db: InstanceType<typeof Database>) {
   );
 
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     "run_test2",
     "spec_test2",
     "completed",
-    "quick",
+    0,
     2,
     25.0,
     8.0,
@@ -87,13 +87,13 @@ function seedTestData(db: InstanceType<typeof Database>) {
 
   // Create a run with a spec_id that does NOT exist in the specs table
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     "run_orphan",
     "spec_deleted",
     "failed",
-    "quick",
+    0,
     2,
     25.0,
     2.0,
@@ -164,13 +164,13 @@ describe("API Enrichment — EnrichedRunSummary Contract", () => {
       expect(run2.specTitle).toBe("Require holdout scenarios before build");
     });
 
-    test("specTitle is null when spec is not found in database", async () => {
+    test("specTitle falls back to specId when spec is not found in database", async () => {
       const res = await fetch(`${server?.url}/api/runs`);
       const data = await res.json();
 
       const orphan = data.find((r: Record<string, unknown>) => r.id === "run_orphan");
       expect(orphan).toBeDefined();
-      expect(orphan.specTitle).toBeNull();
+      expect(orphan.specTitle).toBe("spec_deleted");
     });
   });
 
@@ -183,12 +183,12 @@ describe("API Enrichment — EnrichedRunSummary Contract", () => {
       expect(data.specTitle).toBe("Redesign dashboard around the workplan");
     });
 
-    test("single run with missing spec returns specTitle as null", async () => {
+    test("single run with missing spec falls back specTitle to specId", async () => {
       const res = await fetch(`${server?.url}/api/runs/run_orphan`);
       expect(res.status).toBe(200);
       const data = await res.json();
 
-      expect(data.specTitle).toBeNull();
+      expect(data.specTitle).toBe("spec_deleted");
     });
   });
 
