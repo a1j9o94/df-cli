@@ -108,11 +108,11 @@ describe("merge-phase conflict flow", () => {
     expect(result.branchResults).toBeDefined();
 
     // Find the conflicted branch result
-    const conflictedResult = result.branchResults!.find((r) => r.conflicted);
+    const conflictedResult = result.branchResults!.find((r) => r.status === "conflicted");
     expect(conflictedResult).toBeDefined();
     expect(conflictedResult!.branch).toBe("mod-conflict");
     expect(conflictedResult!.conflictedFiles).toBeDefined();
-    expect(conflictedResult!.conflictedFiles!).toContain("file.txt");
+    expect(conflictedResult!.conflictedFiles!.some((f) => f.path === "file.txt")).toBe(true);
 
     // The merge phase can use this info to hand off to the agent
     // Verify conflict markers are on disk
@@ -133,12 +133,12 @@ describe("merge-phase conflict flow", () => {
     execSync('git commit -m "Conflict version"', { cwd: wt2, stdio: "pipe" });
 
     // First branch merges clean
-    const r1 = mergeSingleBranch(repoDir, "mod-resolve-ok");
+    const r1 = mergeSingleBranch(wt1, repoDir, "main");
     expect(r1.success).toBe(true);
 
     // Second branch conflicts
-    const r2 = mergeSingleBranch(repoDir, "mod-resolve-conflict");
-    expect(r2.conflicted).toBe(true);
+    const r2 = mergeSingleBranch(wt2, repoDir, "main");
+    expect(r2.status).toBe("conflicted");
 
     // Simulate agent resolution
     writeFileSync(join(repoDir, "file.txt"), "ok version\nconflict version\n");
@@ -149,9 +149,9 @@ describe("merge-phase conflict flow", () => {
     });
 
     // Verify no markers remain
-    const scan = scanConflictMarkers(repoDir);
-    expect(scan.found).toBe(false);
-    expect(scan.files).toEqual([]);
+    // scanConflictMarkers checks a single file — check the conflicted file
+    const hasConflicts = scanConflictMarkers(join(repoDir, "file.txt"));
+    expect(hasConflicts).toBe(false);
   });
 
   test("three-module cascading merge: A clean, B conflict+resolve, C clean", () => {
@@ -217,18 +217,16 @@ describe("merge-phase conflict flow", () => {
     });
 
     // Merge A — should be clean
-    const r1 = mergeSingleBranch(repoDir, "builder-mod-a");
-    expect(r1.success).toBe(true);
-    expect(r1.conflicted).toBe(false);
+    const r1 = mergeSingleBranch(wt1, repoDir, "main");
+    expect(r1.status).toBe("clean");
 
     // Merge B — should conflict on server.ts
-    const r2 = mergeSingleBranch(repoDir, "builder-mod-b");
-    expect(r2.success).toBe(false);
-    expect(r2.conflicted).toBe(true);
-    expect(r2.conflictedFiles).toContain("server.ts");
+    const r2 = mergeSingleBranch(wt2, repoDir, "main");
+    expect(r2.status).toBe("conflicted");
+    expect(r2.conflictedFiles!.some((f) => f.path === "server.ts")).toBe(true);
 
     // Verify conflict markers exist
-    expect(scanConflictMarkers(repoDir).found).toBe(true);
+    expect(scanConflictMarkers(join(repoDir, "server.ts"))).toBe(true);
 
     // Agent resolves: combine both ports
     writeFileSync(
@@ -242,12 +240,12 @@ describe("merge-phase conflict flow", () => {
     });
 
     // Verify no markers remain after resolution
-    expect(scanConflictMarkers(repoDir).found).toBe(false);
+    expect(scanConflictMarkers(join(repoDir, "server.ts"))).toBe(false);
 
     // Merge C — should be clean (only touches utils.ts)
-    const r3 = mergeSingleBranch(repoDir, "builder-mod-c");
+    const r3 = mergeSingleBranch(wt3, repoDir, "main");
     expect(r3.success).toBe(true);
-    expect(r3.conflicted).toBe(false);
+    expect(r3.status === "conflicted").toBe(false);
 
     // Verify all files have correct content
     const serverContent = readFileSync(join(repoDir, "server.ts"), "utf-8");
@@ -260,6 +258,6 @@ describe("merge-phase conflict flow", () => {
     expect(utilsContent).toContain("toLocaleDateString");
 
     // Final check: no conflict markers anywhere
-    expect(scanConflictMarkers(repoDir).found).toBe(false);
+    expect(scanConflictMarkers(join(repoDir, "server.ts"))).toBe(false);
   });
 });

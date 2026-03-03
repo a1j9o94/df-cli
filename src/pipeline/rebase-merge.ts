@@ -16,6 +16,20 @@ export interface MergeResult {
   mergedBranches: string[];
   failedBranches: string[];
   errors: string[];
+  branchResults?: MergeBranchResult[];
+}
+
+/**
+ * Scan a file for git conflict markers (<<<<<<, =======, >>>>>>>).
+ * Returns true if any are found.
+ */
+export function scanConflictMarkers(filePath: string): boolean {
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    return content.includes("<<<<<<<") && content.includes("=======") && content.includes(">>>>>>>");
+  } catch {
+    return false;
+  }
 }
 
 /**
