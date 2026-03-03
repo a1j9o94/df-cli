@@ -675,8 +675,12 @@ function generateScript(apiBase: string): string {
   function renderRunHeader(run) {
     const progress = run.moduleCount > 0
       ? Math.round((run.completedCount / run.moduleCount) * 100) : 0;
+    var totalCost = run.cost + (run.estimatedCost || 0);
     const budgetPct = run.budget > 0
-      ? Math.round((run.cost / run.budget) * 100) : 0;
+      ? Math.round((totalCost / run.budget) * 100) : 0;
+    var costDisplay = run.estimatedCost > 0
+      ? formatCost(run.cost) + ' + <span class="cost-estimated">~' + formatCost(run.estimatedCost) + '</span>'
+      : formatCost(run.cost);
 
     document.getElementById("run-header").innerHTML =
       '<div class="run-header-title">'
@@ -686,7 +690,7 @@ function generateScript(apiBase: string): string {
       + '<div class="run-stats">'
       + '<div class="stat"><span class="stat-label">Phase</span><span class="stat-value"><span class="phase-indicator' + (run.status === "running" ? ' active' : '') + '"></span>' + esc(run.phase || "—") + '</span></div>'
       + '<div class="stat"><span class="stat-label">Elapsed</span><span class="stat-value">' + esc(run.elapsed) + '</span></div>'
-      + '<div class="stat"><span class="stat-label">Cost</span><span class="stat-value">' + formatCost(run.cost) + ' / ' + formatCost(run.budget) + ' (' + budgetPct + '%)</span></div>'
+      + '<div class="stat"><span class="stat-label">Cost</span><span class="stat-value">' + costDisplay + ' / ' + formatCost(run.budget) + ' (' + budgetPct + '%)</span></div>'
       + '<div class="stat"><span class="stat-label">Tokens</span><span class="stat-value">' + formatTokens(run.tokensUsed) + '</span></div>'
       + '<div class="stat"><span class="stat-label">Modules</span><span class="stat-value">' + esc(run.completedCount) + ' / ' + esc(run.moduleCount) + '</span></div>'
       + '</div>'
@@ -716,7 +720,7 @@ function generateScript(apiBase: string): string {
     }
     container.innerHTML = agents.map(function(a) {
       var statusClass = (a.status || "pending");
-      var isEstimate = a.cost === 0 && (a.status === "running" || a.status === "spawning" || a.status === "pending");
+      var isEstimate = a.isEstimate === true;
       var costDisplay = isEstimate && a.estimatedCost > 0
         ? '<span class="cost-estimated">~' + formatCost(a.estimatedCost) + '</span>'
         : formatCost(a.cost);
