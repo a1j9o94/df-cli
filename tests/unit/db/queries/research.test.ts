@@ -18,6 +18,7 @@ beforeEach(() => {
   db = getDbForTest();
   runId = createRun(db, { spec_id: "s1" }).id;
   const agent = createAgent(db, {
+    agent_id: "",
     run_id: runId,
     role: "architect",
     name: "test-architect",
@@ -176,6 +177,7 @@ describe("listResearchArtifacts", () => {
 
   test("filters by agent_id", () => {
     const agent2 = createAgent(db, {
+      agent_id: "",
       run_id: runId,
       role: "builder",
       name: "test-builder",

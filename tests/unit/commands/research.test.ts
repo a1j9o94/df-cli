@@ -19,6 +19,7 @@ beforeEach(() => {
   db = getDbForTest();
   runId = createRun(db, { spec_id: "s1" }).id;
   const agent = createAgent(db, {
+    agent_id: "",
     run_id: runId,
     role: "architect",
     name: "test-architect",
@@ -177,6 +178,7 @@ describe("research persistence across agents", () => {
 
     // Builder agent (different agent) queries research
     const builder = createAgent(db, {
+      agent_id: "",
       run_id: runId,
       role: "builder",
       name: "test-builder",

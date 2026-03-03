@@ -29,6 +29,7 @@ beforeEach(() => {
   db = getDbForTest();
   runId = createRun(db, { spec_id: "spec_test123" }).id;
   const architect = createAgent(db, {
+    agent_id: "",
     run_id: runId,
     role: "architect",
     name: "integration-architect",
@@ -37,6 +38,7 @@ beforeEach(() => {
   architectId = architect.id;
 
   const builder = createAgent(db, {
+    agent_id: "",
     run_id: runId,
     role: "builder",
     name: "integration-builder",
