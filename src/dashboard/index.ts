@@ -591,6 +591,13 @@ function generateScript(apiBase: string): string {
     return "$" + Number(n || 0).toFixed(4);
   }
 
+  function formatCostDisplay(cost, estimatedCost, isEstimate) {
+    if (isEstimate && estimatedCost > 0) {
+      return '<span class="cost-estimated">~' + formatCost(estimatedCost) + '</span>';
+    }
+    return formatCost(cost);
+  }
+
   function formatTokens(n) {
     const num = Number(n || 0);
     if (num >= 1e6) return (num / 1e6).toFixed(1) + "M";
@@ -720,10 +727,7 @@ function generateScript(apiBase: string): string {
     }
     container.innerHTML = agents.map(function(a) {
       var statusClass = (a.status || "pending");
-      var isEstimate = a.isEstimate === true;
-      var costDisplay = isEstimate && a.estimatedCost > 0
-        ? '<span class="cost-estimated">~' + formatCost(a.estimatedCost) + '</span>'
-        : formatCost(a.cost);
+      var costDisplay = formatCostDisplay(a.cost, a.estimatedCost, a.isEstimate);
       return '<div class="agent-card">'
         + '<div class="agent-card-header">'
         + '<span class="agent-name"><span class="agent-status-indicator ' + esc(statusClass) + '"></span>' + esc(a.name) + '</span>'
@@ -767,13 +771,14 @@ function generateScript(apiBase: string): string {
       const contractPct = m.contractsTotal > 0
         ? Math.round((m.contractsAcknowledged / m.contractsTotal) * 100) : 100;
 
+      var moduleCostDisplay = formatCostDisplay(m.cost, m.estimatedCost, m.isEstimate);
       return '<div class="module-card">'
         + '<div class="module-card-header">'
         + '<span class="module-name">' + esc(m.title || m.id) + '</span>'
         + statusBadge(m.agentStatus)
         + '</div>'
         + '<div class="module-meta">'
-        + '<span class="meta-item"><span class="meta-label">Cost:</span> ' + formatCost(m.cost) + '</span>'
+        + '<span class="meta-item"><span class="meta-label">Cost:</span> ' + moduleCostDisplay + '</span>'
         + '<span class="meta-item"><span class="meta-label">Tokens:</span> ' + formatTokens(m.tokens) + '</span>'
         + (m.tddPhase ? '<span class="meta-item"><span class="meta-label">TDD:</span> ' + esc(m.tddPhase) + ' (' + esc(m.tddCycles) + ' cycles)</span>' : '')
         + '<span class="meta-item"><span class="meta-label">Files:</span> ' + esc(m.filesChanged) + '</span>'
