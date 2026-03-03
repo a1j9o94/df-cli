@@ -1,5 +1,5 @@
-export type { DfConfig } from "./config.js";
-export { DEFAULT_CONFIG } from "./config.js";
+export type { DfConfig, CostConfig, CostRoleOverride } from "./config.js";
+export { DEFAULT_CONFIG, DEFAULT_COST_CONFIG } from "./config.js";
 
 export type {
   AgentRole,
