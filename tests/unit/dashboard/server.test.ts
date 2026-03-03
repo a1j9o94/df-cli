@@ -608,6 +608,82 @@ describe("Dashboard Server", () => {
     });
   });
 
+  describe("estimatedCost on AgentSummary", () => {
+    test("running agent with cost=0 has estimatedCost > 0", async () => {
+      // agt_build2 is pending with cost_usd=0, created 2026-03-01T11:05:00Z
+      // Since it's an active agent (pending), estimatedCost should be > 0
+      const res = await fetch(`${server?.url}/api/runs/run_test1/agents`);
+      const data = await res.json();
+      const pendingAgent = data.find((a: Record<string, unknown>) => a.id === "agt_build2");
+
+      expect(pendingAgent).toBeDefined();
+      expect(pendingAgent.status).toBe("pending");
+      expect(pendingAgent.cost).toBe(0);
+      expect(typeof pendingAgent.estimatedCost).toBe("number");
+      expect(pendingAgent.estimatedCost).toBeGreaterThan(0);
+    });
+
+    test("running agent with real cost has estimatedCost = 0", async () => {
+      // agt_build1 is running with cost_usd=5.0 — already has real cost
+      const res = await fetch(`${server?.url}/api/runs/run_test1/agents`);
+      const data = await res.json();
+      const runningAgent = data.find((a: Record<string, unknown>) => a.id === "agt_build1");
+
+      expect(runningAgent).toBeDefined();
+      expect(runningAgent.status).toBe("running");
+      expect(runningAgent.cost).toBe(5.0);
+      expect(runningAgent.estimatedCost).toBe(0);
+    });
+
+    test("completed agent has estimatedCost = 0", async () => {
+      // agt_arch1 is completed
+      const res = await fetch(`${server?.url}/api/runs/run_test1/agents`);
+      const data = await res.json();
+      const completedAgent = data.find((a: Record<string, unknown>) => a.id === "agt_arch1");
+
+      expect(completedAgent).toBeDefined();
+      expect(completedAgent.status).toBe("completed");
+      expect(completedAgent.estimatedCost).toBe(0);
+    });
+
+    test("all agents have estimatedCost field", async () => {
+      const res = await fetch(`${server?.url}/api/runs/run_test1/agents`);
+      const data = await res.json();
+
+      for (const agent of data) {
+        expect(typeof agent.estimatedCost).toBe("number");
+      }
+    });
+  });
+
+  describe("estimatedCost on RunSummary", () => {
+    test("running run includes estimatedCost summing running agent estimates", async () => {
+      const res = await fetch(`${server?.url}/api/runs/run_test1`);
+      const data = await res.json();
+
+      expect(typeof data.estimatedCost).toBe("number");
+      // run_test1 has agt_build2 (pending, cost=0) which should contribute estimated cost
+      expect(data.estimatedCost).toBeGreaterThan(0);
+    });
+
+    test("completed run has estimatedCost = 0", async () => {
+      const res = await fetch(`${server?.url}/api/runs/run_test2`);
+      const data = await res.json();
+
+      expect(typeof data.estimatedCost).toBe("number");
+      expect(data.estimatedCost).toBe(0);
+    });
+
+    test("all runs in list include estimatedCost field", async () => {
+      const res = await fetch(`${server?.url}/api/runs`);
+      const data = await res.json();
+
+      for (const run of data) {
+        expect(typeof run.estimatedCost).toBe("number");
+      }
+    });
+  });
+
   describe("Error handling", () => {
     test("unknown API routes return 404", async () => {
       const res = await fetch(`${server?.url}/api/unknown`);
