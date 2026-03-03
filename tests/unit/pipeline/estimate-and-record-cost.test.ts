@@ -119,8 +119,8 @@ describe("estimateAndRecordCost", () => {
     expect(totalCost).toBeLessThan(0.25);
   });
 
-  test("ensures minimum cost of $0.01", () => {
-    // Agent just created moments ago
+  test("returns near-zero cost for freshly created agent", () => {
+    // Agent just created moments ago — cost should be proportional to elapsed time
     const agent = createAgent(db, {
       agent_id: "",
       run_id: runId,
@@ -130,6 +130,8 @@ describe("estimateAndRecordCost", () => {
     });
 
     const totalCost = estimateAndRecordCost(db, agent.id);
-    expect(totalCost).toBeGreaterThanOrEqual(0.01);
+    // Freshly created agent: elapsed time is milliseconds, cost should be near zero
+    expect(totalCost).toBeGreaterThanOrEqual(0);
+    expect(totalCost).toBeLessThan(0.01);
   });
 });
