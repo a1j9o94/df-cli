@@ -52,6 +52,7 @@ export function generateDashboardHtml(config?: DashboardConfig): string {
         </div>
         <div class="detail-panels" id="detail-panels" style="display:none">
           <div class="run-header" id="run-header"></div>
+          <div class="phase-timeline" id="phase-timeline"></div>
           <div class="tab-bar" id="tab-bar">
             <button class="tab active" data-tab="agents">Agents</button>
             <button class="tab" data-tab="modules">Modules</button>
@@ -542,6 +543,88 @@ function generateStyles(): string {
     animation: pulse 1.5s ease-in-out infinite;
   }
 
+  /* --- Phase Timeline --- */
+
+  .phase-timeline {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 10px;
+    padding: 8px 0;
+    overflow-x: auto;
+  }
+
+  .phase-step {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+
+  .phase-step .phase-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .phase-step.completed {
+    color: var(--accent-green);
+    background: rgba(63, 185, 80, 0.08);
+  }
+
+  .phase-step.completed .phase-dot {
+    background: var(--accent-green);
+  }
+
+  .phase-step.active {
+    color: var(--accent-blue);
+    background: rgba(88, 166, 255, 0.12);
+    border-color: rgba(88, 166, 255, 0.3);
+    animation: phase-glow 2s ease-in-out infinite;
+  }
+
+  .phase-step.active .phase-dot {
+    background: var(--accent-blue);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes phase-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(88, 166, 255, 0); }
+    50% { box-shadow: 0 0 6px 0 rgba(88, 166, 255, 0.2); }
+  }
+
+  .phase-step.pending {
+    color: var(--text-muted);
+  }
+
+  .phase-step.pending .phase-dot {
+    background: var(--text-muted);
+  }
+
+  .phase-step.skipped {
+    color: var(--text-muted);
+    opacity: 0.5;
+    text-decoration: line-through;
+  }
+
+  .phase-step.skipped .phase-dot {
+    background: var(--text-muted);
+    opacity: 0.5;
+  }
+
+  .phase-connector {
+    width: 12px;
+    height: 1px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
   /* --- Estimated Cost --- */
 
   .cost-estimated {
@@ -677,7 +760,8 @@ function generateScript(apiBase: string): string {
     await Promise.all([
       loadRunDetail(runId, true),
       loadAgents(runId, true),
-      loadModules(runId, true)
+      loadModules(runId, true),
+      loadPhases(runId, true)
     ]);
   }
 
@@ -819,6 +903,37 @@ function generateScript(apiBase: string): string {
     }).join("");
   }
 
+  // --- Phase Timeline ---
+
+  function renderPhaseTimeline(phases) {
+    var container = document.getElementById("phase-timeline");
+    if (!phases || phases.length === 0) {
+      container.innerHTML = "";
+      return;
+    }
+    container.innerHTML = phases.map(function(phase, idx) {
+      var connector = idx < phases.length - 1 ? '<span class="phase-connector"></span>' : '';
+      return '<span class="phase-step ' + esc(phase.status) + '">'
+        + '<span class="phase-dot"></span>'
+        + esc(phase.label)
+        + '</span>'
+        + connector;
+    }).join("");
+  }
+
+  async function loadPhases(runId, showSpinner) {
+    var container = document.getElementById("phase-timeline");
+    if (showSpinner) {
+      container.innerHTML = '<div class="loading-spinner">Loading phases\\u2026</div>';
+    }
+    try {
+      var phases = await fetchJson("/api/runs/" + runId + "/phases");
+      renderPhaseTimeline(phases);
+    } catch (err) {
+      container.innerHTML = '<div class="error-text">Error: ' + esc(err.message) + '</div>';
+    }
+  }
+
   // --- Tab switching ---
 
   document.getElementById("tab-bar").addEventListener("click", function(e) {
@@ -837,7 +952,8 @@ function generateScript(apiBase: string): string {
       await Promise.all([
         loadRunDetail(selectedRunId, false),
         loadAgents(selectedRunId, false),
-        loadModules(selectedRunId, false)
+        loadModules(selectedRunId, false),
+        loadPhases(selectedRunId, false)
       ]);
     }
   }
