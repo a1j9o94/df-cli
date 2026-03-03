@@ -36,13 +36,13 @@ function seedCostEstimationData(db: InstanceType<typeof Database>) {
 
   // Create a running run
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     "run_cost",
     "spec_cost",
     "running",
-    "thorough",
+    0,
     4,
     50.0,
     0.5, // only completed agent's cost counts
@@ -210,13 +210,13 @@ describe("Cost estimates update on successive polls", () => {
     // Create a run with a running agent created very recently
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+      `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       "run_poll",
       "spec_poll",
       "running",
-      "thorough",
+      0,
       4,
       50.0,
       0,
@@ -292,13 +292,13 @@ describe("Run summary includes aggregated estimated cost", () => {
 
     // Create a run with budget=50, cost=1.0
     db.prepare(
-      `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+      `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       "run_agg",
       "spec_agg",
       "running",
-      "thorough",
+      0,
       4,
       50.0,
       1.0,
@@ -439,13 +439,13 @@ describe("Budget progress reflects estimated costs", () => {
 
     // Run with budget=10.0, cost=4.0
     db.prepare(
-      `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+      `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       "run_budget",
       "spec_budget",
       "running",
-      "thorough",
+      0,
       4,
       10.0,
       4.0,
@@ -557,14 +557,14 @@ describe("Estimate transitions to real cost", () => {
     // Create run
     testDb
       .prepare(
-        `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+        `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         "run_trans",
         "spec_trans",
         "running",
-        "thorough",
+        0,
         4,
         50.0,
         0,
@@ -649,13 +649,13 @@ describe("Spawning agent cost estimation", () => {
     const now = new Date().toISOString();
 
     db.prepare(
-      `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+      `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       "run_spawn",
       "spec_spawn",
       "running",
-      "thorough",
+      0,
       4,
       50.0,
       0,
@@ -733,13 +733,13 @@ describe("Failed/killed agent cost estimation", () => {
     const now = new Date().toISOString();
 
     db.prepare(
-      `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+      `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       "run_dead",
       "spec_dead",
       "running",
-      "thorough",
+      0,
       4,
       50.0,
       0,
@@ -904,13 +904,13 @@ describe("Running agent with real cost already set", () => {
     const threeMinAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
 
     db.prepare(
-      `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+      `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       "run_real",
       "spec_real",
       "running",
-      "thorough",
+      0,
       4,
       50.0,
       2.0,

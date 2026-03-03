@@ -13,13 +13,13 @@ import { preBuildValidation, computeContentHash } from "../pipeline/build-guards
 export const buildCommand = new Command("build")
   .description("Run the full build pipeline for a spec")
   .argument("[spec-id]", "Specification ID to build (auto-selects if only one exists)")
-  .option("--mode <mode>", "Build mode: quick or thorough")
+  .option("--skip-change-eval", "Skip the change evaluation phase")
   .option("--parallel <n>", "Maximum parallel builders")
   .option("--budget-usd <amount>", "Budget cap in USD")
   .option("--skip-architect", "Skip architect decomposition (scenarios are still extracted from spec)")
   .option("--force", "Bypass content hash check (does not bypass status check)")
   .action(async (specIdArg: string | undefined, options: {
-    mode?: string;
+    skipChangeEval?: boolean;
     parallel?: string;
     budgetUsd?: string;
     skipArchitect?: boolean;
@@ -103,7 +103,7 @@ export const buildCommand = new Command("build")
     const engine = new PipelineEngine(db, runtime, config);
 
     const runId = await engine.execute(specId, {
-      mode: options.mode,
+      skipChangeEval: options.skipChangeEval,
       budget: options.budgetUsd ? parseFloat(options.budgetUsd) : undefined,
       skipArchitect: options.skipArchitect,
       force: options.force,

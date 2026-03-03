@@ -3,7 +3,7 @@ project:
   root: .
   branch: main
 build:
-  default_mode: thorough
+  skip_change_eval: false
   max_parallel: 4
   budget_usd: 50
   max_iterations: 3

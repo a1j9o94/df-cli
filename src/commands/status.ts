@@ -75,7 +75,7 @@ export const statusCommand = new Command("status")
       const queueStr = formatQueueStatus(queueInfo);
       const phaseDisplay = run.current_phase ?? "(none)";
       console.log(`  Phase:     ${phaseDisplay}${queueStr ? ` ${queueStr}` : ""}`);
-      console.log(`  Mode:      ${run.mode}`);
+      console.log(`  Skip change eval: ${run.skip_change_eval}`);
       console.log(`  Iteration: ${run.iteration}/${run.max_iterations}`);
       console.log(`  Cost:      $${run.cost_usd.toFixed(2)} / $${run.budget_usd.toFixed(2)}`);
       console.log(`  Tokens:    ${run.tokens_used.toLocaleString()}`);

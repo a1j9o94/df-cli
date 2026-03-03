@@ -224,7 +224,7 @@ function setupRun(db: SqliteDb, options?: { buildplan?: string }): { specId: str
   const spec = createSpec(db, `spec-${Date.now()}`, "Test spec", "/tmp/test-spec.md");
   const run = createRun(db, {
     spec_id: spec.id,
-    mode: "quick",
+    skip_change_eval: true,
     max_parallel: 4,
     budget_usd: 50,
     max_iterations: 3,

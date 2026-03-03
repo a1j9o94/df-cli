@@ -18,9 +18,9 @@ function insertRun(
 ) {
   const { budgetUsd = 50.0, costUsd = 0, status = "running" } = opts;
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, "spec_test", status, "thorough", 4, budgetUsd, costUsd, 0, "build", 1, 3, "{}", "2026-03-01T10:00:00Z", "2026-03-01T12:00:00Z");
+  ).run(id, "spec_test", status, 0, 4, budgetUsd, costUsd, 0, "build", 1, 3, "{}", "2026-03-01T10:00:00Z", "2026-03-01T12:00:00Z");
 }
 
 function insertAgent(

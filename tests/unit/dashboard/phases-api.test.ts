@@ -6,11 +6,11 @@ import { startServer, type ServerHandle } from "../../../src/dashboard/server.js
 function seedRun(
   db: InstanceType<typeof Database>,
   runId: string,
-  opts: { phase: string; mode: string; moduleCount: number }
+  opts: { phase: string; skipChangeEval: boolean; moduleCount: number }
 ) {
   db.prepare(
-    "INSERT INTO runs (id, spec_id, status, current_phase, mode, cost_usd, budget_usd, tokens_used, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(runId, "test-spec", "running", opts.phase, opts.mode, 0, 50, 0, new Date(Date.now() - 300000).toISOString(), new Date().toISOString());
+    "INSERT INTO runs (id, spec_id, status, current_phase, skip_change_eval, cost_usd, budget_usd, tokens_used, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(runId, "test-spec", "running", opts.phase, opts.skipChangeEval ? 1 : 0, 0, 50, 0, new Date(Date.now() - 300000).toISOString(), new Date().toISOString());
 
   // Agent required for buildplan FK
   const agentId = `agt_${runId}`;
@@ -41,7 +41,7 @@ describe("Phases API endpoint", () => {
     db.exec("PRAGMA foreign_keys = ON");
     db.exec(SCHEMA_SQL);
 
-    seedRun(db, "run_phase_test", { phase: "build", mode: "thorough", moduleCount: 3 });
+    seedRun(db, "run_phase_test", { phase: "build", skipChangeEval: false, moduleCount: 3 });
 
     server = await startServer({ port: 0, db });
   });
@@ -149,7 +149,7 @@ describe("Phases API - skipped phases", () => {
     db.exec("PRAGMA foreign_keys = ON");
     db.exec(SCHEMA_SQL);
 
-    seedRun(db, "run_skip_test", { phase: "build", mode: "quick", moduleCount: 1 });
+    seedRun(db, "run_skip_test", { phase: "build", skipChangeEval: true, moduleCount: 1 });
 
     server = await startServer({ port: 0, db });
   });

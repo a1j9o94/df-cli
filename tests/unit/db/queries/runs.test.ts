@@ -18,7 +18,7 @@ describe("runs queries", () => {
     expect(run.id).toMatch(/^run_/);
     expect(run.spec_id).toBe("spec_test1");
     expect(run.status).toBe("pending");
-    expect(run.mode).toBe("thorough");
+    expect(run.skip_change_eval).toBe(false);
     expect(run.max_parallel).toBe(4);
     expect(run.budget_usd).toBe(50.0);
     expect(run.cost_usd).toBe(0);
@@ -28,12 +28,12 @@ describe("runs queries", () => {
   test("createRun respects options", () => {
     const run = createRun(db, {
       spec_id: "spec_test2",
-      mode: "quick",
+      skip_change_eval: true,
       max_parallel: 2,
       budget_usd: 10,
       max_iterations: 5,
     });
-    expect(run.mode).toBe("quick");
+    expect(run.skip_change_eval).toBe(true);
     expect(run.max_parallel).toBe(2);
     expect(run.budget_usd).toBe(10);
     expect(run.max_iterations).toBe(5);

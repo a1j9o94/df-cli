@@ -34,7 +34,7 @@ export class PipelineEngine {
    * Execute the full pipeline for a spec.
    * Creates a run, walks through phases, spawns agents, polls for completion.
    */
-  async execute(specId: string, options?: { mode?: string; budget?: number; skipArchitect?: boolean; force?: boolean }): Promise<string> {
+  async execute(specId: string, options?: { skipChangeEval?: boolean; budget?: number; skipArchitect?: boolean; force?: boolean }): Promise<string> {
     const spec = getSpec(this.db, specId);
     if (!spec) throw new Error(`Spec not found: ${specId}`);
 
@@ -61,18 +61,18 @@ export class PipelineEngine {
       }
     }
 
-    const mode = (options?.mode ?? this.config.build.default_mode) as "quick" | "thorough";
+    const skipChangeEval = options?.skipChangeEval ?? false;
     const budget = options?.budget ?? this.config.build.budget_usd;
 
     const run = createRun(this.db, {
       spec_id: specId,
-      mode,
+      skip_change_eval: skipChangeEval,
       max_parallel: this.config.build.max_parallel,
       budget_usd: budget,
       max_iterations: this.config.build.max_iterations,
     });
 
-    createEvent(this.db, run.id, "run-created", { specId, mode, budget });
+    createEvent(this.db, run.id, "run-created", { specId, skipChangeEval, budget });
     updateRunStatus(this.db, run.id, "running");
     createEvent(this.db, run.id, "run-started");
 
@@ -81,7 +81,7 @@ export class PipelineEngine {
 
     const context: Record<string, unknown> = {
       skip_architect: options?.skipArchitect ?? false,
-      mode,
+      skip_change_eval: skipChangeEval,
       module_count: 0,
     };
 
@@ -214,7 +214,7 @@ export class PipelineEngine {
 
     const context: Record<string, unknown> = {
       skip_architect: false,
-      mode: run.mode,
+      skip_change_eval: run.skip_change_eval,
       module_count: 0,
       completedModules: previouslyCompletedModules,
     };

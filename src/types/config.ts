@@ -46,7 +46,8 @@ export interface DfConfig {
     branch: string;
   };
   build: {
-    default_mode: "quick" | "thorough";
+    /** Whether to skip the change evaluation phase by default. Default: false */
+    skip_change_eval: boolean;
     max_parallel: number;
     budget_usd: number;
     max_iterations: number;
@@ -79,7 +80,7 @@ export const DEFAULT_CONFIG: DfConfig = {
     branch: "main",
   },
   build: {
-    default_mode: "thorough",
+    skip_change_eval: false,
     max_parallel: 4,
     budget_usd: 50.0,
     max_iterations: 3,
