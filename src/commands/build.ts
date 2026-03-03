@@ -16,7 +16,7 @@ export const buildCommand = new Command("build")
   .option("--mode <mode>", "Build mode: quick or thorough")
   .option("--parallel <n>", "Maximum parallel builders")
   .option("--budget-usd <amount>", "Budget cap in USD")
-  .option("--skip-architect", "Skip architect phase for single-module specs")
+  .option("--skip-architect", "Skip architect decomposition (scenarios are still extracted from spec)")
   .option("--force", "Bypass content hash check (does not bypass status check)")
   .action(async (specIdArg: string | undefined, options: {
     mode?: string;

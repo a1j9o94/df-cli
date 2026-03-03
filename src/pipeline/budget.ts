@@ -3,9 +3,6 @@ import { getRun } from "../db/queries/runs.js";
 import { getAgent, listAgents, updateAgentCost } from "../db/queries/agents.js";
 import { updateRunCost } from "../db/queries/runs.js";
 
-/** Default cost per minute for agent time estimation. */
-const DEFAULT_COST_PER_MINUTE = 0.05;
-
 export interface BudgetStatus {
   budgetUsd: number;
   spentUsd: number;
@@ -40,18 +37,25 @@ export function recordCost(
   updateRunCost(db, runId, costUsd, tokensUsed);
 }
 
+/** Default cost per minute for time-based estimation (~$0.05/min for Sonnet). */
+const DEFAULT_COST_PER_MINUTE = 0.05;
+
+/** Default token rate estimate (~4K tokens/min). */
+const DEFAULT_TOKENS_PER_MINUTE = 4000;
+
 /**
- * Estimate incremental cost for an agent based on elapsed time since last
- * cost-recording touchpoint and record it. Uses the LATER of
- * (last_heartbeat, updated_at, created_at) as the base time.
+ * Estimate and record incremental cost for an agent based on elapsed time.
  *
- * This is the single shared helper that every agent command calls as a side
- * effect — making cost tracking automatic and unavoidable.
+ * Uses time since the LATER of (last_heartbeat, last cost update via updated_at, created_at)
+ * to compute an incremental cost delta, then records it via recordCost().
  *
- * Idempotent for rapid successive calls: uses time-since-last-update,
- * not time-since-creation, so calling twice in quick succession adds ~$0.
+ * This function is idempotent for rapid successive calls: each call updates
+ * the agent's updated_at, so the next call measures from that point forward.
  *
- * @returns The new total cost for the agent.
+ * @param db - Database connection
+ * @param agentId - Agent ID to estimate cost for
+ * @param costPerMinute - Cost per minute (default: $0.05)
+ * @returns The new total cost for the agent
  */
 export function estimateAndRecordCost(
   db: SqliteDb,
@@ -61,32 +65,38 @@ export function estimateAndRecordCost(
   const agent = getAgent(db, agentId);
   if (!agent) throw new Error(`Agent not found: ${agentId}`);
 
-  // Use the LATER of (last_heartbeat, updated_at, created_at) as the base time
-  const candidates: number[] = [
-    new Date(agent.created_at).getTime(),
-  ];
-  if (agent.updated_at) {
-    candidates.push(new Date(agent.updated_at).getTime());
-  }
+  // Determine the latest known touchpoint for this agent
+  const timestamps = [agent.created_at, agent.updated_at];
   if (agent.last_heartbeat) {
-    candidates.push(new Date(agent.last_heartbeat).getTime());
+    timestamps.push(agent.last_heartbeat);
   }
 
-  const baseTime = Math.max(...candidates);
+  const latestTouchpoint = timestamps
+    .map((ts) => new Date(ts).getTime())
+    .reduce((max, t) => Math.max(max, t), 0);
+
   const nowMs = Date.now();
-  const elapsedMs = nowMs - baseTime;
+  const elapsedMs = nowMs - latestTouchpoint;
   const elapsedMin = elapsedMs / 60_000;
 
-  const estimatedCost = elapsedMin * costPerMinute;
-  const estimatedTokens = Math.round(elapsedMin * 4000); // ~4K tokens/min heuristic
-
-  if (estimatedCost > 0) {
-    recordCost(db, agent.run_id, agentId, estimatedCost, Math.max(0, estimatedTokens));
+  // Only record if meaningful elapsed time (>1 second)
+  if (elapsedMin < 1 / 60) {
+    // Re-read to return current total
+    return getAgent(db, agentId)!.cost_usd;
   }
 
-  // Re-read the agent to get the updated total
-  const updatedAgent = getAgent(db, agentId);
-  return updatedAgent?.cost_usd ?? estimatedCost;
+  const costDelta = elapsedMin * costPerMinute;
+  const tokensDelta = Math.round(elapsedMin * DEFAULT_TOKENS_PER_MINUTE);
+
+  recordCost(db, agent.run_id, agentId, costDelta, tokensDelta);
+
+  // Update updated_at so the next call measures from now
+  db.prepare("UPDATE agents SET updated_at = ? WHERE id = ?").run(
+    new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    agentId,
+  );
+
+  return getAgent(db, agentId)!.cost_usd;
 }
 
 /**

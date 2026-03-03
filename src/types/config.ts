@@ -1,22 +1,28 @@
-/** Per-role cost override configuration */
+/**
+ * Role-specific cost overrides.
+ * Each field is optional — unset fields fall back to the top-level CostConfig values.
+ */
 export interface CostRoleOverride {
   cost_per_minute?: number;
   tokens_per_minute?: number;
 }
 
-/** Cost estimation configuration */
+/**
+ * Cost estimation configuration.
+ *
+ * Contract: CostConfig
+ * - model: display name of the default model
+ * - input_cost_per_mtok / output_cost_per_mtok / cache_read_cost_per_mtok: token-based pricing
+ * - cost_per_minute / tokens_per_minute: elapsed-time fallback
+ * - profile: optional preset profile shorthand (overridden by explicit fields)
+ * - roles: optional per-role overrides
+ */
 export interface CostConfig {
-  /** Display name for the model (e.g., "sonnet", "opus", "haiku") */
   model: string;
-  /** Cost per million input tokens */
   input_cost_per_mtok: number;
-  /** Cost per million output tokens */
   output_cost_per_mtok: number;
-  /** Cost per million cached input tokens */
   cache_read_cost_per_mtok: number;
-  /** Elapsed-time estimation fallback: $/min when no token data */
   cost_per_minute: number;
-  /** Estimated tokens/min for elapsed-time fallback */
   tokens_per_minute: number;
   /** Optional preset profile shorthand (overridden by explicit fields) */
   profile?: string;
@@ -47,6 +53,7 @@ export interface DfConfig {
     /** Cost per minute for time-based agent cost estimation. Default: 0.05 */
     cost_per_minute: number;
   };
+  cost: CostConfig;
   runtime: {
     agent_binary: string;
     heartbeat_interval_ms: number;
@@ -61,7 +68,6 @@ export interface DfConfig {
     max_worktrees: number;
     max_api_slots: number;
   };
-  cost: CostConfig;
 }
 
 export const DEFAULT_CONFIG: DfConfig = {
@@ -77,6 +83,7 @@ export const DEFAULT_CONFIG: DfConfig = {
     max_iterations: 3,
     cost_per_minute: 0.05,
   },
+  cost: { ...DEFAULT_COST_CONFIG },
   runtime: {
     agent_binary: "claude",
     heartbeat_interval_ms: 30_000,
@@ -91,5 +98,4 @@ export const DEFAULT_CONFIG: DfConfig = {
     max_worktrees: 6,
     max_api_slots: 4,
   },
-  cost: { ...DEFAULT_COST_CONFIG },
 };
