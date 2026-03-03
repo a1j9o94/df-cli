@@ -41,6 +41,11 @@ IMPORTANT: Committing after each successful TDD cycle preserves your progress. I
 - If a contract needs modification, send mail to the architect explaining what and why
 - Do NOT modify contracts yourself — only the architect can update them
 
+## Research
+Check for architect research findings relevant to your module before starting work:
+- List research: dark research list --run-id ${context.runId} --module ${context.moduleId}
+- View details: dark research show <research-id>
+
 ## Communication
 - Check messages: dark mail check --agent ${context.agentId}
 - Send messages: dark mail send --to <target> --body "..." --from ${context.agentId} --run-id ${context.runId}
