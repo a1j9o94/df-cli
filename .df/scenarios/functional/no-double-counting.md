@@ -1,33 +1,38 @@
 ---
 name: no-double-counting
 type: functional
-spec_id: run_01KJNF621NWJEZ5JT45BDR4JFB
-created_by: agt_01KJNF621SCC96MJ883W7SCDBK
+spec_id: run_01KJSRR001N48MFYRE9XHH1TA0
+created_by: agt_01KJSRR002NH10ZW5RZY4QVC13
 ---
 
-# No Double-Counting on Rapid Successive Calls
+SCENARIO: Rapid successive calls (heartbeat then immediately complete) do not double-count the same time period.
 
-## Preconditions
-- A Dark Factory project is initialized with a run
+PRECONDITIONS:
+- A Dark Factory project is initialized
 - An agent exists in 'running' status
-- Agent has been running for at least 60 seconds
 
-## Steps
-1. Create/spawn an agent, wait 60 seconds
-2. Call `dark agent heartbeat <agent-id>`
-3. Record agent.cost_usd as cost_after_heartbeat
-4. Immediately (within 1 second) call `dark agent complete <agent-id>`
-5. Record agent.cost_usd as cost_after_complete
+STEPS:
+1. Create an agent. Wait 60 seconds (to accumulate meaningful elapsed time).
+2. Agent calls `dark agent heartbeat <id>` (no --cost flag). estimateAndRecordCost runs.
+3. Query agent.cost_usd immediately. Record as cost_after_hb.
+4. Immediately (within 1 second) agent calls `dark agent complete <id>` (no --cost flag). estimateAndRecordCost runs again.
+5. Query agent.cost_usd. Record as cost_after_complete.
 
-## Expected Output
-- cost_after_heartbeat > 0 (covers ~60s of elapsed time, approximately $0.05)
-- cost_after_complete >= cost_after_heartbeat
-- (cost_after_complete - cost_after_heartbeat) is very small (< $0.002, representing ~1 second)
-- cost_after_complete is NOT approximately 2x cost_after_heartbeat (which would indicate double-counting)
+EXPECTED:
+- cost_after_hb ≈ 60s * $0.05/min ≈ $0.05
+- cost_after_complete ≈ cost_after_hb + tiny delta (near-zero, covering only the ~1s between heartbeat and complete)
+- cost_after_complete should NOT be ≈ 2 * cost_after_hb (that would indicate double-counting)
 
-## Pass/Fail Criteria
-- PASS: The complete call adds only a tiny increment (~1 second worth) on top of the heartbeat cost, NOT the full elapsed time from creation
-- FAIL: The complete call re-estimates from creation time, resulting in approximately double the expected cost
+VERIFICATION:
+- estimateAndRecordCost uses time since last update (updated_at), not time since creation
+- After heartbeat records cost, updated_at is bumped to now
+- The immediate complete call sees near-zero elapsed time since updated_at
+- Therefore the second estimation adds near-zero cost
 
-## Key Verification
-The estimateAndRecordCost function must track the timestamp of the last cost update. When heartbeat runs at T=60s, it records cost and updates the 'last cost recorded' timestamp to T=60s. When complete runs at T=61s, it only estimates for the 1-second gap (T=61 - T=60). The function uses MAX(last_heartbeat, last_cost_update, created_at) as the reference point.
+PASS CRITERIA:
+- (cost_after_complete - cost_after_hb) < 0.01 (less than 1 cent for the ~1s gap)
+- Total cost is approximately what you'd expect for 60 seconds, not 120 seconds
+
+FAIL CRITERIA:
+- cost_after_complete ≈ 2 * cost_after_hb (double-counting: both calls measured from creation)
+- estimateAndRecordCost uses created_at instead of updated_at/last_heartbeat
