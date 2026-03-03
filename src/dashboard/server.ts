@@ -575,31 +575,6 @@ function handleGetModules(db: InstanceType<typeof Database>, runId: string): Res
 
 // --- Contract: SpecContentEndpoint ---
 
-function handleGetSpec(db: InstanceType<typeof Database>, runId: string): Response {
-  const result = validateRun(db, runId);
-  if ("error" in result) return result.error;
-
-  const run = result.run;
-  const specId = run.spec_id as string;
-
-  // Look up spec metadata from specs table
-  const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as Record<string, unknown> | null;
-
-  if (!spec) {
-    return jsonResponse({
-      specId,
-      title: specId,
-      content: null,
-    });
-  }
-
-  return jsonResponse({
-    specId,
-    title: spec.title as string,
-    status: spec.status as string,
-    scenarioCount: spec.scenario_count as number,
-  });
-}
 
 // --- Phase labels ---
 

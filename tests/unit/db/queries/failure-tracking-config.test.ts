@@ -17,7 +17,7 @@ describe("failure tracking config", () => {
 
   test("config structure has all expected build fields", () => {
     expect(DEFAULT_CONFIG.build).toEqual({
-      default_mode: "thorough",
+      skip_change_eval: false,
       max_parallel: 4,
       budget_usd: 50.0,
       max_iterations: 3,
