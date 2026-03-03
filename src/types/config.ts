@@ -9,6 +9,8 @@ export interface DfConfig {
     max_parallel: number;
     budget_usd: number;
     max_iterations: number;
+    /** Max failed attempts per module before triggering re-decomposition. Default: 2 */
+    max_module_retries: number;
   };
   runtime: {
     agent_binary: string;
@@ -37,6 +39,7 @@ export const DEFAULT_CONFIG: DfConfig = {
     max_parallel: 4,
     budget_usd: 50.0,
     max_iterations: 3,
+    max_module_retries: 2,
   },
   runtime: {
     agent_binary: "claude",
