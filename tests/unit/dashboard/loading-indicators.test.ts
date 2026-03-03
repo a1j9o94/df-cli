@@ -180,6 +180,38 @@ describe("Loading indicators are CSS-only (no external deps)", () => {
   });
 });
 
+describe("Loading Spinner JS - Run Header", () => {
+  const html = generateDashboardHtml();
+
+  it("shows loading spinner before fetching run detail", () => {
+    // loadRunDetail should set a loading-spinner innerHTML on run-header before fetching
+    const loadRunDetailSection = html.substring(html.indexOf("function loadRunDetail"));
+    expect(loadRunDetailSection).toContain("loading-spinner");
+    expect(loadRunDetailSection).toMatch(/Loading run detail|Loading run\b(?!s)/);
+  });
+
+  it("sets loading state before fetchJson call for run detail", () => {
+    // Within loadRunDetail, the loading spinner must be set BEFORE the fetchJson call
+    const fnStart = html.indexOf("function loadRunDetail");
+    const section = html.substring(fnStart);
+    const spinnerIdx = section.indexOf("loading-spinner");
+    const fetchIdx = section.indexOf("fetchJson");
+    expect(spinnerIdx).toBeGreaterThan(-1);
+    expect(fetchIdx).toBeGreaterThan(-1);
+    expect(spinnerIdx).toBeLessThan(fetchIdx);
+  });
+
+  it("run header loading spinner is cleared when data arrives", () => {
+    expect(html).toContain("renderRunHeader(run)");
+  });
+
+  it("run header loading spinner is cleared on error", () => {
+    // The run header error handler sets innerHTML
+    const runHeaderSection = html.substring(html.indexOf("loadRunDetail"));
+    expect(runHeaderSection).toContain("error-text");
+  });
+});
+
 describe("Loading clears on success and error", () => {
   const html = generateDashboardHtml();
 

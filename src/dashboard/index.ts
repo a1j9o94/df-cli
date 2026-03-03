@@ -663,11 +663,13 @@ function generateScript(apiBase: string): string {
   }
 
   async function loadRunDetail(runId) {
+    var header = document.getElementById("run-header");
+    header.innerHTML = '<div class="loading-spinner">Loading run detail\u2026</div>';
     try {
       const run = await fetchJson("/api/runs/" + runId);
       renderRunHeader(run);
     } catch (err) {
-      document.getElementById("run-header").innerHTML =
+      header.innerHTML =
         '<div class="error-text">Error: ' + esc(err.message) + '</div>';
     }
   }
