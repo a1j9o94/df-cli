@@ -21,6 +21,7 @@ describe("failure tracking config", () => {
       max_parallel: 4,
       budget_usd: 50.0,
       max_iterations: 3,
+      cost_per_minute: 0.05,
       max_module_retries: 2,
     });
   });
