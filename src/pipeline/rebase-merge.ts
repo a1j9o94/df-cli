@@ -166,6 +166,7 @@ export function rebaseAndMerge(
   const mergedBranches: string[] = [];
   const failedBranches: string[] = [];
   const errors: string[] = [];
+  const branchResults: MergeBranchResult[] = [];
 
   // Pre-merge: Sanitize the main repo (stash uncommitted changes)
   const mainSanitize = sanitizeMainRepo(mainRepoPath);
@@ -191,10 +192,15 @@ export function rebaseAndMerge(
         const dirtyInfo = sanitizeResult.remainingDirtyFiles?.length
           ? `: dirty files: ${sanitizeResult.remainingDirtyFiles.join(", ")}`
           : "";
-        errors.push(
-          sanitizeResult.error ??
-            `Worktree sanitization failed for ${branch}${dirtyInfo}`,
-        );
+        const errorMsg = sanitizeResult.error ??
+            `Worktree sanitization failed for ${branch}${dirtyInfo}`;
+        errors.push(errorMsg);
+        branchResults.push({
+          success: false,
+          status: "error",
+          branch,
+          error: errorMsg,
+        });
         continue;
       }
 
@@ -202,12 +208,12 @@ export function rebaseAndMerge(
       const rebaseResult = rebaseWorktreeBranch(wtPath, targetBranch);
 
       if (!rebaseResult.success) {
-        failedBranches.push(branch);
-        errors.push(rebaseResult.error ?? `Rebase of ${branch} failed`);
-        continue;
+        // Rebase failed — likely conflicts with already-merged branches.
+        // Fall through to try a direct merge, which will produce conflict markers
+        // that a merger agent can resolve.
       }
 
-      // Step 2: Merge the rebased branch into target using --no-commit for sanitization
+      // Step 2: Merge the (possibly un-rebased) branch into target using --no-commit for sanitization
       try {
         // Use --no-commit so we can inspect and sanitize staged files before committing
         execSync(`git merge ${branch} --no-commit --no-ff`, {
@@ -276,9 +282,57 @@ export function rebaseAndMerge(
           env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
         });
         mergedBranches.push(branch);
+        branchResults.push({
+          success: true,
+          status: "clean",
+          branch,
+        });
       } catch (err) {
-        failedBranches.push(branch);
-        errors.push(err instanceof Error ? err.message : `Merge of ${branch} into ${targetBranch} failed`);
+        // Check if this is a conflict (merge in progress with unmerged files)
+        let handled = false;
+        try {
+          const unmergedOutput = execSync("git diff --name-only --diff-filter=U", {
+            cwd: mainRepoPath,
+            encoding: "utf-8",
+          }).trim();
+
+          if (unmergedOutput.length > 0) {
+            const conflictedPaths = unmergedOutput.split("\n").filter(Boolean);
+            const conflictedFiles = conflictedPaths.map((filePath) => {
+              let content = "";
+              try {
+                content = readFileSync(join(mainRepoPath, filePath), "utf-8");
+              } catch {
+                content = `(Could not read file: ${filePath})`;
+              }
+              return { path: filePath, content };
+            });
+
+            failedBranches.push(branch);
+            errors.push(`Merge of ${branch} into ${targetBranch} conflicted`);
+            branchResults.push({
+              success: false,
+              status: "conflicted",
+              branch,
+              conflictedFiles,
+            });
+            handled = true;
+          }
+        } catch {
+          // If we can't check for unmerged files, fall through to generic error
+        }
+
+        if (!handled) {
+          const errorMsg = err instanceof Error ? err.message : `Merge of ${branch} into ${targetBranch} failed`;
+          failedBranches.push(branch);
+          errors.push(errorMsg);
+          branchResults.push({
+            success: false,
+            status: "error",
+            branch,
+            error: errorMsg,
+          });
+        }
       }
     }
   } finally {
@@ -293,6 +347,7 @@ export function rebaseAndMerge(
     mergedBranches,
     failedBranches,
     errors,
+    branchResults,
   };
 }
 

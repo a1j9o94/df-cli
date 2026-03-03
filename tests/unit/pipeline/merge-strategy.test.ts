@@ -266,11 +266,11 @@ describe("sequential merge with conflict detection", () => {
     execSync('git commit -m "Second module"', { cwd: wt2, stdio: "pipe" });
 
     // First merges clean
-    const r1 = mergeSingleBranch(repoDir, repoDir, "main");
+    const r1 = mergeSingleBranch(wt1, repoDir, "main");
     expect(r1.success).toBe(true);
 
     // Second conflicts
-    const r2 = mergeSingleBranch(repoDir, repoDir, "main");
+    const r2 = mergeSingleBranch(wt2, repoDir, "main");
     expect(r2.success).toBe(false);
     expect(r2.status).toBe("conflicted");
     expect(r2.conflictedFiles!.some((f) => f.path === "file.txt")).toBe(true);
@@ -297,12 +297,12 @@ describe("sequential merge with conflict detection", () => {
     execSync('git commit -m "Module C"', { cwd: wt3, stdio: "pipe" });
 
     // A merges clean
-    const r1 = mergeSingleBranch(repoDir, repoDir, "main");
+    const r1 = mergeSingleBranch(wt1, repoDir, "main");
     expect(r1.success).toBe(true);
     expect(r1.status).toBe("clean");
 
     // B conflicts with A
-    const r2 = mergeSingleBranch(repoDir, repoDir, "main");
+    const r2 = mergeSingleBranch(wt2, repoDir, "main");
     expect(r2.success).toBe(false);
     expect(r2.status).toBe("conflicted");
 
@@ -315,7 +315,7 @@ describe("sequential merge with conflict detection", () => {
     });
 
     // C should merge clean against the resolved A+B state
-    const r3 = mergeSingleBranch(repoDir, repoDir, "main");
+    const r3 = mergeSingleBranch(wt3, repoDir, "main");
     expect(r3.success).toBe(true);
     expect(r3.status).toBe("clean");
 
@@ -411,7 +411,7 @@ describe("scanConflictMarkers", () => {
     execSync("git add -A", { cwd: repoDir, stdio: "pipe" });
     execSync('git commit -m "Scan main"', { cwd: repoDir, stdio: "pipe" });
 
-    const mergeResult = mergeSingleBranch(repoDir, repoDir, "main");
+    const mergeResult = mergeSingleBranch(wtDir, repoDir, "main");
     expect(mergeResult.status).toBe("conflicted");
 
     // Conflict markers should be present
@@ -429,7 +429,7 @@ describe("scanConflictMarkers", () => {
     execSync("git add -A", { cwd: repoDir, stdio: "pipe" });
     execSync('git commit -m "Resolve main"', { cwd: repoDir, stdio: "pipe" });
 
-    mergeSingleBranch(repoDir, repoDir, "main");
+    mergeSingleBranch(wtDir, repoDir, "main");
 
     // Resolve conflict
     writeFileSync(join(repoDir, "file.txt"), "resolved content\n");
