@@ -18,9 +18,9 @@ function seedRuns(db: InstanceType<typeof Database>, count: number): string[] {
     const id = `run_test${i + 1}`;
     const ts = `2026-03-01T12:0${i}:00Z`;
     db.prepare(
-      `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+      `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, `spec_${i + 1}`, "running", "thorough", 4, 50.0, i * 1.5, 10000, "merge", 0, 3, "{}", ts, ts);
+    ).run(id, `spec_${i + 1}`, "running", 0, 4, 50.0, i * 1.5, 10000, "merge", 0, 3, "{}", ts, ts);
     ids.push(id);
   }
   return ids;
@@ -63,9 +63,9 @@ describe("queue-visibility", () => {
     test("returns null for run not in merge phase", () => {
       // Create a run in build phase
       db.prepare(
-        `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+        `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run("run_build", "spec_1", "running", "thorough", 4, 50.0, 0, 0, "build", 0, 3, "{}", "2026-03-01T12:00:00Z", "2026-03-01T12:00:00Z");
+      ).run("run_build", "spec_1", "running", 0, 4, 50.0, 0, 0, "build", 0, 3, "{}", "2026-03-01T12:00:00Z", "2026-03-01T12:00:00Z");
 
       expect(getRunQueueInfo(db, "run_build")).toBeNull();
     });

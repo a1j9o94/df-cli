@@ -17,13 +17,13 @@ function seedMergeQueueData(db: InstanceType<typeof Database>) {
   // Create 3 runs all in merge phase
   for (let i = 1; i <= 3; i++) {
     db.prepare(
-      `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+      `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       `run_merge${i}`,
       `spec_merge${i}`,
       "running",
-      "thorough",
+      0,
       4,
       50.0,
       i * 1.5,
@@ -39,13 +39,13 @@ function seedMergeQueueData(db: InstanceType<typeof Database>) {
 
   // Create a run NOT in merge phase
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     "run_build1",
     "spec_build1",
     "running",
-    "thorough",
+    0,
     4,
     50.0,
     2.0,

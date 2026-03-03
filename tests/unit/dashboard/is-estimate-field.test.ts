@@ -14,9 +14,9 @@ function createTestDb(): InstanceType<typeof Database> {
 function seedData(db: InstanceType<typeof Database>) {
   // Create a running run
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run("run_est", "spec_est", "running", "thorough", 4, 50.0, 0, 0, "build", 1, 3, "{}", "2026-03-01T11:00:00Z", "2026-03-01T12:00:00Z");
+  ).run("run_est", "spec_est", "running", 0, 4, 50.0, 0, 0, "build", 1, 3, "{}", "2026-03-01T11:00:00Z", "2026-03-01T12:00:00Z");
 
   // Running agent with zero cost (should be an estimate)
   db.prepare(

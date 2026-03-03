@@ -17,13 +17,13 @@ function seedTestData(db: InstanceType<typeof Database>) {
 
   // Create a run
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     "run_test1",
     "spec_test1",
     "running",
-    "thorough",
+    0,
     4,
     50.0,
     12.5,
@@ -38,13 +38,13 @@ function seedTestData(db: InstanceType<typeof Database>) {
 
   // Create a completed run
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, error, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, error, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     "run_test2",
     "spec_test2",
     "completed",
-    "quick",
+    1,
     2,
     25.0,
     8.0,

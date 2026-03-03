@@ -31,13 +31,13 @@ function createTestDb(): InstanceType<typeof Database> {
 function seedRetryScenario(db: InstanceType<typeof Database>) {
   // Create a run
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     "run_retry",
     "spec_retry",
     "running",
-    "thorough",
+    0,
     4,
     50.0,
     5.0,
@@ -265,13 +265,13 @@ describe("CompletedCountDistinct contract: completedCount uses COUNT(DISTINCT mo
 function seedCompletedRetryScenario(db: InstanceType<typeof Database>) {
   // Create a completed run
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     "run_completed",
     "spec_completed",
     "completed",
-    "thorough",
+    0,
     4,
     50.0,
     10.0,
