@@ -44,7 +44,7 @@ export function getNextPhase(current: PhaseName): PhaseName | null {
 export function shouldSkipPhase(phase: PhaseName, context: Record<string, unknown>): boolean {
   const skipArchitect = context.skip_architect === true;
   const moduleCount = (context.module_count as number) ?? 0;
-  const mode = (context.mode as string) ?? "thorough";
+  const skipChangeEval = context.skip_change_eval === true;
 
   switch (phase) {
     case "architect":
@@ -54,7 +54,7 @@ export function shouldSkipPhase(phase: PhaseName, context: Record<string, unknow
     case "integrate":
       return moduleCount <= 1;
     case "evaluate-change":
-      return mode === "quick";
+      return skipChangeEval;
     default:
       return false;
   }

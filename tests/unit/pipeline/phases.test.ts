@@ -28,9 +28,9 @@ describe("shouldSkipPhase", () => {
     expect(shouldSkipPhase("integrate", { module_count: 3 })).toBe(false);
   });
 
-  test("skips evaluate-change in quick mode", () => {
-    expect(shouldSkipPhase("evaluate-change", { mode: "quick" })).toBe(true);
-    expect(shouldSkipPhase("evaluate-change", { mode: "thorough" })).toBe(false);
+  test("skips evaluate-change when skip_change_eval is true", () => {
+    expect(shouldSkipPhase("evaluate-change", { skip_change_eval: true })).toBe(true);
+    expect(shouldSkipPhase("evaluate-change", { skip_change_eval: false })).toBe(false);
   });
 
   test("never skips build, scout, merge", () => {
