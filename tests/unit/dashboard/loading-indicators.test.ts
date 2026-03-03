@@ -212,6 +212,58 @@ describe("Loading Spinner JS - Run Header", () => {
   });
 });
 
+describe("Auto-refresh suppresses loading spinners", () => {
+  const html = generateDashboardHtml();
+
+  it("refresh function does not show loading spinners on auto-refresh", () => {
+    // The refresh() function should call load functions without showing spinners
+    // This can be achieved by passing a skipSpinner parameter, using separate functions,
+    // or checking if container already has content
+    const refreshSection = html.substring(html.indexOf("async function refresh"));
+    // The refresh path should NOT trigger loading-spinner display
+    // It should either pass a flag or use a different pattern
+    expect(refreshSection).toMatch(/skipSpinner|isRefresh|silent|false/);
+  });
+
+  it("loadAgents accepts a parameter to skip spinner on refresh", () => {
+    // loadAgents should accept a parameter to control spinner display
+    const fnDef = html.match(/function loadAgents\([^)]*\)/);
+    expect(fnDef).toBeTruthy();
+    // Should accept more than just runId
+    expect(fnDef![0]).toMatch(/function loadAgents\(\s*runId\s*,/);
+  });
+
+  it("loadModules accepts a parameter to skip spinner on refresh", () => {
+    const fnDef = html.match(/function loadModules\([^)]*\)/);
+    expect(fnDef).toBeTruthy();
+    expect(fnDef![0]).toMatch(/function loadModules\(\s*runId\s*,/);
+  });
+
+  it("loadRunDetail accepts a parameter to skip spinner on refresh", () => {
+    const fnDef = html.match(/function loadRunDetail\([^)]*\)/);
+    expect(fnDef).toBeTruthy();
+    expect(fnDef![0]).toMatch(/function loadRunDetail\(\s*runId\s*,/);
+  });
+
+  it("refresh passes skip-spinner flag to load functions", () => {
+    const refreshSection = html.substring(html.indexOf("async function refresh"));
+    const refreshEnd = refreshSection.indexOf("}\n");
+    const refreshBody = refreshSection.substring(0, refreshEnd);
+    // The refresh function should pass false/true to indicate skip spinner
+    expect(refreshBody).toMatch(/loadRunDetail\(selectedRunId\s*,\s*false\)/);
+    expect(refreshBody).toMatch(/loadAgents\(selectedRunId\s*,\s*false\)/);
+    expect(refreshBody).toMatch(/loadModules\(selectedRunId\s*,\s*false\)/);
+  });
+
+  it("selectRun passes show-spinner flag to load functions", () => {
+    const selectRunSection = html.substring(html.indexOf("async function selectRun"));
+    // selectRun should pass true for showing spinners (initial load)
+    expect(selectRunSection).toMatch(/loadRunDetail\(runId\s*,\s*true\)/);
+    expect(selectRunSection).toMatch(/loadAgents\(runId\s*,\s*true\)/);
+    expect(selectRunSection).toMatch(/loadModules\(runId\s*,\s*true\)/);
+  });
+});
+
 describe("Loading clears on success and error", () => {
   const html = generateDashboardHtml();
 

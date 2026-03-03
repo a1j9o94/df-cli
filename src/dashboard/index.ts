@@ -656,15 +656,17 @@ function generateScript(apiBase: string): string {
     });
 
     await Promise.all([
-      loadRunDetail(runId),
-      loadAgents(runId),
-      loadModules(runId)
+      loadRunDetail(runId, true),
+      loadAgents(runId, true),
+      loadModules(runId, true)
     ]);
   }
 
-  async function loadRunDetail(runId) {
+  async function loadRunDetail(runId, showSpinner) {
     var header = document.getElementById("run-header");
-    header.innerHTML = '<div class="loading-spinner">Loading run detail\u2026</div>';
+    if (showSpinner) {
+      header.innerHTML = '<div class="loading-spinner">Loading run detail\u2026</div>';
+    }
     try {
       const run = await fetchJson("/api/runs/" + runId);
       renderRunHeader(run);
@@ -702,9 +704,11 @@ function generateScript(apiBase: string): string {
 
   // --- Agents ---
 
-  async function loadAgents(runId) {
+  async function loadAgents(runId, showSpinner) {
     var container = document.getElementById("agents-container");
-    container.innerHTML = '<div class="loading-spinner">Loading agents\u2026</div>';
+    if (showSpinner) {
+      container.innerHTML = '<div class="loading-spinner">Loading agents\u2026</div>';
+    }
     try {
       const agents = await fetchJson("/api/runs/" + runId + "/agents");
       renderAgents(agents);
@@ -745,9 +749,11 @@ function generateScript(apiBase: string): string {
 
   // --- Modules ---
 
-  async function loadModules(runId) {
+  async function loadModules(runId, showSpinner) {
     var container = document.getElementById("modules-container");
-    container.innerHTML = '<div class="loading-spinner">Loading modules\u2026</div>';
+    if (showSpinner) {
+      container.innerHTML = '<div class="loading-spinner">Loading modules\u2026</div>';
+    }
     try {
       const modules = await fetchJson("/api/runs/" + runId + "/modules");
       renderModules(modules);
@@ -808,9 +814,9 @@ function generateScript(apiBase: string): string {
     await loadRuns();
     if (selectedRunId) {
       await Promise.all([
-        loadRunDetail(selectedRunId),
-        loadAgents(selectedRunId),
-        loadModules(selectedRunId)
+        loadRunDetail(selectedRunId, false),
+        loadAgents(selectedRunId, false),
+        loadModules(selectedRunId, false)
       ]);
     }
   }
