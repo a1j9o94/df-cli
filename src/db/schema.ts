@@ -192,6 +192,23 @@ CREATE INDEX IF NOT EXISTS idx_merge_queue_run ON merge_queue(run_id);
 CREATE INDEX IF NOT EXISTS idx_merge_queue_status ON merge_queue(status);
 CREATE INDEX IF NOT EXISTS idx_merge_queue_position ON merge_queue(position);
 
+-- Research Artifacts
+CREATE TABLE IF NOT EXISTS research_artifacts (
+  id              TEXT PRIMARY KEY,
+  run_id          TEXT NOT NULL REFERENCES runs(id),
+  agent_id        TEXT NOT NULL,
+  label           TEXT NOT NULL,
+  type            TEXT NOT NULL,
+  content         TEXT,
+  file_path       TEXT,
+  module_id       TEXT,
+  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_research_run ON research_artifacts(run_id);
+CREATE INDEX IF NOT EXISTS idx_research_agent ON research_artifacts(agent_id);
+CREATE INDEX IF NOT EXISTS idx_research_module ON research_artifacts(module_id);
+
 -- Parallel Build Progress View
 CREATE VIEW IF NOT EXISTS parallel_build_progress AS
 SELECT

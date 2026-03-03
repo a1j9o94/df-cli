@@ -38,3 +38,9 @@ export type { MessageRecord } from "./message.js";
 export type { EventType, EventRecord } from "./event.js";
 
 export type { ResourceRecord } from "./resource.js";
+
+export type {
+  ResearchArtifactType,
+  ResearchArtifactRecord,
+  ResearchArtifactCreateInput,
+} from "./research.js";
