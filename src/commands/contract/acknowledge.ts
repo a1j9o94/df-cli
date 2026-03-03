@@ -4,6 +4,7 @@ import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getContract, acknowledgeContract } from "../../db/queries/contracts.js";
 import { createEvent } from "../../db/queries/events.js";
+import { estimateAndRecordCost } from "../../pipeline/budget.js";
 import { log } from "../../utils/logger.js";
 
 export const contractAcknowledgeCommand = new Command("acknowledge")
@@ -24,6 +25,9 @@ export const contractAcknowledgeCommand = new Command("acknowledge")
       log.error(`Contract not found: ${contractId}`);
       process.exit(1);
     }
+
+    // Estimate cost on contract acknowledge
+    estimateAndRecordCost(db, options.agent);
 
     acknowledgeContract(db, contractId, options.agent);
     createEvent(db, contract.run_id, "contract-acknowledged", { contractId }, options.agent);

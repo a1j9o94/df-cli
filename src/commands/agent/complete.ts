@@ -9,7 +9,7 @@ import { getRun } from "../../db/queries/runs.js";
 import { listBuildplans } from "../../db/queries/buildplans.js";
 import { listEvents } from "../../db/queries/events.js";
 import { createEvent } from "../../db/queries/events.js";
-import { recordCost } from "../../pipeline/budget.js";
+import { recordCost, estimateAndRecordCost } from "../../pipeline/budget.js";
 import { checkMergerGuards } from "../../pipeline/merger-guards.js";
 import { promoteBranch, isStagingBranch } from "../../pipeline/complete-promotion.js";
 import { log } from "../../utils/logger.js";
@@ -41,6 +41,9 @@ export const agentCompleteCommand = new Command("complete")
       log.error("Finish your required work before calling complete.");
       process.exit(1);
     }
+
+    // Estimate final cost before marking complete
+    estimateAndRecordCost(db, agentId);
 
     if (options.cost || options.tokens) {
       const costUsd = options.cost ? parseFloat(options.cost) : 0;

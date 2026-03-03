@@ -4,6 +4,7 @@ import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getMessagesForAgent, getMessagesForRole, markAllReadForAgent } from "../../db/queries/messages.js";
 import { getAgent } from "../../db/queries/agents.js";
+import { estimateAndRecordCost } from "../../pipeline/budget.js";
 import { formatJson } from "../../utils/format.js";
 import { log } from "../../utils/logger.js";
 
@@ -27,6 +28,9 @@ export const mailCheckCommand = new Command("check")
       log.error(`Agent not found: ${options.agent}`);
       process.exit(1);
     }
+
+    // Estimate cost on every mail check
+    estimateAndRecordCost(db, options.agent);
 
     // Get direct messages + role-based messages
     const directMsgs = getMessagesForAgent(db, options.agent, options.unread);
