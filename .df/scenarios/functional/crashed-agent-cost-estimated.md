@@ -1,34 +1,37 @@
 ---
 name: crashed-agent-cost-estimated
 type: functional
-spec_id: run_01KJNF621NWJEZ5JT45BDR4JFB
-created_by: agt_01KJNF621SCC96MJ883W7SCDBK
+spec_id: run_01KJSRR001N48MFYRE9XHH1TA0
+created_by: agt_01KJSRR002NH10ZW5RZY4QVC13
 ---
 
-# Crashed Agent Cost Estimated
+SCENARIO: When an agent crashes (PID dies without calling complete/fail), the engine estimates final cost from time since last heartbeat.
 
-## Preconditions
-- A Dark Factory project is initialized with a run
-- The engine is running and monitoring agents
+PRECONDITIONS:
+- A Dark Factory project is initialized
+- An agent is spawned and running
 
-## Steps
-1. Spawn a builder agent (record agent ID and PID)
-2. Let the agent send one heartbeat (cost recorded for first interval)
-3. Wait 60 seconds after heartbeat
-4. Kill the agent PID: `kill -9 <pid>`
-5. Wait for the engine to detect the crash (PID liveness check loop)
-6. Query agent record from DB
+STEPS:
+1. Spawn an agent. It calls `dark agent heartbeat <id>` once. Note agent.cost_usd after heartbeat (call it cost_at_hb).
+2. Wait some time (e.g. 30 seconds).
+3. Kill the agent's PID (simulate crash).
+4. The engine detects the crashed agent (PID dead, no complete/fail call).
+5. Query agent.cost_usd after engine crash detection.
 
-## Expected Output
-- Agent status is 'failed' with error about process exiting
-- Agent cost_usd > 0
-- Agent cost_usd includes cost for the time between last heartbeat and crash detection
-- Specifically: cost should cover (crash_detection_time - last_heartbeat_time) × cost_per_minute
-- If heartbeat was at T=30s and crash detected at T=90s, cost covers both 0-30s (from heartbeat) and 30-90s (from engine crash estimation)
+EXPECTED:
+- agent.cost_usd > cost_at_hb (engine added a final cost increment)
+- The increment covers the gap between last heartbeat and crash detection time
+- The engine calls estimateAndRecordCost for the crashed agent
 
-## Pass/Fail Criteria
-- PASS: Crashed agent has cost_usd > 0 covering the full time from last heartbeat to crash detection
-- FAIL: Crashed agent has cost_usd == 0, or only has cost up to the last heartbeat (missing the gap)
+VERIFICATION (code-level):
+- In build-phase.ts: when runtimeStatus is 'stopped' and agent didn't call complete/fail, estimateAndRecordCost is called before marking agent as failed
+- In agent-lifecycle.ts waitForAgent: when PID is dead and agent didn't call complete/fail, estimateAndRecordCost is called
+- This is the ONLY place the engine estimates cost — all other cost tracking is in the command layer
 
-## Key Verification
-This is the ONLY place the engine should estimate cost. When PID is dead and agent didn't call complete/fail, the engine calls estimateAndRecordCost one final time for the gap between last heartbeat and crash detection. Check engine.ts at the PID-dead code paths (~line 446, ~952, ~1019).
+PASS CRITERIA:
+- Crashed agent has cost_usd > 0 (includes both heartbeat-reported cost and engine-estimated final gap)
+- Engine only estimates cost for crashed agents, not for agents that called complete/fail normally
+
+FAIL CRITERIA:
+- Crashed agent has cost_usd == 0 or only the heartbeat cost (gap not covered)
+- Engine still has estimateCostIfMissing function (should be removed)
