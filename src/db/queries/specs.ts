@@ -5,13 +5,13 @@ function now(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-export function createSpec(db: SqliteDb, id: string, title: string, filePath: string): SpecRecord {
+export function createSpec(db: SqliteDb, id: string, title: string, filePath: string, parentSpecId?: string): SpecRecord {
   const ts = now();
 
   db.prepare(
-    `INSERT INTO specs (id, title, status, file_path, created_at, updated_at)
-     VALUES (?, ?, 'draft', ?, ?, ?)`
-  ).run(id, title, filePath, ts, ts);
+    `INSERT INTO specs (id, title, status, file_path, parent_spec_id, created_at, updated_at)
+     VALUES (?, ?, 'draft', ?, ?, ?, ?)`
+  ).run(id, title, filePath, parentSpecId ?? null, ts, ts);
 
   return getSpec(db, id)!;
 }

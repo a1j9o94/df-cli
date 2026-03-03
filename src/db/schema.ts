@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS specs (
   status          TEXT NOT NULL DEFAULT 'draft',
   file_path       TEXT NOT NULL,
   content_hash    TEXT NOT NULL DEFAULT '',
+  parent_spec_id  TEXT,
   scenario_count  INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))

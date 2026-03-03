@@ -6,6 +6,7 @@ export interface SpecRecord {
   status: SpecStatus;
   file_path: string;
   content_hash: string;
+  parent_spec_id: string | null;
   scenario_count: number;
   created_at: string;
   updated_at: string;
@@ -19,4 +20,5 @@ export interface SpecFrontmatter {
   version: string;
   priority: string;
   scenarios?: number;
+  parent_spec_id?: string;
 }
