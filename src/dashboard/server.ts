@@ -29,8 +29,13 @@ export interface ServerHandle {
 interface RunSummary {
   id: string;
   specId: string;
+<<<<<<< HEAD
   /** Human-readable spec title from specs table, null if spec not found */
   specTitle: string | null;
+=======
+  /** Human-readable spec title, resolved from specs table. Falls back to specId if not found. */
+  specTitle: string;
+>>>>>>> df-build/run_01KJ/mod_ui_redesign-mmapuau3
   status: string;
   phase: string | null;
   cost: number;
@@ -56,6 +61,8 @@ interface AgentSummary {
   id: string;
   role: string;
   name: string;
+  /** Human-readable display name, e.g. "Builder: HTTP API Server" */
+  displayName: string;
   status: string;
   pid: number | null;
   cost: number;
@@ -87,6 +94,11 @@ interface ModuleStatus {
   contractsTotal: number;
   depsSatisfied: number;
   depsTotal: number;
+  /** Scope of files this module creates and modifies */
+  scope: {
+    creates: string[];
+    modifies: string[];
+  };
 }
 
 // --- Helpers ---
@@ -172,15 +184,25 @@ function handleListRuns(db: InstanceType<typeof Database>): Response {
   return jsonResponse(summaries);
 }
 
+/** Resolve spec title from specs table, falling back to specId */
+function resolveSpecTitle(db: InstanceType<typeof Database>, specId: string): string {
+  const spec = db.prepare("SELECT title FROM specs WHERE id = ?").get(specId) as { title: string } | null;
+  return spec?.title ?? specId;
+}
+
 function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unknown>): RunSummary {
   const runId = r.id as string;
   const specId = r.spec_id as string;
+<<<<<<< HEAD
 
   // Look up spec title from specs table
   const specRow = db
     .prepare("SELECT title FROM specs WHERE id = ?")
     .get(specId) as { title: string } | null;
   const specTitle = specRow?.title ?? null;
+=======
+  const specTitle = resolveSpecTitle(db, specId);
+>>>>>>> df-build/run_01KJ/mod_ui_redesign-mmapuau3
 
   // Compute moduleCount and completedCount from buildplan + agents
   let moduleCount = 0;
@@ -225,7 +247,11 @@ function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unkno
 
   const summary: RunSummary = {
     id: runId,
+<<<<<<< HEAD
     specId: specId,
+=======
+    specId,
+>>>>>>> df-build/run_01KJ/mod_ui_redesign-mmapuau3
     specTitle,
     status: r.status as string,
     phase: (r.current_phase as string) ?? null,
@@ -263,6 +289,40 @@ function handleGetRun(db: InstanceType<typeof Database>, runId: string): Respons
   return jsonResponse(toRunSummary(db, result.run));
 }
 
+/** Build a human-readable display name for an agent, e.g. "Builder: HTTP API Server" */
+function buildAgentDisplayName(
+  db: InstanceType<typeof Database>,
+  runId: string,
+  role: string,
+  moduleId: string | null,
+): string {
+  const roleName = role.charAt(0).toUpperCase() + role.slice(1);
+
+  if (moduleId && role === "builder") {
+    // Try to resolve module title from buildplan
+    const plan = db
+      .prepare(
+        "SELECT plan FROM buildplans WHERE run_id = ? AND status = 'active' ORDER BY version DESC LIMIT 1",
+      )
+      .get(runId) as { plan: string } | null;
+
+    if (plan) {
+      try {
+        const parsed = JSON.parse(plan.plan);
+        const mod = parsed.modules?.find((m: { id: string }) => m.id === moduleId);
+        if (mod?.title) {
+          return `Builder: ${mod.title}`;
+        }
+      } catch {
+        // fall through
+      }
+    }
+    return `Builder: ${moduleId}`;
+  }
+
+  return roleName;
+}
+
 function handleGetAgents(db: InstanceType<typeof Database>, runId: string): Response {
   const result = validateRun(db, runId);
   if ("error" in result) return result.error;
@@ -277,13 +337,16 @@ function handleGetAgents(db: InstanceType<typeof Database>, runId: string): Resp
 
     const agentCost = a.cost_usd as number;
     const agentStatus = a.status as string;
+    const agentRole = a.role as string;
+    const agentModuleId = (a.module_id as string) ?? null;
     const estCost = computeAgentEstimatedCost(agentCost, a.created_at as string, agentStatus);
     const isEstimate = agentCost === 0 && estCost > 0;
 
     const summary: AgentSummary = {
       id: a.id as string,
-      role: a.role as string,
+      role: agentRole,
       name: a.name as string,
+      displayName: buildAgentDisplayName(db, runId, agentRole, agentModuleId),
       status: agentStatus,
       pid: (a.pid as number) ?? null,
       cost: agentCost,
@@ -442,7 +505,7 @@ function handleGetModules(db: InstanceType<typeof Database>, runId: string): Res
     id: string;
     title: string;
     description: string;
-    scope?: { creates?: string[] };
+    scope?: { creates?: string[]; modifies?: string[] };
   }>;
   try {
     const parsed = JSON.parse(plan.plan as string);
@@ -513,10 +576,42 @@ function handleGetModules(db: InstanceType<typeof Database>, runId: string): Res
       contractsTotal,
       depsSatisfied,
       depsTotal,
+      scope: {
+        creates: mod.scope?.creates ?? [],
+        modifies: mod.scope?.modifies ?? [],
+      },
     };
   });
 
   return jsonResponse(moduleStatuses);
+}
+
+// --- Contract: SpecContentEndpoint ---
+
+function handleGetSpec(db: InstanceType<typeof Database>, runId: string): Response {
+  const result = validateRun(db, runId);
+  if ("error" in result) return result.error;
+
+  const run = result.run;
+  const specId = run.spec_id as string;
+
+  // Look up spec metadata from specs table
+  const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as Record<string, unknown> | null;
+
+  if (!spec) {
+    return jsonResponse({
+      specId,
+      title: specId,
+      content: null,
+    });
+  }
+
+  return jsonResponse({
+    specId,
+    title: spec.title as string,
+    status: spec.status as string,
+    scenarioCount: spec.scenario_count as number,
+  });
 }
 
 // --- Phase labels ---
@@ -648,6 +743,8 @@ function route(
         return handleGetModules(db, runId);
       case "phases":
         return handleGetPhases(db, runId);
+      case "spec":
+        return handleGetSpec(db, runId);
       default:
         return errorResponse(`Unknown sub-resource: ${sub}`, 404);
     }
