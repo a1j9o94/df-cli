@@ -1,2 +1,3 @@
 # mod-loading-ui complete - loading indicators implemented with 50 tests
 # mod-server-cost-estimation complete - 52 tests covering cost estimation in dashboard polling
+# pipeline-prompts complete — research CLI references added to architect, builder, and evaluator prompts (32 new tests)
