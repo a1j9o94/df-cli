@@ -1,27 +1,27 @@
 ---
 name: agent-list-elapsed-and-cost
 type: functional
-spec_id: run_01KJR3DRQJPAE01XP0BJ0TGM1E
-created_by: agt_01KJR3DRQKZK8N369V2TJZ66EJ
+spec_id: run_01KJSXZQ1WDY0A0JVRTZPNB3AW
+created_by: agt_01KJSXZQ1X0E7M9WZA7R77WKY6
 ---
 
-Test: Agent list shows elapsed time and estimated cost for running agents.
+SCENARIO: Agent list shows elapsed time and estimated cost for running agents.
 
-SETUP:
-1. Initialize in-memory DB with schema
-2. Create a run record (run_01TEST) with spec_id=spec_01TEST
-3. Create an agent record with role=builder, status=running, created_at=12 minutes ago, cost_usd=0.62
-4. Set agent PID to a valid PID (e.g., process.pid)
+PRECONDITIONS:
+- A run exists with at least one agent in 'running' status that was created >30 seconds ago.
+- At least one agent has cost_usd > 0.
 
-EXECUTE:
-Run the agent list command output formatter (or invoke 'dark agent list' CLI)
+STEPS:
+1. Run: dark agent list --run-id <run_id>
+2. Capture the text output.
 
 EXPECTED OUTPUT:
-- Each running agent line MUST contain elapsed time in human-readable format (e.g., '12m 34s' or '12m')
-- Each running agent line MUST contain estimated cost prefixed with ~ dollar sign (e.g., '~$0.62')
-- Completed/failed agents should show final elapsed and cost (not live-computed)
+- Each running agent line contains an elapsed time in format like '12m 34s' or '5s' (matches pattern /\d+[hms]/).
+- Each agent with cost_usd > 0 shows cost prefixed with '~$' (matches pattern /~?\$\d+\.\d{2}/).
+- The elapsed time for a running agent is greater than 0s.
+- Completed agents show their final elapsed time (from total_active_ms) rather than live-computed.
 
 PASS CRITERIA:
-- Output contains a time duration string matching pattern like /\d+m\s*\d*s?/ or /\d+h\s*\d+m/
-- Output contains a cost string matching pattern like /~?\$\d+\.\d{2}/
-- Both elapsed and cost appear on the SAME line as the agent ID
+- Running agent output matches: /<agent_id>\s+\S+\s+\(\w+\)\s+running\s+\d+[hms].*~?\$\d+\.\d{2}/
+- No running agent shows '0s' elapsed.
+- Elapsed is shown BEFORE cost on the same line.
