@@ -1,28 +1,26 @@
 ---
 name: agent-list-worktree-path
 type: functional
-spec_id: run_01KJR3DRQJPAE01XP0BJ0TGM1E
-created_by: agt_01KJR3DRQKZK8N369V2TJZ66EJ
+spec_id: run_01KJSXZQ1WDY0A0JVRTZPNB3AW
+created_by: agt_01KJSXZQ1X0E7M9WZA7R77WKY6
 ---
 
-Test: Agent list shows worktree path for builder agents.
+SCENARIO: Agent list shows worktree path for builder agents.
 
-SETUP:
-1. Initialize in-memory DB with schema
-2. Create a run record
-3. Create a builder agent with worktree_path='/var/folders/.../foo-mm8abc', status=running
+PRECONDITIONS:
+- A run exists with at least one builder agent that has worktree_path set in the DB.
+- The worktree_path value is a valid filesystem path.
 
-EXECUTE:
-Run 'dark agent list' or invoke the list formatter
+STEPS:
+1. Run: dark agent list --run-id <run_id>
+2. Capture text output.
 
 EXPECTED OUTPUT:
-- The worktree path MUST appear in the output for each builder agent that has one
-- The path should appear on a sub-line (indented) beneath the main agent summary line, prefixed with 'worktree:' or similar label
-- Format example:
-  agt_01XYZ  builder-foo (builder)  running  12m 34s  ~$0.62  3 files  module=foo
-    worktree: /var/folders/.../foo-mm8abc
+- For each agent with a worktree_path, there is an indented line below the main agent line showing: 'worktree: <path>'
+- The indentation is deeper than the main line (at least 4 spaces).
+- The path matches the worktree_path value from the agents DB table.
 
 PASS CRITERIA:
-- Output contains the literal worktree path string '/var/folders/.../foo-mm8abc'
-- The worktree path appears labeled (e.g., 'worktree:')
-- Agents without worktree_path do NOT show a worktree line
+- Output contains a line matching /^\s{4,}worktree:\s+\S+/ for each agent that has a worktree.
+- The worktree path shown matches what is stored in state.db agents.worktree_path.
+- Agents without worktree_path do NOT show a worktree line.
