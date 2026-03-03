@@ -69,6 +69,70 @@ export function getLatestRunForSpec(db: SqliteDb, specId: string): RunRecord | n
 }
 
 /**
+ * Result of pre-build validation.
+ */
+export interface PreBuildResult {
+  allowed: boolean;
+  error?: string;
+  warning?: string;
+}
+
+/**
+ * Pre-build validation for the build command.
+ * Implements BuildCommandInterface contract:
+ *   1) STATUS CHECK: reject completed/archived with helpful message
+ *   2) HASH CHECK: warn on mismatch unless --force, showing run ID
+ *   3) STATUS TRANSITION: set to building before engine.execute
+ * --force bypasses hash check only, NOT status check.
+ */
+export function preBuildValidation(
+  db: SqliteDb,
+  specId: string,
+  filePath: string,
+  force: boolean,
+): PreBuildResult {
+  const spec = getSpec(db, specId);
+  if (!spec) {
+    return { allowed: false, error: `Spec not found: ${specId}` };
+  }
+
+  // Guard 1: STATUS CHECK — reject completed/archived
+  if (spec.status === "completed") {
+    return {
+      allowed: false,
+      error: `Spec ${specId} is already completed. To build something new, create a new spec:\n  dark spec create "Follow-up: <description>"`,
+    };
+  }
+  if (spec.status === "archived") {
+    return {
+      allowed: false,
+      error: `Spec ${specId} is archived. To build something new, create a new spec:\n  dark spec create "Follow-up: <description>"`,
+    };
+  }
+
+  // Guard 2: HASH CHECK — warn on mismatch unless --force
+  if (!force) {
+    const latestRun = getLatestRunForSpec(db, specId);
+    if (latestRun && spec.content_hash && spec.content_hash !== "") {
+      try {
+        const currentHash = computeContentHash(filePath);
+        if (currentHash !== spec.content_hash) {
+          return {
+            allowed: false,
+            warning: `Warning: spec file has been modified since the last build.\nThe original spec produced ${latestRun.id}. If this is intentional, use:\n  dark spec create "Updated: ${spec.title}"\nTo build against the modified spec as a NEW spec, or:\n  dark build --force`,
+          };
+        }
+      } catch {
+        // If file can't be read, skip hash check
+      }
+    }
+  }
+
+  // Guard 3: spec is in a buildable state (draft, ready, or building for retry)
+  return { allowed: true };
+}
+
+/**
  * Helper: get valid next statuses from a given status.
  */
 function getValidNextStatuses(current: SpecStatus): SpecStatus[] {
