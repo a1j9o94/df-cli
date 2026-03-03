@@ -9,15 +9,9 @@ import {
 // Basic conflict prompt structure
 // =============================================================================
 
-const sampleConflictContent = `<<<<<<< HEAD
-export function greet() {
+const sampleConflictContent = `export function greet() {
   return "Hello from module A";
 }
-=======
-export function greet() {
-  return "Hello from module B";
-}
->>>>>>> incoming`;
 
 const baseContext: ConflictPromptContext = {
   agentId: "agt_test123",
