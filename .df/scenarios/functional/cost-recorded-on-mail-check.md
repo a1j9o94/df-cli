@@ -1,31 +1,36 @@
 ---
 name: cost-recorded-on-mail-check
 type: functional
-spec_id: run_01KJNF621NWJEZ5JT45BDR4JFB
-created_by: agt_01KJNF621SCC96MJ883W7SCDBK
+spec_id: run_01KJSRR001N48MFYRE9XHH1TA0
+created_by: agt_01KJSRR002NH10ZW5RZY4QVC13
 ---
 
-# Cost Recorded on Mail Check
+SCENARIO: Calling `dark mail check` increases agent cost even though mail check has no --cost option.
 
-## Preconditions
-- A Dark Factory project is initialized with a run
+PRECONDITIONS:
+- A Dark Factory project is initialized
 - An agent exists in 'running' status
+- agent.cost_usd == 0 initially
 
-## Steps
-1. Create/spawn an agent (record agent ID)
-2. Record initial agent.cost_usd (should be 0 or baseline)
-3. Wait at least 10 seconds
-4. Call `dark mail check --agent <agent-id>`
-5. Query agent.cost_usd from DB
+STEPS:
+1. Create an agent record. Note agent.cost_usd == 0.
+2. Wait a few seconds (enough for measurable elapsed time).
+3. Agent calls `dark mail check --agent <id>`.
+4. Query agent.cost_usd.
 
-## Expected Output
-- Agent cost_usd after mail check > initial cost_usd
-- The increment is proportional to elapsed time since agent creation (or last command)
-- Run cost_usd also increases by the same delta
+EXPECTED:
+- agent.cost_usd > 0 after mail check
+- The cost increment is based on elapsed time since agent creation (or last command)
 
-## Pass/Fail Criteria
-- PASS: agent.cost_usd increases after a mail check command
-- FAIL: agent.cost_usd remains unchanged after mail check
+VERIFICATION (code-level):
+- src/commands/mail/check.ts imports estimateAndRecordCost from pipeline/budget
+- The function is called during the mail check command handler
+- No --cost flag needed — estimation is automatic
 
-## Key Verification
-This tests that non-agent commands (mail check) also trigger cost estimation. Currently mail/check.ts has NO cost recording. After the fix, it should call estimateAndRecordCost as a side effect. Also verify mail/send.ts, scenario/create, and contract/acknowledge all have the same behavior by checking their code paths include the estimateAndRecordCost call.
+PASS CRITERIA:
+- agent.cost_usd > 0 after a single mail check call
+- The cost is proportional to elapsed time
+
+FAIL CRITERIA:
+- agent.cost_usd == 0 after mail check (estimation not wired up)
+- mail/check.ts does not import or call estimateAndRecordCost
