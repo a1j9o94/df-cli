@@ -9,23 +9,23 @@ describe("Phase Timeline CSS", () => {
   });
 
   it("contains phase-completed CSS class with distinct styling", () => {
-    expect(html).toContain(".phase-step.completed");
+    expect(html).toContain(".phase-completed");
   });
 
   it("contains phase-active CSS class with animation", () => {
-    expect(html).toContain(".phase-step.active");
+    expect(html).toContain(".phase-active");
     // Active phase should have animation (pulse, glow, etc.)
-    expect(html).toMatch(/\.phase-step\.active[^}]*\{[^}]*animation/s);
+    expect(html).toMatch(/\.phase-active[^}]*\{[^}]*animation/s);
   });
 
   it("contains phase-pending CSS class with muted styling", () => {
-    expect(html).toContain(".phase-step.pending");
+    expect(html).toContain(".phase-pending");
   });
 
   it("contains phase-skipped CSS class that is distinct from pending", () => {
-    expect(html).toContain(".phase-step.skipped");
+    expect(html).toContain(".phase-skipped");
     // Skipped should have a different visual treatment (strikethrough, dashed, dimmed)
-    const skippedMatch = html.match(/\.phase-step\.skipped\s*\{([^}]*)\}/);
+    const skippedMatch = html.match(/\.phase-skipped\s*\{([^}]*)\}/);
     expect(skippedMatch).toBeTruthy();
     // Should have some unique styling like text-decoration or opacity
     expect(skippedMatch![1]).toMatch(/text-decoration|opacity|border-style/);
@@ -90,15 +90,15 @@ describe("Phase Timeline in refresh cycle", () => {
 describe("Phase Timeline - phase container in HTML", () => {
   const html = generateDashboardHtml();
 
-  it("has a phase-timeline container element in the detail panels", () => {
-    // There should be a div with id or class for phase timeline
-    expect(html).toMatch(/id="phase-timeline"/);
+  it("has a phases-container element in the detail panels", () => {
+    // There should be a div with id for phase timeline
+    expect(html).toMatch(/id="phases-container"/);
   });
 
-  it("phase-timeline container is within the run-header section", () => {
-    // phase-timeline should appear after run-header div
+  it("phases-container is within the run-header section", () => {
+    // phases-container should appear after run-header div
     const headerIdx = html.indexOf('id="run-header"');
-    const timelineIdx = html.indexOf('id="phase-timeline"');
+    const timelineIdx = html.indexOf('id="phases-container"');
     expect(headerIdx).toBeGreaterThan(-1);
     expect(timelineIdx).toBeGreaterThan(-1);
     // timeline should be after the header in the HTML
