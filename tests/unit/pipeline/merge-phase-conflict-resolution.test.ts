@@ -1,21 +1,14 @@
-import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from "node:fs";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { getDbForTest } from "../../../src/db/index.js";
-import type { SqliteDb } from "../../../src/db/index.js";
-import { createRun } from "../../../src/db/queries/runs.js";
-import { createAgent, updateAgentStatus } from "../../../src/db/queries/agents.js";
-import { createSpec } from "../../../src/db/queries/specs.js";
-import { getEvents } from "../../../src/db/queries/events.js";
 import {
   mergeSingleBranch,
   type MergeBranchResult,
 } from "../../../src/pipeline/rebase-merge.js";
 
-let db: SqliteDb;
 let repoDir: string;
 
 /**
@@ -50,7 +43,6 @@ function createWorktreeBranch(mainRepo: string, branchName: string): string {
 }
 
 beforeEach(() => {
-  db = getDbForTest();
   repoDir = setupTestRepo();
 });
 
