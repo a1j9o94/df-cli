@@ -37,6 +37,11 @@ export type EventType =
   | "merge-lock-released"
   | "merge-lock-timeout"
   | "rebase-merge-result"
+  | "merge-branch-clean"
+  | "merge-branch-conflicted"
+  | "merge-branch-conflict-resolved"
+  | "merge-branch-conflict-failed"
+  | "merge-branch-error"
   | "state-db-backed-up"
   | "state-db-restored"
   | "state-db-backup-removed";
