@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getContract, acknowledgeContract } from "../../db/queries/contracts.js";
+import { getAgent } from "../../db/queries/agents.js";
 import { createEvent } from "../../db/queries/events.js";
+import { estimateAndRecordCost } from "../../pipeline/budget.js";
 import { log } from "../../utils/logger.js";
 
 export const contractAcknowledgeCommand = new Command("acknowledge")
@@ -23,6 +25,12 @@ export const contractAcknowledgeCommand = new Command("acknowledge")
     if (!contract) {
       log.error(`Contract not found: ${contractId}`);
       process.exit(1);
+    }
+
+    // Estimate cost from elapsed time for the agent (automatic, unavoidable)
+    const agent = getAgent(db, options.agent);
+    if (agent) {
+      estimateAndRecordCost(db, options.agent);
     }
 
     acknowledgeContract(db, contractId, options.agent);

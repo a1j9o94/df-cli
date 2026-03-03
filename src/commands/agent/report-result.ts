@@ -4,6 +4,7 @@ import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getAgent } from "../../db/queries/agents.js";
 import { createEvent } from "../../db/queries/events.js";
+import { estimateAndRecordCost } from "../../pipeline/budget.js";
 import { log } from "../../utils/logger.js";
 
 export const agentReportResultCommand = new Command("report-result")
@@ -26,6 +27,9 @@ export const agentReportResultCommand = new Command("report-result")
       log.error(`Agent not found: ${agentId}`);
       process.exit(1);
     }
+
+    // Estimate cost from elapsed time (automatic, unavoidable)
+    estimateAndRecordCost(db, agentId);
 
     if (agent.role !== "evaluator" && agent.role !== "integration-tester") {
       log.error(`Agent ${agentId} is not an evaluator or integration-tester (role: ${agent.role})`);

@@ -4,7 +4,7 @@ import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getAgent, updateAgentStatus } from "../../db/queries/agents.js";
 import { createEvent } from "../../db/queries/events.js";
-import { recordCost } from "../../pipeline/budget.js";
+import { recordCost, estimateAndRecordCost } from "../../pipeline/budget.js";
 import { log } from "../../utils/logger.js";
 
 export const agentFailCommand = new Command("fail")
@@ -27,6 +27,9 @@ export const agentFailCommand = new Command("fail")
       log.error(`Agent not found: ${agentId}`);
       process.exit(1);
     }
+
+    // Estimate cost from elapsed time (automatic, unavoidable)
+    estimateAndRecordCost(db, agentId);
 
     if (options.cost || options.tokens) {
       const costUsd = options.cost ? parseFloat(options.cost) : 0;
