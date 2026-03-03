@@ -485,7 +485,7 @@ function handleGetPhases(db: InstanceType<typeof Database>, runId: string): Resp
 
   const run = result.run;
   const currentPhase = (run.current_phase as string) ?? null;
-  const mode = (run.mode as string) ?? "thorough";
+  const skipChangeEval = (run.skip_change_eval as number) === 1;
 
   // Determine module count from buildplan
   let moduleCount = 0;
@@ -510,7 +510,7 @@ function handleGetPhases(db: InstanceType<typeof Database>, runId: string): Resp
   const skipContext = {
     skip_architect: skipArchitect,
     module_count: moduleCount,
-    mode,
+    skip_change_eval: skipChangeEval,
   };
 
   const currentIdx = currentPhase ? PHASE_ORDER.indexOf(currentPhase as PhaseName) : -1;

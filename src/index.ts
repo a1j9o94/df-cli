@@ -64,7 +64,7 @@ Examples:
 
   $ dark init --name my-project
   $ dark spec create "Add user authentication"
-  $ dark build spec_01ABC123 --mode quick --budget-usd 10
+  $ dark build spec_01ABC123 --skip-change-eval --budget-usd 10
   $ dark build spec_01ABC123 --skip-architect   # single-module, no decomposition
   $ dark status --run-id run_01XYZ --json
   $ dark architect analyze spec_01ABC123

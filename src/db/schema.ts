@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS runs (
   id              TEXT PRIMARY KEY,
   spec_id         TEXT NOT NULL,
   status          TEXT NOT NULL DEFAULT 'pending',
-  mode            TEXT NOT NULL DEFAULT 'thorough',
+  skip_change_eval INTEGER NOT NULL DEFAULT 0,
   max_parallel    INTEGER NOT NULL DEFAULT 4,
   budget_usd      REAL NOT NULL DEFAULT 50.0,
   cost_usd        REAL NOT NULL DEFAULT 0.0,

@@ -6,31 +6,41 @@ function now(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
+/** Convert SQLite integer (0/1) to boolean for skip_change_eval */
+function hydrateRun(row: Record<string, unknown>): RunRecord {
+  return {
+    ...row,
+    skip_change_eval: row.skip_change_eval === 1,
+  } as RunRecord;
+}
+
 export function createRun(db: SqliteDb, input: RunCreateInput): RunRecord {
   const id = newRunId();
-  const mode = input.mode ?? "thorough";
+  const skipChangeEval = input.skip_change_eval ? 1 : 0;
   const maxParallel = input.max_parallel ?? 4;
   const budgetUsd = input.budget_usd ?? 50.0;
   const maxIterations = input.max_iterations ?? 3;
   const ts = now();
 
   db.prepare(
-    `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, max_iterations, config, created_at, updated_at)
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, max_iterations, config, created_at, updated_at)
      VALUES (?, ?, 'pending', ?, ?, ?, ?, '{}', ?, ?)`
-  ).run(id, input.spec_id, mode, maxParallel, budgetUsd, maxIterations, ts, ts);
+  ).run(id, input.spec_id, skipChangeEval, maxParallel, budgetUsd, maxIterations, ts, ts);
 
   return getRun(db, id)!;
 }
 
 export function getRun(db: SqliteDb, id: string): RunRecord | null {
-  return db.prepare("SELECT * FROM runs WHERE id = ?").get(id) as RunRecord | null;
+  const row = db.prepare("SELECT * FROM runs WHERE id = ?").get(id) as Record<string, unknown> | null;
+  if (!row) return null;
+  return hydrateRun(row);
 }
 
 export function listRuns(db: SqliteDb, specId?: string): RunRecord[] {
-  if (specId) {
-    return db.prepare("SELECT * FROM runs WHERE spec_id = ? ORDER BY created_at DESC").all(specId) as RunRecord[];
-  }
-  return db.prepare("SELECT * FROM runs ORDER BY created_at DESC").all() as RunRecord[];
+  const rows = specId
+    ? db.prepare("SELECT * FROM runs WHERE spec_id = ? ORDER BY created_at DESC").all(specId)
+    : db.prepare("SELECT * FROM runs ORDER BY created_at DESC").all();
+  return (rows as Record<string, unknown>[]).map(hydrateRun);
 }
 
 export function updateRunStatus(db: SqliteDb, id: string, status: string, error?: string): void {

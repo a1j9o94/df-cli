@@ -68,7 +68,7 @@ const DEFAULT_PIPELINE = {
       id: "evaluate-change",
       agent: "evaluator",
       description: "Run change holdout scenarios.",
-      skip_when: "config.build.default_mode == 'quick'",
+      skip_when: "run.skip_change_eval == true",
       gate: { type: "threshold", metric: "changeability", threshold: "config.thresholds.changeability" },
     },
     {

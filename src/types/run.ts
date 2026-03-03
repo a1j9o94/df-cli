@@ -10,7 +10,7 @@ export interface RunRecord {
   id: string;
   spec_id: string;
   status: RunStatus;
-  mode: "quick" | "thorough";
+  skip_change_eval: boolean;
   max_parallel: number;
   budget_usd: number;
   cost_usd: number;
@@ -26,7 +26,7 @@ export interface RunRecord {
 
 export interface RunCreateInput {
   spec_id: string;
-  mode?: "quick" | "thorough";
+  skip_change_eval?: boolean;
   max_parallel?: number;
   budget_usd?: number;
   max_iterations?: number;
