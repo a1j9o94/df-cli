@@ -1,10 +1,27 @@
+import { extractVideoUrls } from "../../utils/url-detection.js";
+
 export function getArchitectPrompt(context: {
   specId: string;
   runId: string;
   agentId: string;
   specFilePath?: string;
   codebasePaths?: string[];
+  specContent?: string;
 }): string {
+  // Detect video URLs in spec content (if provided)
+  const videoUrls = context.specContent ? extractVideoUrls(context.specContent) : [];
+  const videoUrlSection = videoUrls.length > 0
+    ? `
+## Referenced Videos
+
+The spec references the following video URLs. Use \`dark research video\` to extract context before decomposing:
+
+${videoUrls.map((url) => `- \`dark research video ${context.agentId} ${url}\``).join("\n")}
+
+Extract transcripts and ask questions about each video to inform your decomposition.
+`
+    : "";
+
   return `You are an Architect agent in a Dark Factory pipeline.
 
 ## Identity
@@ -74,8 +91,9 @@ The buildplan JSON must contain:
 - Submit buildplan: dark architect submit-plan ${context.agentId} --plan '<json>'
 - Save research (text): dark research add ${context.agentId} --label "<label>" --content "<URL, code snippet, API docs excerpt, or decision rationale>" [--module <module-id>]
 - Save research (file): dark research add ${context.agentId} --label "<label>" --file <path> [--module <module-id>]
+- Video research: dark research video ${context.agentId} <url> [--question "<q>"] — fetch transcript from YouTube/Loom videos and save as research artifact
 - Heartbeat: dark agent heartbeat ${context.agentId}
 - Complete: dark agent complete ${context.agentId}
 - Fail: dark agent fail ${context.agentId} --error "<description>"
-`;
+${videoUrlSection}`;
 }
