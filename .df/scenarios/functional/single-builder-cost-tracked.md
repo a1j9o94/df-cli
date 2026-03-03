@@ -1,29 +1,29 @@
 ---
 name: single-builder-cost-tracked
 type: functional
-spec_id: run_01KJNF621NWJEZ5JT45BDR4JFB
-created_by: agt_01KJNF621SCC96MJ883W7SCDBK
+spec_id: run_01KJSRR001N48MFYRE9XHH1TA0
+created_by: agt_01KJSRR002NH10ZW5RZY4QVC13
 ---
 
-# Single Builder Cost Tracked
+SCENARIO: Single builder (no buildplan) completes with cost >0.
 
-## Preconditions
-- A Dark Factory project is initialized with a spec
-- No architect/buildplan is created (single-builder fallback path)
+PRECONDITIONS:
+- A Dark Factory project is initialized
+- A run exists with a spec but no buildplan (triggers single-builder fallback path)
 
-## Steps
-1. Run `dark build --skip-architect` against a valid spec
-2. Wait for the single builder agent to complete
-3. Query the agent record from the DB: `SELECT cost_usd FROM agents WHERE run_id = '<run-id>'`
+STEPS:
+1. Run `dark build --skip-architect` to trigger single-builder fallback (no buildplan)
+2. The builder agent spawns, does work, calls `dark agent complete <id>`
+3. Query the agent record: SELECT cost_usd FROM agents WHERE id = <builder-id>
 
-## Expected Output
-- The builder agent's cost_usd is > 0.0
-- The run's cost_usd is > 0.0
-- Cost should be proportional to actual elapsed time (elapsed_minutes × 0.05 approximately)
+EXPECTED:
+- agent.cost_usd > 0 after builder completes
+- The cost should be proportional to elapsed time (e.g., if builder ran for 2 minutes at $0.05/min, cost ~ $0.10)
 
-## Pass/Fail Criteria
-- PASS: Agent cost_usd > 0 after completion on the single-builder fallback path
-- FAIL: Agent cost_usd == 0 (the current broken behavior)
+PASS CRITERIA:
+- agent.cost_usd > 0
+- The cost was recorded WITHOUT the engine calling estimateCostIfMissing — it was recorded by the agent command layer (dark agent complete)
 
-## Key Verification
-This specifically tests the single-builder fallback code path in executeBuildPhase (line ~799) which currently returns without estimating cost. After the fix, cost should be tracked via command-layer calls (heartbeat, complete) the builder makes during execution.
+FAIL CRITERIA:
+- agent.cost_usd == 0 after single builder completes
+- estimateCostIfMissing still exists in build-phase.ts or agent-lifecycle.ts
