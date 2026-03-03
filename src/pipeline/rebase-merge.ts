@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { existsSync, unlinkSync, rmSync, readdirSync } from "node:fs";
+import { existsSync, unlinkSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { isProtectedPath, getProtectedFiles } from "../runtime/protected-paths.js";
 import { sanitizeWorktree, sanitizeMainRepo, unstashMainRepo } from "./worktree-sanitization.js";
@@ -16,6 +16,29 @@ export interface MergeResult {
   mergedBranches: string[];
   failedBranches: string[];
   errors: string[];
+}
+
+/**
+ * Result of attempting to merge a single branch into the target.
+ *
+ * Contract: MergeBranchResult
+ *
+ * - status "clean": merge succeeded without conflicts, commit was made
+ * - status "conflicted": merge had conflicts; conflict markers are on disk,
+ *   merge is in progress (not committed, not aborted)
+ * - status "error": merge failed for a non-conflict reason
+ */
+export interface MergeBranchResult {
+  /** Whether the merge completed successfully (clean merge committed) */
+  success: boolean;
+  /** The merge outcome: "clean", "conflicted", or "error" */
+  status: "clean" | "conflicted" | "error";
+  /** The branch name that was merged */
+  branch: string;
+  /** Conflicted files with their paths and content (only when status is "conflicted") */
+  conflictedFiles?: { path: string; content: string }[];
+  /** Error message (only when status is "error") */
+  error?: string;
 }
 
 /**
@@ -257,4 +280,95 @@ export function rebaseAndMerge(
     failedBranches,
     errors,
   };
+}
+
+/**
+ * Merge a single worktree branch into the target branch using `git merge --no-commit`.
+ *
+ * Contract: MergeSingleBranchFunction
+ *
+ * This function implements the conflict-detection-and-handoff strategy:
+ * 1. Attempt `git merge --no-commit` for the branch
+ * 2. If merge succeeds cleanly: commit and return status "clean"
+ * 3. If merge has conflicts: list conflicted files with their content,
+ *    leave the merge in progress (not committed, not aborted),
+ *    and return status "conflicted"
+ *
+ * When status is "conflicted", the caller is responsible for either:
+ * - Spawning a merger agent to resolve the conflicts, then committing
+ * - Aborting the merge with `git merge --abort`
+ *
+ * @param worktreePath - Path to the worktree directory whose branch is being merged
+ * @param mainRepoPath - Path to the main repository
+ * @param targetBranch - The branch to merge into (e.g., "main")
+ * @returns MergeBranchResult indicating clean merge, conflict, or error
+ */
+export function mergeSingleBranch(
+  worktreePath: string,
+  mainRepoPath: string,
+  targetBranch: string,
+): MergeBranchResult {
+  const branch = getWorktreeBranch(worktreePath);
+
+  try {
+    // Attempt merge with --no-commit so we can inspect before committing
+    execSync(`git merge ${branch} --no-commit --no-ff`, {
+      cwd: mainRepoPath,
+      stdio: "pipe",
+      env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
+    });
+
+    // Merge succeeded cleanly — commit it
+    execSync(`git commit --no-edit -m "Merge branch '${branch}'"`, {
+      cwd: mainRepoPath,
+      stdio: "pipe",
+      env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
+    });
+
+    return {
+      success: true,
+      status: "clean",
+      branch,
+    };
+  } catch (err) {
+    // Check if this is a conflict (merge in progress with unmerged files)
+    try {
+      const unmergedOutput = execSync("git diff --name-only --diff-filter=U", {
+        cwd: mainRepoPath,
+        encoding: "utf-8",
+      }).trim();
+
+      if (unmergedOutput.length > 0) {
+        // There are unmerged (conflicted) files — read their content
+        const conflictedPaths = unmergedOutput.split("\n").filter(Boolean);
+        const conflictedFiles = conflictedPaths.map((filePath) => {
+          let content = "";
+          try {
+            content = readFileSync(join(mainRepoPath, filePath), "utf-8");
+          } catch {
+            content = `(Could not read file: ${filePath})`;
+          }
+          return { path: filePath, content };
+        });
+
+        return {
+          success: false,
+          status: "conflicted",
+          branch,
+          conflictedFiles,
+        };
+      }
+    } catch {
+      // If we can't even check for unmerged files, it's a general error
+    }
+
+    // Non-conflict error
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      status: "error",
+      branch,
+      error: `Merge of ${branch} into ${targetBranch} failed: ${errorMsg}`,
+    };
+  }
 }
