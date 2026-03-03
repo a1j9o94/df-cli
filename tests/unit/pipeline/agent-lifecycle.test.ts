@@ -10,9 +10,9 @@ import type { AgentRuntime } from "../../../src/runtime/interface.js";
 import type { AgentHandle, AgentSpawnConfig } from "../../../src/types/index.js";
 import {
   waitForAgent,
-  estimateCostIfMissing,
   executeAgentPhase,
 } from "../../../src/pipeline/agent-lifecycle.js";
+import { estimateAndRecordCost } from "../../../src/pipeline/budget.js";
 
 let db: SqliteDb;
 
@@ -157,12 +157,12 @@ describe("waitForAgent", () => {
   });
 });
 
-describe("estimateCostIfMissing", () => {
-  test("is exported as a function", () => {
-    expect(typeof estimateCostIfMissing).toBe("function");
+describe("estimateAndRecordCost (from budget.ts, replaces old estimateCostIfMissing)", () => {
+  test("is exported from budget.ts", () => {
+    expect(typeof estimateAndRecordCost).toBe("function");
   });
 
-  test("does nothing if agent already has cost > 0", () => {
+  test("estimates cost based on elapsed time", () => {
     const spec = createTestSpec(db);
     const run = createRun(db, { spec_id: spec.id, budget_usd: 50 });
 
@@ -171,37 +171,39 @@ describe("estimateCostIfMissing", () => {
       name: "test-eval", system_prompt: "test",
     });
 
-    // Manually set cost
-    db.prepare("UPDATE agents SET cost_usd = 5.0 WHERE id = ?").run(agent.id);
+    // Set created_at to 5 minutes ago
+    const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    db.prepare("UPDATE agents SET created_at = ?, updated_at = ? WHERE id = ?")
+      .run(fiveMinAgo, fiveMinAgo, agent.id);
 
-    const agentRecord = db.prepare("SELECT * FROM agents WHERE id = ?").get(agent.id) as any;
-    estimateCostIfMissing(db, agentRecord);
+    const cost = estimateAndRecordCost(db, agent.id);
 
-    const after = db.prepare("SELECT cost_usd FROM agents WHERE id = ?").get(agent.id) as { cost_usd: number };
-    expect(after.cost_usd).toBe(5.0); // Unchanged
-  });
+    // Check that cost was estimated (~5 min * $0.05/min = ~$0.25)
+    expect(cost).toBeGreaterThan(0);
 
-  test("estimates cost based on elapsed time if cost is 0", () => {
-    const spec = createTestSpec(db);
-    const run = createRun(db, { spec_id: spec.id, budget_usd: 50 });
-
-    const agent = createAgent(db, {
-      agent_id: "", run_id: run.id, role: "evaluator",
-      name: "test-eval", system_prompt: "test",
-    });
-
-    // Set updated_at to 5 minutes after created_at
-    const created = new Date();
-    const updated = new Date(created.getTime() + 5 * 60 * 1000);
-    db.prepare("UPDATE agents SET created_at = ?, updated_at = ?, cost_usd = 0 WHERE id = ?")
-      .run(created.toISOString(), updated.toISOString(), agent.id);
-
-    const agentRecord = db.prepare("SELECT * FROM agents WHERE id = ?").get(agent.id) as any;
-    estimateCostIfMissing(db, agentRecord);
-
-    // Check that cost was estimated (5 min * $0.05/min = ~$0.25)
     const after = db.prepare("SELECT cost_usd FROM runs WHERE id = ?").get(run.id) as { cost_usd: number };
     expect(after.cost_usd).toBeGreaterThan(0);
+  });
+
+  test("is idempotent for rapid calls (no double-counting)", () => {
+    const spec = createTestSpec(db);
+    const run = createRun(db, { spec_id: spec.id, budget_usd: 50 });
+
+    const agent = createAgent(db, {
+      agent_id: "", run_id: run.id, role: "evaluator",
+      name: "test-eval", system_prompt: "test",
+    });
+
+    const twoMinAgo = new Date(Date.now() - 2 * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    db.prepare("UPDATE agents SET created_at = ?, updated_at = ? WHERE id = ?")
+      .run(twoMinAgo, twoMinAgo, agent.id);
+
+    const cost1 = estimateAndRecordCost(db, agent.id);
+    const cost2 = estimateAndRecordCost(db, agent.id);
+
+    // Second call adds very little
+    const finalAgent = db.prepare("SELECT cost_usd FROM agents WHERE id = ?").get(agent.id) as { cost_usd: number };
+    expect(finalAgent.cost_usd).toBeLessThan(cost1 * 2 + 0.02);
   });
 });
 

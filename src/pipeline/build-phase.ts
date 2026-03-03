@@ -22,7 +22,7 @@ import { createMessage } from "../db/queries/messages.js";
 import { listContracts, createBinding, createDependency, satisfyDependency } from "../db/queries/contracts.js";
 import { updateAgentPid } from "../db/queries/agents.js";
 import { getReadyModules } from "./scheduler.js";
-import { checkBudget, recordCost } from "./budget.js";
+import { checkBudget, recordCost, estimateAndRecordCost } from "./budget.js";
 import { log } from "../utils/logger.js";
 import { getBuilderPrompt } from "../agents/prompts/builder.js";
 import { createWorktree, removeWorktree, getWorktreeCommits, worktreeHasCommits } from "../runtime/worktree.js";
@@ -75,28 +75,12 @@ async function waitForAgent(
       if (finalCheck?.status === "failed") {
         throw new Error(`Agent failed: ${finalCheck.error ?? "unknown error"}`);
       }
+      // Crashed agent — estimate one final cost increment (engine crash fallback)
+      estimateAndRecordCost(db, agentId);
       updateAgentStatus(db, agentId, "failed", "Process exited without completing");
       throw new Error("Agent process exited without completing");
     }
   }
-}
-
-/**
- * If an agent completed without self-reporting cost, estimate from elapsed time.
- * Rough heuristic: ~$0.05/min for Sonnet agents.
- */
-function estimateCostIfMissing(
-  db: SqliteDb,
-  agent: { id: string; run_id: string; cost_usd: number; created_at: string; updated_at: string },
-): void {
-  if (agent.cost_usd > 0) return;
-
-  const elapsedMs = new Date(agent.updated_at).getTime() - new Date(agent.created_at).getTime();
-  const elapsedMin = elapsedMs / 60_000;
-  const estimatedCost = Math.max(0.01, elapsedMin * 0.05);
-  const estimatedTokens = Math.round(elapsedMin * 4000);
-
-  recordCost(db, agent.run_id, agent.id, estimatedCost, estimatedTokens);
 }
 
 /**
@@ -332,8 +316,10 @@ export async function executeBuildPhase(
         completedModules.add(info.moduleId);
         activeBuilders.delete(agentId);
         createEvent(db, runId, "agent-completed", { moduleId: info.moduleId }, agentId);
-        estimateCostIfMissing(db, agentRecord);
-        log.info(`Builder completed: ${info.moduleId} ($${agentRecord.cost_usd.toFixed(2)})`);
+        // Cost is already tracked by the agent's `dark agent complete` call.
+        // No engine-side estimation needed for normally completing agents.
+        const updatedAgent = getAgent(db, agentId);
+        log.info(`Builder completed: ${info.moduleId} ($${(updatedAgent?.cost_usd ?? 0).toFixed(2)})`);
 
         // Satisfy dependencies that depend on this module
         const deps = db.prepare(
@@ -366,6 +352,8 @@ export async function executeBuildPhase(
       // DB status is still running — check if PID is alive
       const runtimeStatus = await runtime.status(agentId);
       if (runtimeStatus === "stopped" || runtimeStatus === "unknown") {
+        // Crashed agent — estimate one final cost increment (engine crash fallback)
+        estimateAndRecordCost(db, agentId);
         updateAgentStatus(db, agentId, "failed", "Process exited without completing");
         activeBuilders.delete(agentId);
         createEvent(db, runId, "agent-failed", {
@@ -610,6 +598,8 @@ export async function executeResumeBuildPhase(
 
       const runtimeStatus = await runtime.status(agentId);
       if (runtimeStatus === "stopped" || runtimeStatus === "unknown") {
+        // Crashed agent — estimate one final cost increment (engine crash fallback)
+        estimateAndRecordCost(db, agentId);
         updateAgentStatus(db, agentId, "failed", "Process exited without completing");
         activeBuilders.delete(agentId);
         createEvent(db, runId, "agent-failed", {

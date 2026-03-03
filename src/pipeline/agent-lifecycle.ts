@@ -10,7 +10,7 @@ import type { AgentRuntime } from "../runtime/interface.js";
 import type { ClaudeResult } from "../types/index.js";
 import { createAgent, getAgent, updateAgentPid, updateAgentStatus, updateAgentSessionId } from "../db/queries/agents.js";
 import { createEvent } from "../db/queries/events.js";
-import { recordCost } from "./budget.js";
+import { recordCost, estimateAndRecordCost } from "./budget.js";
 
 /** Default poll interval for waitForAgent (5 seconds). */
 export const DEFAULT_POLL_INTERVAL_MS = 5_000;
@@ -77,6 +77,10 @@ export async function waitForAgent(
       }
 
       // Process exited without calling complete or fail.
+      // This is the ONLY place the engine estimates cost — for agents that crashed
+      // without ever getting a chance to call back to the system.
+      estimateAndRecordCost(db, agentId);
+
       // Check the JSON result to understand why.
       const result = handle?.result ? await handle.result : null;
 
@@ -135,24 +139,6 @@ export async function waitForAgent(
 }
 
 /**
- * If an agent completed without self-reporting cost, estimate from elapsed time.
- * Rough heuristic: ~$0.05/min for Sonnet agents (typical tool-use sessions).
- */
-export function estimateCostIfMissing(
-  db: SqliteDb,
-  agent: { id: string; run_id: string; cost_usd: number; created_at: string; updated_at: string },
-): void {
-  if (agent.cost_usd > 0) return; // Already reported
-
-  const elapsedMs = new Date(agent.updated_at).getTime() - new Date(agent.created_at).getTime();
-  const elapsedMin = elapsedMs / 60_000;
-  const estimatedCost = Math.max(0.01, elapsedMin * 0.05); // ~$0.05/min heuristic
-  const estimatedTokens = Math.round(elapsedMin * 4000); // ~4K tokens/min heuristic
-
-  recordCost(db, agent.run_id, agent.id, estimatedCost, estimatedTokens);
-}
-
-/**
  * Spawn a single agent for a phase and wait for it to complete.
  *
  * This is the standard lifecycle for non-builder phases:
@@ -161,7 +147,10 @@ export function estimateCostIfMissing(
  * 3. Send instructions via mail (via caller-provided sendInstructions)
  * 4. Spawn the agent process
  * 5. Poll until completion
- * 6. Estimate cost if agent didn't self-report
+ *
+ * Cost tracking is handled automatically by agent commands (heartbeat, complete, fail, etc.)
+ * via estimateAndRecordCost. The only engine fallback is for crashed agents that never
+ * got a chance to call back.
  */
 export async function executeAgentPhase(
   db: SqliteDb,
@@ -223,9 +212,10 @@ export async function executeAgentPhase(
     const result = await waitForAgent(db, runtime, agent.id, handle, pollIntervalMs);
 
     // Check if agent called complete (DB status)
+    // Cost is already tracked by the agent's `dark agent complete` call.
+    // No engine-side estimation needed for normally completing agents.
     const finalAgent = getAgent(db, agent.id);
     if (finalAgent?.status === "completed") {
-      estimateCostIfMissing(db, finalAgent);
       console.log(`[dark] Agent ${finalAgent.name} completed. Cost: $${finalAgent.cost_usd.toFixed(2)}`);
       return;
     }
