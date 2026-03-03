@@ -447,6 +447,17 @@ function generateStyles(): string {
     white-space: nowrap;
   }
 
+  /* --- Run Card Alive Pulse --- */
+
+  .run-card.alive {
+    animation: glow-pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes glow-pulse {
+    0%, 100% { border-color: transparent; }
+    50% { border-color: rgba(63, 185, 80, 0.3); }
+  }
+
   /* --- Loading Spinner --- */
 
   .loading-spinner {
@@ -618,9 +629,10 @@ function generateScript(apiBase: string): string {
     }
     container.innerHTML = runs.map(function(run) {
       const isActive = run.id === selectedRunId ? " active" : "";
+      const isAlive = run.status === "running" ? " alive" : "";
       const progress = run.moduleCount > 0
         ? Math.round((run.completedCount / run.moduleCount) * 100) : 0;
-      return '<div class="run-card' + isActive + '" data-run-id="' + esc(run.id) + '">'
+      return '<div class="run-card' + isActive + isAlive + '" data-run-id="' + esc(run.id) + '">'
         + '<div class="run-card-header">'
         + '<span class="run-card-id">' + esc(run.id.slice(0, 16)) + '…</span>'
         + statusBadge(run.status)

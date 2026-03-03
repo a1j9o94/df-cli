@@ -161,6 +161,47 @@ describe("Estimated Cost Display", () => {
   });
 });
 
+describe("Run Card Sidebar Pulse for Active Runs", () => {
+  const html = generateDashboardHtml();
+
+  it("contains CSS for run-card.alive animation", () => {
+    expect(html).toContain(".run-card.alive");
+  });
+
+  it("run-card.alive has a subtle CSS animation", () => {
+    expect(html).toMatch(/\.run-card\.alive\s*\{[^}]*animation/);
+  });
+
+  it("defines @keyframes glow-pulse for sidebar cards", () => {
+    expect(html).toContain("@keyframes glow-pulse");
+  });
+
+  it("renderRunsList JS adds alive class to running run cards", () => {
+    // The JS should check run.status === 'running' and add 'alive' class
+    expect(html).toMatch(/run\.status\s*===\s*["']running["']/);
+    expect(html).toContain("alive");
+  });
+
+  it("non-running run cards do not get alive class", () => {
+    // The alive class should only be added conditionally for running status
+    const renderSection = html.substring(html.indexOf("function renderRunsList"));
+    expect(renderSection).toMatch(/status\s*===\s*["']running["']\s*\?\s*["']\s*alive["']/);
+  });
+});
+
+describe("No Animation on Completed Runs", () => {
+  const html = generateDashboardHtml();
+
+  it("completed run cards do not get alive class", () => {
+    // Only running status should get the alive class
+    const renderSection = html.substring(html.indexOf("function renderRunsList"));
+    // The alive conditional should check specifically for 'running'
+    expect(renderSection).toMatch(/status\s*===\s*["']running["']/);
+    // It should not match 'completed' or 'failed' for alive
+    expect(renderSection).not.toMatch(/status\s*===\s*["']completed["'].*alive/);
+  });
+});
+
 describe("Loading indicators are CSS-only (no external deps)", () => {
   const html = generateDashboardHtml();
 
