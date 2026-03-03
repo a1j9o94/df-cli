@@ -52,6 +52,8 @@ export interface DfConfig {
     max_iterations: number;
     /** Cost per minute for time-based agent cost estimation. Default: 0.05 */
     cost_per_minute: number;
+    /** Max failed attempts per module before triggering re-decomposition. Default: 2 */
+    max_module_retries: number;
   };
   cost: CostConfig;
   runtime: {
@@ -82,6 +84,7 @@ export const DEFAULT_CONFIG: DfConfig = {
     budget_usd: 50.0,
     max_iterations: 3,
     cost_per_minute: 0.05,
+    max_module_retries: 2,
   },
   cost: { ...DEFAULT_COST_CONFIG },
   runtime: {
