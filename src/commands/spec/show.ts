@@ -35,6 +35,9 @@ export const specShowCommand = new Command("show")
     console.log(`  Title:      ${spec.title}`);
     console.log(`  Status:     ${formatStatus(spec.status)}`);
     console.log(`  File:       ${spec.file_path}`);
+    if (spec.parent_spec_id) {
+      console.log(`  Parent:     ${spec.parent_spec_id}`);
+    }
     console.log(`  Scenarios:  ${spec.scenario_count}`);
     console.log(`  Created:    ${spec.created_at}`);
 

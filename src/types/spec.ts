@@ -8,6 +8,7 @@ export interface SpecRecord {
   content_hash: string;
   parent_spec_id: string | null;
   scenario_count: number;
+  parent_spec_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -21,4 +22,5 @@ export interface SpecFrontmatter {
   priority: string;
   parent_spec_id?: string;
   scenarios?: number;
+  parent_spec_id?: string;
 }
