@@ -5,6 +5,7 @@ import { findDfDir } from "../utils/config.js";
 import { generateDashboardHtml } from "./index.js";
 import { getRunQueueInfo, type RunQueueInfo } from "../pipeline/queue-visibility.js";
 import { computeElapsedMs, estimateCost } from "../utils/agent-enrichment.js";
+import { PHASE_ORDER, shouldSkipPhase, type PhaseName } from "../pipeline/phases.js";
 
 // --- Contract: ServerExport ---
 
@@ -465,6 +466,79 @@ function handleGetModules(db: InstanceType<typeof Database>, runId: string): Res
   return jsonResponse(moduleStatuses);
 }
 
+// --- Phase labels ---
+
+const PHASE_LABELS: Record<string, string> = {
+  scout: "Scout",
+  architect: "Architect",
+  "plan-review": "Plan Review",
+  build: "Build",
+  integrate: "Integrate",
+  "evaluate-functional": "Evaluate",
+  "evaluate-change": "Change Eval",
+  merge: "Merge",
+};
+
+function handleGetPhases(db: InstanceType<typeof Database>, runId: string): Response {
+  const result = validateRun(db, runId);
+  if ("error" in result) return result.error;
+
+  const run = result.run;
+  const currentPhase = (run.current_phase as string) ?? null;
+  const mode = (run.mode as string) ?? "thorough";
+
+  // Determine module count from buildplan
+  let moduleCount = 0;
+  const plan = db
+    .prepare(
+      "SELECT module_count FROM buildplans WHERE run_id = ? AND status = 'active' ORDER BY version DESC LIMIT 1",
+    )
+    .get(runId) as { module_count: number } | null;
+  if (plan) {
+    moduleCount = plan.module_count;
+  }
+
+  // Determine skip_architect from run config
+  let skipArchitect = false;
+  try {
+    const config = JSON.parse((run.config as string) ?? "{}");
+    skipArchitect = config.skip_architect === true;
+  } catch {
+    // ignore parse errors
+  }
+
+  const skipContext = {
+    skip_architect: skipArchitect,
+    module_count: moduleCount,
+    mode,
+  };
+
+  const currentIdx = currentPhase ? PHASE_ORDER.indexOf(currentPhase as PhaseName) : -1;
+
+  const phases = PHASE_ORDER.map((phaseId, idx) => {
+    const isSkipped = shouldSkipPhase(phaseId, skipContext);
+
+    let status: "completed" | "active" | "pending" | "skipped";
+    if (isSkipped) {
+      status = "skipped";
+    } else if (currentIdx >= 0 && idx < currentIdx) {
+      status = "completed";
+    } else if (currentIdx >= 0 && idx === currentIdx) {
+      status = "active";
+    } else {
+      status = "pending";
+    }
+
+    return {
+      id: phaseId,
+      label: PHASE_LABELS[phaseId] ?? phaseId,
+      status,
+    };
+  });
+
+  return jsonResponse(phases);
+}
+
 // --- URL Router ---
 
 function route(
@@ -517,6 +591,8 @@ function route(
         return handleGetScenarios(db, runId);
       case "modules":
         return handleGetModules(db, runId);
+      case "phases":
+        return handleGetPhases(db, runId);
       default:
         return errorResponse(`Unknown sub-resource: ${sub}`, 404);
     }

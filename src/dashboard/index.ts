@@ -867,6 +867,15 @@ function generateScript(apiBase: string): string {
     }
   }
 
+  function agentStatusIcon(status) {
+    if (status === "running") return '<span class="agent-spinner"></span>';
+    if (status === "spawning") return '<span class="agent-spinner spawning"></span>';
+    if (status === "completed") return '<span class="agent-status-icon completed">\u2713</span>';
+    if (status === "failed") return '<span class="agent-status-icon failed">\u2717</span>';
+    if (status === "killed") return '<span class="agent-status-icon killed">\u2717</span>';
+    return '<span class="agent-status-indicator ' + esc(status || "pending") + '"></span>';
+  }
+
   function renderAgents(agents) {
     const container = document.getElementById("agents-container");
     if (!agents || agents.length === 0) {
