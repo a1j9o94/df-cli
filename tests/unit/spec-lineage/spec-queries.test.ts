@@ -57,8 +57,9 @@ describe("getSpecLineage", () => {
   test("returns single-element chain for spec with no parent", () => {
     createSpec(db, "spec_root", "Root", "specs/root.md");
     const chain = getSpecLineage(db, "spec_root");
-    expect(chain).toHaveLength(1);
-    expect(chain[0].id).toBe("spec_root");
+    expect(chain).not.toBeNull();
+    expect(chain!).toHaveLength(1);
+    expect(chain![0].id).toBe("spec_root");
   });
 
   test("returns full ancestor chain: root → parent → child", () => {
@@ -66,11 +67,12 @@ describe("getSpecLineage", () => {
     createSpecFrom(db, "spec_mid", "Middle", "specs/mid.md", "spec_root");
     createSpecFrom(db, "spec_leaf", "Leaf", "specs/leaf.md", "spec_mid");
     const chain = getSpecLineage(db, "spec_leaf");
-    expect(chain).toHaveLength(3);
+    expect(chain).not.toBeNull();
+    expect(chain!).toHaveLength(3);
     // Chain should be ordered root-first
-    expect(chain[0].id).toBe("spec_root");
-    expect(chain[1].id).toBe("spec_mid");
-    expect(chain[2].id).toBe("spec_leaf");
+    expect(chain![0].id).toBe("spec_root");
+    expect(chain![1].id).toBe("spec_mid");
+    expect(chain![2].id).toBe("spec_leaf");
   });
 
   test("returns null for nonexistent spec", () => {
