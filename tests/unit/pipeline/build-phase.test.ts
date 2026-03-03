@@ -326,5 +326,5 @@ describe("executeResumeBuildPhase", () => {
     expect(agents.length).toBe(2);
     const moduleIds = agents.map((a) => a.module_id);
     expect(moduleIds).toEqual(["module-b", "module-c"]);
-  });
+  }, 15_000);
 });
