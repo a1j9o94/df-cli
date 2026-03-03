@@ -4,6 +4,7 @@ import { SCHEMA_SQL } from "../db/schema.js";
 import { findDfDir } from "../utils/config.js";
 import { generateDashboardHtml } from "./index.js";
 import { getRunQueueInfo, type RunQueueInfo } from "../pipeline/queue-visibility.js";
+import { computeElapsedMs, estimateCost } from "../utils/agent-enrichment.js";
 
 // --- Contract: ServerExport ---
 
@@ -32,6 +33,7 @@ interface RunSummary {
   elapsed: string;
   moduleCount: number;
   completedCount: number;
+  estimatedCost: number;
   error?: string;
   createdAt: string;
   tokensUsed: number;
@@ -54,6 +56,7 @@ interface AgentSummary {
   cost: number;
   tokens: number;
   elapsed: string;
+  estimatedCost: number;
   moduleId?: string;
   tddPhase?: string;
   tddCycles?: number;
@@ -180,6 +183,19 @@ function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unkno
       .get(runId) as { cnt: number }
   ).cnt;
 
+  // Compute estimated cost for this run by summing estimates across active agents with cost=0
+  let runEstimatedCost = 0;
+  const agentRows = db
+    .prepare("SELECT status, cost_usd, created_at FROM agents WHERE run_id = ?")
+    .all(runId) as Array<{ status: string; cost_usd: number; created_at: string }>;
+
+  for (const agent of agentRows) {
+    if (agent.cost_usd === 0) {
+      const elapsedMs = computeElapsedMs(agent.created_at, agent.status);
+      runEstimatedCost += estimateCost(elapsedMs);
+    }
+  }
+
   const updatedAt =
     r.status === "running" || r.status === "pending" ? undefined : (r.updated_at as string);
 
@@ -193,6 +209,7 @@ function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unkno
     elapsed: computeElapsed(r.created_at as string, updatedAt),
     moduleCount,
     completedCount,
+    estimatedCost: runEstimatedCost,
     createdAt: r.created_at as string,
     tokensUsed: r.tokens_used as number,
   };
@@ -233,15 +250,25 @@ function handleGetAgents(db: InstanceType<typeof Database>, runId: string): Resp
     const updatedAt =
       a.status === "running" || a.status === "pending" ? undefined : (a.updated_at as string);
 
+    // Compute estimated cost for active agents with no real cost yet
+    const agentCost = a.cost_usd as number;
+    const agentStatus = a.status as string;
+    let agentEstimatedCost = 0;
+    if (agentCost === 0) {
+      const elapsedMs = computeElapsedMs(a.created_at as string, agentStatus);
+      agentEstimatedCost = estimateCost(elapsedMs);
+    }
+
     const summary: AgentSummary = {
       id: a.id as string,
       role: a.role as string,
       name: a.name as string,
-      status: a.status as string,
+      status: agentStatus,
       pid: (a.pid as number) ?? null,
-      cost: a.cost_usd as number,
+      cost: agentCost,
       tokens: a.tokens_used as number,
       elapsed: computeElapsed(a.created_at as string, updatedAt),
+      estimatedCost: agentEstimatedCost,
     };
 
     if (a.module_id) summary.moduleId = a.module_id as string;
