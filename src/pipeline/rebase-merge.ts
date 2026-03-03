@@ -370,3 +370,40 @@ export function rebaseAndMerge(
     branchResults,
   };
 }
+
+/**
+ * Scan all tracked files in a repository for conflict markers.
+ *
+ * Checks for `<<<<<<<`, `=======`, and `>>>>>>>` patterns in tracked files.
+ * Used after agent conflict resolution to verify no markers remain.
+ *
+ * @param repoPath - Path to the repository to scan
+ * @returns Object with `found` boolean and `files` array of paths containing markers
+ */
+export function scanConflictMarkers(repoPath: string): {
+  found: boolean;
+  files: string[];
+} {
+  try {
+    // Use git grep to find conflict markers in tracked files
+    // git grep returns exit code 1 when no matches found, 0 when matches found
+    const output = execSync(
+      'git grep -l "^<<<<<<<\\|^=======\\|^>>>>>>>" -- ":(exclude).df/"',
+      {
+        cwd: repoPath,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    ).trim();
+
+    if (output.length === 0) {
+      return { found: false, files: [] };
+    }
+
+    const files = output.split("\n").filter(Boolean);
+    return { found: files.length > 0, files };
+  } catch {
+    // git grep returns exit code 1 when no matches found — that's the happy path
+    return { found: false, files: [] };
+  }
+}
