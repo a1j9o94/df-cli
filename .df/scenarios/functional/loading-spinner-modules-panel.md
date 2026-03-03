@@ -1,28 +1,16 @@
 ---
 name: loading-spinner-modules-panel
 type: functional
-spec_id: run_01KJRFKRTWVQCMT4QE63HSTTTX
-created_by: agt_01KJRFKRTYPNYRAWF618C92CKJ
+spec_id: run_01KJRQYQMGFJ5J31M5F5CCD6KM
+created_by: agt_01KJRQYQMH3ZCH0EQ5168F1SV9
 ---
 
-SCENARIO: Loading spinner appears in modules panel during data fetch.
-
-PRECONDITIONS:
-- Dashboard server is running
-- At least one run exists with modules (has an active buildplan)
-
-STEPS:
-1. Open dashboard at http://localhost:3141
-2. Click on a run card in the sidebar
-3. Switch to the Modules tab
-4. Observe the modules panel (#modules-container) during data load
-
-EXPECTED:
-- A loading indicator (spinner, skeleton, or animated element) should be visible inside the modules panel before module data arrives
-- The loading indicator has a CSS animation (not just static 'Loading...' text)
-- After modules data loads, the loading indicator is replaced with module cards
-
-VERIFICATION:
-- The generated HTML should contain a loading indicator element for the modules panel
-- The JS should show loading state before fetchJson call for modules and clear it after
-- Test: generateDashboardHtml() output contains a loading indicator element in or near the modules panel
+Test: Loading spinner appears in modules panel during data fetch.
+Setup: Call generateDashboardHtml() to get the HTML string.
+Steps:
+1. Parse the generated HTML string
+2. Find the loadModules function in the JS section
+3. Verify that before the fetchJson call for modules, container.innerHTML is set to a loading-spinner element
+4. Verify the loading-spinner text says 'Loading modules' (with ellipsis)
+Expected output: The HTML contains a loading-spinner div set before the fetch call in loadModules.
+Pass criteria: loading-spinner innerHTML appears before fetchJson modules call in the JS; the spinner uses the same CSS class as agents panel.
