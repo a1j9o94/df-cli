@@ -1,41 +1,47 @@
 ---
 name: agent-show-detail
 type: functional
-spec_id: run_01KJR3DRQJPAE01XP0BJ0TGM1E
-created_by: agt_01KJR3DRQKZK8N369V2TJZ66EJ
+spec_id: run_01KJSXZQ1WDY0A0JVRTZPNB3AW
+created_by: agt_01KJSXZQ1X0E7M9WZA7R77WKY6
 ---
 
-Test: 'dark agent show <id>' displays full agent detail including mail history and events.
+SCENARIO: dark agent show <id> displays full agent detail with events and messages.
 
-SETUP:
-1. Initialize in-memory DB
-2. Create a run record (run_01TEST) with spec_id=spec_01TEST
-3. Create an agent (agt_01TEST) with: role=builder, name=builder-auth, status=running, pid=12345, module_id=mod-auth, worktree_path=/tmp/wt-auth, cost_usd=1.50, tokens_used=50000, created_at=15 minutes ago, last_heartbeat=2 minutes ago
-4. Create 2 messages TO this agent (from orchestrator)
-5. Create 3 events for this agent (agent-spawned, agent-heartbeat, agent-heartbeat)
+PRECONDITIONS:
+- An agent exists in the DB with: id, name, role, status, pid, module_id, worktree_path, cost_usd > 0, tokens_used > 0, last_heartbeat set, created_at, updated_at.
+- The agent has at least 2 events in the events table (e.g., agent-spawned, agent-heartbeat).
+- The agent has at least 1 message in the messages table (to_agent_id = agent.id).
 
-EXECUTE:
-Run 'dark agent show agt_01TEST'
+STEPS:
+1. Run: dark agent show <agent_id>
+2. Capture text output.
+3. Run: dark agent show <agent_id> --json
+4. Parse JSON output.
 
-EXPECTED OUTPUT must include ALL of:
-- Agent ID: agt_01TEST
-- Role: builder
-- Name: builder-auth
-- Status: running
-- PID: 12345
-- Module: mod-auth
-- Worktree: /tmp/wt-auth
-- Cost: $1.50
-- Tokens: 50,000 (or 50000)
-- Created: (timestamp or relative time)
-- Last heartbeat: (relative time like '2m ago')
-- Elapsed: ~15m (or similar human-readable)
-- Mail history section with at least 2 messages
-- Events section with at least 3 events
+EXPECTED TEXT OUTPUT must contain ALL of these fields:
+- 'Agent: <id>' header line
+- 'Name:' with agent name
+- 'Role:' with agent role
+- 'Status:' with agent status
+- 'PID:' with PID or 'none'
+- 'Module:' with module_id or 'none'
+- 'Worktree:' with path or 'none'
+- 'Branch:' with branch or 'none'
+- 'Elapsed:' with time string
+- 'Heartbeat:' with relative time
+- 'Cost:' with dollar amount
+- 'Tokens:' with formatted number
+- 'Events (N):' section with at least 2 entries
+- 'Messages (N):' section with at least 1 entry showing from, read status, and truncated body
+
+EXPECTED JSON OUTPUT:
+- Has agent object with all AgentRecord fields
+- Has events array with EventRecord objects
+- Has messages array with MessageRecord objects
 
 PASS CRITERIA:
-- The command 'dark agent show' exists and is registered
-- All listed fields appear in output
-- Mail messages show sender and body excerpt
-- Events show type and timestamp
-- If agent not found, outputs error 'Agent not found: <id>'
+- Text output contains all 12+ labeled fields listed above.
+- Events section shows type and relative time for each event.
+- Messages section shows from_agent_id, [unread] marker if unread, and message body (truncated to ~80 chars).
+- --json output parses as valid JSON with agent, events, messages keys.
+- Non-existent agent ID returns error message and exits non-zero.
