@@ -44,6 +44,8 @@ export interface DfConfig {
     max_parallel: number;
     budget_usd: number;
     max_iterations: number;
+    /** Cost per minute for time-based agent cost estimation. Default: 0.05 */
+    cost_per_minute: number;
   };
   runtime: {
     agent_binary: string;
@@ -73,6 +75,7 @@ export const DEFAULT_CONFIG: DfConfig = {
     max_parallel: 4,
     budget_usd: 50.0,
     max_iterations: 3,
+    cost_per_minute: 0.05,
   },
   runtime: {
     agent_binary: "claude",

@@ -28,7 +28,7 @@ export const agentReportResultCommand = new Command("report-result")
       process.exit(1);
     }
 
-    // Estimate cost on report-result
+    // Estimate cost on every agent command
     estimateAndRecordCost(db, agentId);
 
     if (agent.role !== "evaluator" && agent.role !== "integration-tester") {

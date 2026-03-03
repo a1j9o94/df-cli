@@ -135,24 +135,6 @@ export async function waitForAgent(
 }
 
 /**
- * If an agent completed without self-reporting cost, estimate from elapsed time.
- * Rough heuristic: ~$0.05/min for Sonnet agents (typical tool-use sessions).
- */
-export function estimateCostIfMissing(
-  db: SqliteDb,
-  agent: { id: string; run_id: string; cost_usd: number; created_at: string; updated_at: string },
-): void {
-  if (agent.cost_usd > 0) return; // Already reported
-
-  const elapsedMs = new Date(agent.updated_at).getTime() - new Date(agent.created_at).getTime();
-  const elapsedMin = elapsedMs / 60_000;
-  const estimatedCost = Math.max(0.01, elapsedMin * 0.05); // ~$0.05/min heuristic
-  const estimatedTokens = Math.round(elapsedMin * 4000); // ~4K tokens/min heuristic
-
-  recordCost(db, agent.run_id, agent.id, estimatedCost, estimatedTokens);
-}
-
-/**
  * Spawn a single agent for a phase and wait for it to complete.
  *
  * This is the standard lifecycle for non-builder phases:
@@ -161,7 +143,10 @@ export function estimateCostIfMissing(
  * 3. Send instructions via mail (via caller-provided sendInstructions)
  * 4. Spawn the agent process
  * 5. Poll until completion
- * 6. Estimate cost if agent didn't self-report
+ *
+ * Cost tracking is handled at the command layer — every agent command
+ * (heartbeat, complete, fail, mail check, etc.) calls estimateAndRecordCost
+ * automatically. No engine-side estimation needed.
  */
 export async function executeAgentPhase(
   db: SqliteDb,
@@ -225,7 +210,7 @@ export async function executeAgentPhase(
     // Check if agent called complete (DB status)
     const finalAgent = getAgent(db, agent.id);
     if (finalAgent?.status === "completed") {
-      estimateCostIfMissing(db, finalAgent);
+      // Cost tracking is handled at the command layer (estimateAndRecordCost in budget.ts)
       console.log(`[dark] Agent ${finalAgent.name} completed. Cost: $${finalAgent.cost_usd.toFixed(2)}`);
       return;
     }

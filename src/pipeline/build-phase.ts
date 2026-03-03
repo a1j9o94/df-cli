@@ -82,24 +82,6 @@ async function waitForAgent(
 }
 
 /**
- * If an agent completed without self-reporting cost, estimate from elapsed time.
- * Rough heuristic: ~$0.05/min for Sonnet agents.
- */
-function estimateCostIfMissing(
-  db: SqliteDb,
-  agent: { id: string; run_id: string; cost_usd: number; created_at: string; updated_at: string },
-): void {
-  if (agent.cost_usd > 0) return;
-
-  const elapsedMs = new Date(agent.updated_at).getTime() - new Date(agent.created_at).getTime();
-  const elapsedMin = elapsedMs / 60_000;
-  const estimatedCost = Math.max(0.01, elapsedMin * 0.05);
-  const estimatedTokens = Math.round(elapsedMin * 4000);
-
-  recordCost(db, agent.run_id, agent.id, estimatedCost, estimatedTokens);
-}
-
-/**
  * Send builder-specific instructions via the mail system.
  * If previousCommits is provided, includes them in the instructions
  * so the builder knows what was already done by a previous attempt.
@@ -332,7 +314,8 @@ export async function executeBuildPhase(
         completedModules.add(info.moduleId);
         activeBuilders.delete(agentId);
         createEvent(db, runId, "agent-completed", { moduleId: info.moduleId }, agentId);
-        estimateCostIfMissing(db, agentRecord);
+        // Cost tracking is now handled at the command layer (estimateAndRecordCost)
+        // No engine-side estimation needed — every agent command records cost automatically
         log.info(`Builder completed: ${info.moduleId} ($${agentRecord.cost_usd.toFixed(2)})`);
 
         // Satisfy dependencies that depend on this module

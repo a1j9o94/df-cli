@@ -26,7 +26,7 @@ export const contractAcknowledgeCommand = new Command("acknowledge")
       process.exit(1);
     }
 
-    // Estimate cost on contract acknowledge
+    // Estimate cost on every contract acknowledge
     estimateAndRecordCost(db, options.agent);
 
     acknowledgeContract(db, contractId, options.agent);

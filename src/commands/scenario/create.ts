@@ -32,7 +32,7 @@ export const scenarioCreateCommand = new Command("create")
       process.exit(1);
     }
 
-    // Estimate cost on scenario creation
+    // Estimate cost on every scenario create
     estimateAndRecordCost(db, agentId);
 
     if (agent.role !== "architect" && agent.role !== "evaluator") {

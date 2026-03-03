@@ -34,6 +34,9 @@ export const agentCompleteCommand = new Command("complete")
       process.exit(1);
     }
 
+    // Estimate final cost before marking complete
+    estimateAndRecordCost(db, agentId);
+
     // Role-specific completion guards
     const guardError = checkCompletionGuard(db, dfDir, agent);
     if (guardError) {

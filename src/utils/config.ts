@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import type { DfConfig, CostConfig } from "../types/config.js";
 import { DEFAULT_CONFIG } from "../types/config.js";
-import { resolveCostConfig } from "./cost.js";
+import { resolveCostConfig } from "../pipeline/cost.js";
 
 export function findDfDir(startDir?: string): string | null {
   let dir = resolve(startDir ?? process.cwd());

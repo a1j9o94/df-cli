@@ -3,6 +3,9 @@ import { getRun } from "../db/queries/runs.js";
 import { getAgent, listAgents, updateAgentCost } from "../db/queries/agents.js";
 import { updateRunCost } from "../db/queries/runs.js";
 
+/** Default cost per minute for agent time estimation. */
+const DEFAULT_COST_PER_MINUTE = 0.05;
+
 export interface BudgetStatus {
   budgetUsd: number;
   spentUsd: number;
@@ -35,6 +38,53 @@ export function recordCost(
 ): void {
   updateAgentCost(db, agentId, costUsd, tokensUsed);
   updateRunCost(db, runId, costUsd, tokensUsed);
+}
+
+/**
+ * Estimate incremental cost for an agent based on elapsed time since last
+ * cost-recording touchpoint and record it. Uses the LATER of
+ * (last_heartbeat, updated_at, created_at) as the base time.
+ *
+ * This is the single shared helper that every agent command calls as a side
+ * effect — making cost tracking automatic and unavoidable.
+ *
+ * Idempotent for rapid successive calls: uses time-since-last-update,
+ * not time-since-creation, so calling twice in quick succession adds ~$0.
+ *
+ * @returns The new total cost for the agent.
+ */
+export function estimateAndRecordCost(
+  db: SqliteDb,
+  agentId: string,
+  costPerMinute: number = DEFAULT_COST_PER_MINUTE,
+): number {
+  const agent = getAgent(db, agentId);
+  if (!agent) throw new Error(`Agent not found: ${agentId}`);
+
+  // Use the LATER of (last_heartbeat, updated_at, created_at) as the base time
+  const candidates: number[] = [
+    new Date(agent.created_at).getTime(),
+  ];
+  if (agent.updated_at) {
+    candidates.push(new Date(agent.updated_at).getTime());
+  }
+  if (agent.last_heartbeat) {
+    candidates.push(new Date(agent.last_heartbeat).getTime());
+  }
+
+  const baseTime = Math.max(...candidates);
+  const nowMs = Date.now();
+  const elapsedMs = nowMs - baseTime;
+  const elapsedMin = elapsedMs / 60_000;
+
+  const estimatedCost = Math.max(0.01, elapsedMin * costPerMinute);
+  const estimatedTokens = Math.round(elapsedMin * 4000); // ~4K tokens/min heuristic
+
+  recordCost(db, agent.run_id, agentId, estimatedCost, Math.max(0, estimatedTokens));
+
+  // Re-read the agent to get the updated total
+  const updatedAgent = getAgent(db, agentId);
+  return updatedAgent?.cost_usd ?? estimatedCost;
 }
 
 /**
