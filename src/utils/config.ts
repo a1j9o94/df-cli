@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
-import type { DfConfig } from "../types/config.js";
+import type { DfConfig, CostConfig } from "../types/config.js";
 import { DEFAULT_CONFIG } from "../types/config.js";
+import { resolveCostConfig } from "./cost.js";
 
 export function findDfDir(startDir?: string): string | null {
   let dir = resolve(startDir ?? process.cwd());
@@ -33,9 +34,23 @@ export function getConfig(dfDir?: string): DfConfig {
   }
 
   const raw = readFileSync(configPath, "utf-8");
-  const parsed = parseYaml(raw) as Partial<DfConfig>;
+  const parsed = parseYaml(raw) as Record<string, unknown>;
 
-  return deepMerge(DEFAULT_CONFIG as unknown as Record<string, unknown>, parsed as unknown as Record<string, unknown>) as unknown as DfConfig;
+  // Extract cost section for special resolution (profile handling)
+  const rawCost = parsed.cost as Partial<CostConfig> | undefined;
+  // Remove cost from parsed so deepMerge doesn't handle it
+  const { cost: _cost, ...parsedWithoutCost } = parsed;
+
+  // Deep merge everything except cost
+  const merged = deepMerge(
+    DEFAULT_CONFIG as unknown as Record<string, unknown>,
+    parsedWithoutCost as Record<string, unknown>,
+  ) as unknown as DfConfig;
+
+  // Resolve cost config with profile support
+  merged.cost = resolveCostConfig(rawCost ?? {});
+
+  return merged;
 }
 
 function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
