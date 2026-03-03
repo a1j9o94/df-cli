@@ -165,12 +165,12 @@ export function sendInstructions(
     }
 
     case "builder": {
-      body = buildBuilderBody(agentId, context);
+      body = buildBuilderBody(agentId, runId, context);
       break;
     }
 
     case "evaluator": {
-      body = buildEvaluatorBody(agentId);
+      body = buildEvaluatorBody(agentId, runId);
       break;
     }
 
@@ -242,12 +242,17 @@ function buildArchitectBody(agentId: string, context: Record<string, unknown>): 
     "IMPORTANT: You MUST create at least one scenario AND submit a buildplan before completing.",
     "Scenarios are holdout tests that builders never see — the evaluator uses them to validate the build.",
     "",
+    "## Research",
+    "Save research findings for other agents to reference:",
+    `- Save text: dark research add ${agentId} --label "<label>" --content "<URL, code snippet, API docs excerpt, or decision rationale>" [--module <module-id>]`,
+    `- Save file: dark research add ${agentId} --label "<label>" --file <path> [--module <module-id>]`,
+    "",
     "If you cannot complete this work, call:",
     `dark agent fail ${agentId} --error "<description>"`,
   ].join("\n");
 }
 
-function buildBuilderBody(agentId: string, context: Record<string, unknown>): string {
+function buildBuilderBody(agentId: string, runId: string, context: Record<string, unknown>): string {
   const moduleId = context.moduleId as string;
   const worktreePath = context.worktreePath as string;
   const contracts = context.contracts as string[] | undefined;
@@ -284,6 +289,11 @@ function buildBuilderBody(agentId: string, context: Record<string, unknown>): st
     "",
     preloadSection,
     "",
+    "## Research",
+    "Check for architect research findings relevant to your module:",
+    `- List research: dark research list --run-id ${runId} --module ${moduleId}`,
+    `- View details: dark research show <research-id>`,
+    "",
     "## Steps",
     "1. Read this assignment and understand your module scope",
     "2. Follow TDD: write a failing test, make it pass, refactor",
@@ -302,9 +312,14 @@ function buildBuilderBody(agentId: string, context: Record<string, unknown>): st
   ].join("\n");
 }
 
-function buildEvaluatorBody(agentId: string): string {
+function buildEvaluatorBody(agentId: string, runId: string): string {
   return [
     "# Evaluator Instructions",
+    "",
+    "## Research",
+    "Review architect research findings for additional context:",
+    `- List all research: dark research list --run-id ${runId}`,
+    `- View details: dark research show <research-id>`,
     "",
     "## Holdout Scenarios",
     "List available scenarios: dark scenario list --json",
