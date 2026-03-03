@@ -1,0 +1,4 @@
+# Module: build-guards-pipeline-lifecycle
+# Status: complete
+# Tests: 67 new tests, all passing
+# Contracts: SpecStatusTransitionAPI, SpecTypeExtensions, BuildCommandInterface
