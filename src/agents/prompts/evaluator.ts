@@ -49,6 +49,11 @@ This makes the system learn — each iteration gets harder to fool.
 - Overall score = average of scenario scores
 - Report the score — the pipeline compares against the configured threshold
 
+## Research
+Review all architect research findings for additional context on the spec:
+- List all research: dark research list --run-id ${context.runId}
+- View details: dark research show <research-id>
+
 ## Communication
 - Check messages: dark mail check --agent ${context.agentId}
 - List scenarios: dark scenario list [--type functional|change] [--json]

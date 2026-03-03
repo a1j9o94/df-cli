@@ -72,6 +72,8 @@ The buildplan JSON must contain:
 - Send messages: dark mail send --to <target> --body "..." --from ${context.agentId} --run-id ${context.runId}
 - Create scenario: dark scenario create ${context.agentId} --name "<name>" --type <functional|change> --content "<content>"
 - Submit buildplan: dark architect submit-plan ${context.agentId} --plan '<json>'
+- Save research (text): dark research add ${context.agentId} --label "<label>" --content "<URL, code snippet, API docs excerpt, or decision rationale>" [--module <module-id>]
+- Save research (file): dark research add ${context.agentId} --label "<label>" --file <path> [--module <module-id>]
 - Heartbeat: dark agent heartbeat ${context.agentId}
 - Complete: dark agent complete ${context.agentId}
 - Fail: dark agent fail ${context.agentId} --error "<description>"

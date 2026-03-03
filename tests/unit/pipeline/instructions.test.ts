@@ -352,3 +352,100 @@ describe("sendInstructions - builder staging branch warning", () => {
     expect(criticalIndex).toBeGreaterThan(stepsIndex);
   });
 });
+
+// ============================================================
+// sendInstructions — research CLI references in instruction mails
+// ============================================================
+describe("sendInstructions — research CLI references", () => {
+  test("architect instructions mention dark research add for saving findings", () => {
+    sendInstructions(db, runId, agentId, "architect", {
+      specFilePath: "/tmp/fake-spec.md",
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("dark research add");
+  });
+
+  test("architect instructions include --label and --content flags", () => {
+    sendInstructions(db, runId, agentId, "architect", {});
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("--label");
+    expect(messages[0].body).toContain("--content");
+  });
+
+  test("architect instructions include --file flag for attachments", () => {
+    sendInstructions(db, runId, agentId, "architect", {});
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("--file");
+  });
+
+  test("architect instructions include optional --module flag", () => {
+    sendInstructions(db, runId, agentId, "architect", {});
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("--module");
+  });
+
+  test("builder instructions mention dark research list for checking research", () => {
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "test-mod",
+      worktreePath: "/tmp/wt",
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("dark research list");
+  });
+
+  test("builder instructions include --run-id in research list command", () => {
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "test-mod",
+      worktreePath: "/tmp/wt",
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toMatch(/dark research list.*--run-id/);
+  });
+
+  test("builder instructions include --module in research list for module filtering", () => {
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "test-mod",
+      worktreePath: "/tmp/wt",
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toMatch(/dark research list.*--module/);
+  });
+
+  test("builder instructions include dark research show for viewing details", () => {
+    sendInstructions(db, runId, agentId, "builder", {
+      moduleId: "test-mod",
+      worktreePath: "/tmp/wt",
+    });
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("dark research show");
+  });
+
+  test("evaluator instructions mention dark research list", () => {
+    sendInstructions(db, runId, agentId, "evaluator", {});
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("dark research list");
+  });
+
+  test("evaluator instructions include --run-id in research list", () => {
+    sendInstructions(db, runId, agentId, "evaluator", {});
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toMatch(/dark research list.*--run-id/);
+  });
+
+  test("evaluator instructions include dark research show", () => {
+    sendInstructions(db, runId, agentId, "evaluator", {});
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("dark research show");
+  });
+});
