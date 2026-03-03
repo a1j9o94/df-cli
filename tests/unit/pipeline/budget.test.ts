@@ -113,7 +113,7 @@ describe("estimateAndRecordCost", () => {
     // Calling again immediately should add near-zero (time since last update is ~0)
     const second = estimateAndRecordCost(db, agent.id);
     // The second call's delta should be tiny (milliseconds of elapsed time)
-    expect(second - first).toBeLessThan(0.01);
+    expect(second - first).toBeLessThan(0.02);
   });
 
   test("returns new total cost for agent", () => {

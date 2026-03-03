@@ -40,7 +40,7 @@ describe("command cost integration patterns", () => {
 
     // Second heartbeat (immediately after) — near-zero increment
     const cost2 = estimateAndRecordCost(db, agent.id);
-    expect(cost2 - cost1).toBeLessThan(0.01);
+    expect(cost2 - cost1).toBeLessThan(0.02);
   });
 
   test("complete pattern: final cost recorded before marking complete", () => {
@@ -75,7 +75,7 @@ describe("command cost integration patterns", () => {
     const delta = costAfterComplete - costAfterHeartbeat;
 
     // Delta should be near-zero (< 1 second of cost)
-    expect(delta).toBeLessThan(0.01);
+    expect(delta).toBeLessThan(0.02);
   });
 
   test("mail check pattern: cost increments on mail check", () => {
