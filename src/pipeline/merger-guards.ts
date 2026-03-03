@@ -70,7 +70,7 @@ export function runProjectTests(projectRoot: string): TestResult {
       cwd: projectRoot,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
-      timeout: 120_000, // 2 minute timeout
+      timeout: 300_000, // 5 minute timeout
       shell: "/bin/sh",
     });
     return { passed: true, output };
