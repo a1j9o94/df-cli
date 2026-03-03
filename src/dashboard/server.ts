@@ -1,11 +1,13 @@
 import { Database } from "bun:sqlite";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { SCHEMA_SQL } from "../db/schema.js";
 import { findDfDir } from "../utils/config.js";
 import { generateDashboardHtml } from "./index.js";
 import { getRunQueueInfo, type RunQueueInfo } from "../pipeline/queue-visibility.js";
 import { computeElapsedMs, estimateCost } from "../utils/agent-enrichment.js";
 import { PHASE_ORDER, shouldSkipPhase, type PhaseName } from "../pipeline/phases.js";
+import { parseFrontmatter } from "../utils/frontmatter.js";
 
 // --- Contract: ServerExport ---
 
@@ -22,11 +24,13 @@ export interface ServerHandle {
   stop: () => void;
 }
 
-// --- Contract: RunSummary (extended with RunSummaryQueueExtension) ---
+// --- Contract: EnrichedRunSummary (extends RunSummary with spec title) ---
 
 interface RunSummary {
   id: string;
   specId: string;
+  /** Human-readable spec title from specs table, null if spec not found */
+  specTitle: string | null;
   status: string;
   phase: string | null;
   cost: number;
@@ -170,6 +174,13 @@ function handleListRuns(db: InstanceType<typeof Database>): Response {
 
 function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unknown>): RunSummary {
   const runId = r.id as string;
+  const specId = r.spec_id as string;
+
+  // Look up spec title from specs table
+  const specRow = db
+    .prepare("SELECT title FROM specs WHERE id = ?")
+    .get(specId) as { title: string } | null;
+  const specTitle = specRow?.title ?? null;
 
   // Compute moduleCount and completedCount from buildplan + agents
   let moduleCount = 0;
@@ -214,7 +225,8 @@ function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unkno
 
   const summary: RunSummary = {
     id: runId,
-    specId: r.spec_id as string,
+    specId: specId,
+    specTitle,
     status: r.status as string,
     phase: (r.current_phase as string) ?? null,
     cost: r.cost_usd as number,
@@ -368,6 +380,47 @@ function handleGetScenarios(db: InstanceType<typeof Database>, runId: string): R
   }));
 
   return jsonResponse(scenarios);
+}
+
+// --- Contract: SpecContentEndpoint ---
+
+function handleGetSpec(db: InstanceType<typeof Database>, runId: string): Response {
+  const result = validateRun(db, runId);
+  if ("error" in result) return result.error;
+
+  const run = result.run;
+  const specId = run.spec_id as string;
+
+  // Look up spec record from database
+  const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as Record<
+    string,
+    unknown
+  > | null;
+  if (!spec) {
+    return errorResponse(`Spec not found: ${specId}`, 404);
+  }
+
+  const filePath = spec.file_path as string;
+
+  // Resolve file path (could be relative to project root)
+  const resolvedPath = resolve(filePath);
+  if (!existsSync(resolvedPath)) {
+    return errorResponse(`Spec file not found: ${filePath}`, 404);
+  }
+
+  // Read and parse spec content
+  const raw = readFileSync(resolvedPath, "utf-8");
+  const { data: frontmatter, body } = parseFrontmatter<Record<string, unknown>>(raw);
+
+  return jsonResponse({
+    id: specId,
+    title: (frontmatter.title as string) ?? (spec.title as string),
+    type: (frontmatter.type as string) ?? null,
+    status: (frontmatter.status as string) ?? (spec.status as string),
+    version: (frontmatter.version as string) ?? null,
+    priority: (frontmatter.priority as string) ?? null,
+    content: body.trim(),
+  });
 }
 
 function handleGetModules(db: InstanceType<typeof Database>, runId: string): Response {
@@ -589,6 +642,8 @@ function route(
         return handleGetEvents(db, runId);
       case "scenarios":
         return handleGetScenarios(db, runId);
+      case "spec":
+        return handleGetSpec(db, runId);
       case "modules":
         return handleGetModules(db, runId);
       case "phases":
