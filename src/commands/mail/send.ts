@@ -5,6 +5,7 @@ import { getDb } from "../../db/index.js";
 import { createMessage } from "../../db/queries/messages.js";
 import { getAgent, listAgents } from "../../db/queries/agents.js";
 import { getBindingsForContract } from "../../db/queries/contracts.js";
+import { estimateAndRecordCost } from "../../pipeline/budget.js";
 import { log } from "../../utils/logger.js";
 
 export const mailSendCommand = new Command("send")
@@ -22,6 +23,9 @@ export const mailSendCommand = new Command("send")
 
     const db = getDb(join(dfDir, "state.db"));
     const { to, body, from, runId } = options;
+
+    // Estimate cost on every mail send
+    estimateAndRecordCost(db, from);
 
     if (to.startsWith("@contract:")) {
       // Send to all agents bound to a contract

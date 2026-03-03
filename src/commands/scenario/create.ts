@@ -6,6 +6,7 @@ import { getDb } from "../../db/index.js";
 import { getAgent } from "../../db/queries/agents.js";
 import { createEvent } from "../../db/queries/events.js";
 import { autoCommitFile } from "../../pipeline/auto-commit.js";
+import { estimateAndRecordCost } from "../../pipeline/budget.js";
 import { log } from "../../utils/logger.js";
 import { gitCommitFile } from "../../utils/git-persistence.js";
 
@@ -30,6 +31,9 @@ export const scenarioCreateCommand = new Command("create")
       log.error(`Agent not found: ${agentId}`);
       process.exit(1);
     }
+
+    // Estimate cost on every scenario create
+    estimateAndRecordCost(db, agentId);
 
     if (agent.role !== "architect" && agent.role !== "evaluator") {
       log.error(`Only architects and evaluators can create scenarios (agent role: ${agent.role})`);
