@@ -98,6 +98,16 @@ function computeElapsed(createdAt: string, updatedAt?: string): string {
   return `${hours}h ${remainMin}m`;
 }
 
+/**
+ * Compute estimated cost for an agent based on elapsed time.
+ * Only returns > 0 for active agents (pending/spawning/running) with no real cost yet.
+ */
+function computeAgentEstimatedCost(costUsd: number, createdAt: string, status: string): number {
+  if (costUsd !== 0) return 0;
+  const elapsedMs = computeElapsedMs(createdAt, status);
+  return estimateCost(elapsedMs);
+}
+
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -183,17 +193,14 @@ function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unkno
       .get(runId) as { cnt: number }
   ).cnt;
 
-  // Compute estimated cost for this run by summing estimates across active agents with cost=0
-  let runEstimatedCost = 0;
+  // Compute estimated cost for this run by summing estimates across all agents
   const agentRows = db
     .prepare("SELECT status, cost_usd, created_at FROM agents WHERE run_id = ?")
     .all(runId) as Array<{ status: string; cost_usd: number; created_at: string }>;
 
+  let runEstimatedCost = 0;
   for (const agent of agentRows) {
-    if (agent.cost_usd === 0) {
-      const elapsedMs = computeElapsedMs(agent.created_at, agent.status);
-      runEstimatedCost += estimateCost(elapsedMs);
-    }
+    runEstimatedCost += computeAgentEstimatedCost(agent.cost_usd, agent.created_at, agent.status);
   }
 
   const updatedAt =
@@ -250,14 +257,8 @@ function handleGetAgents(db: InstanceType<typeof Database>, runId: string): Resp
     const updatedAt =
       a.status === "running" || a.status === "pending" ? undefined : (a.updated_at as string);
 
-    // Compute estimated cost for active agents with no real cost yet
     const agentCost = a.cost_usd as number;
     const agentStatus = a.status as string;
-    let agentEstimatedCost = 0;
-    if (agentCost === 0) {
-      const elapsedMs = computeElapsedMs(a.created_at as string, agentStatus);
-      agentEstimatedCost = estimateCost(elapsedMs);
-    }
 
     const summary: AgentSummary = {
       id: a.id as string,
@@ -268,7 +269,7 @@ function handleGetAgents(db: InstanceType<typeof Database>, runId: string): Resp
       cost: agentCost,
       tokens: a.tokens_used as number,
       elapsed: computeElapsed(a.created_at as string, updatedAt),
-      estimatedCost: agentEstimatedCost,
+      estimatedCost: computeAgentEstimatedCost(agentCost, a.created_at as string, agentStatus),
     };
 
     if (a.module_id) summary.moduleId = a.module_id as string;
