@@ -260,4 +260,14 @@ describe("Loading clears on success and error", () => {
     const modulesSection = html.substring(html.indexOf("loadModules"));
     expect(modulesSection).toContain("error-text");
   });
+
+  it("run-header loading spinner is cleared when data arrives", () => {
+    expect(html).toContain("renderRunHeader(run)");
+  });
+
+  it("run-header loading spinner is cleared on error", () => {
+    // On error, run-header container.innerHTML is set to error text
+    const runDetailSection = html.substring(html.indexOf("loadRunDetail"));
+    expect(runDetailSection).toContain("error-text");
+  });
 });
