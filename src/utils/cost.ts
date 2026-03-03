@@ -70,6 +70,42 @@ export function getTokensPerMinute(config: CostConfig, role?: string): number {
 }
 
 /**
+ * Resolve a partial cost config (from YAML) into a full CostConfig.
+ *
+ * Resolution order:
+ * 1. Start with defaults (sonnet)
+ * 2. If `profile` is set, overlay the profile values
+ * 3. Overlay any explicit fields from the input
+ *
+ * This means: profile < explicit fields. Explicit always wins.
+ *
+ * Contract: DfConfigCostField
+ */
+export function resolveCostConfig(partial: Partial<CostConfig>): CostConfig {
+  // Start with defaults
+  let base: CostConfig = { ...DEFAULT_COST_CONFIG };
+
+  // If a profile is specified, overlay profile values
+  if (partial.profile && COST_PROFILES[partial.profile]) {
+    base = { ...COST_PROFILES[partial.profile] };
+  }
+
+  // Overlay explicit fields (profile and roles handled specially)
+  const result: CostConfig = { ...base };
+
+  if (partial.model !== undefined) result.model = partial.model;
+  if (partial.input_cost_per_mtok !== undefined) result.input_cost_per_mtok = partial.input_cost_per_mtok;
+  if (partial.output_cost_per_mtok !== undefined) result.output_cost_per_mtok = partial.output_cost_per_mtok;
+  if (partial.cache_read_cost_per_mtok !== undefined) result.cache_read_cost_per_mtok = partial.cache_read_cost_per_mtok;
+  if (partial.cost_per_minute !== undefined) result.cost_per_minute = partial.cost_per_minute;
+  if (partial.tokens_per_minute !== undefined) result.tokens_per_minute = partial.tokens_per_minute;
+  if (partial.roles !== undefined) result.roles = partial.roles;
+  if (partial.profile !== undefined) result.profile = partial.profile;
+
+  return result;
+}
+
+/**
  * Expose the profiles map for extensibility checks.
  */
 export { COST_PROFILES };
