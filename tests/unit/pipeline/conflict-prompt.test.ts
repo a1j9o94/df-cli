@@ -11,7 +11,12 @@ import {
 
 const sampleConflictContent = `export function greet() {
   return "Hello from module A";
+<<<<<<< Updated upstream
 }`;
+=======
+}
+`;
+>>>>>>> Stashed changes
 
 const baseContext: ConflictPromptContext = {
   agentId: "agt_test123",
