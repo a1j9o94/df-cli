@@ -3,11 +3,12 @@ import { join } from "node:path";
 import { findDfDir, getConfig } from "../utils/config.js";
 import { getDb } from "../db/index.js";
 import { getRun } from "../db/queries/runs.js";
-import { getSpec, listSpecs } from "../db/queries/specs.js";
+import { getSpec, listSpecs, updateSpecHash } from "../db/queries/specs.js";
 import { listAgents } from "../db/queries/agents.js";
 import { PipelineEngine } from "../pipeline/engine.js";
 import { ClaudeCodeRuntime } from "../runtime/claude-code.js";
 import { log } from "../utils/logger.js";
+import { preBuildValidation, computeContentHash } from "../pipeline/build-guards.js";
 
 export const buildCommand = new Command("build")
   .description("Run the full build pipeline for a spec")
@@ -16,11 +17,13 @@ export const buildCommand = new Command("build")
   .option("--parallel <n>", "Maximum parallel builders")
   .option("--budget-usd <amount>", "Budget cap in USD")
   .option("--skip-architect", "Skip architect phase for single-module specs")
+  .option("--force", "Bypass content hash check (does not bypass status check)")
   .action(async (specIdArg: string | undefined, options: {
     mode?: string;
     parallel?: string;
     budgetUsd?: string;
     skipArchitect?: boolean;
+    force?: boolean;
   }) => {
     const dfDir = findDfDir();
     if (!dfDir) {
@@ -72,6 +75,29 @@ export const buildCommand = new Command("build")
       }
     }
 
+    // Pre-build validation: status check and content hash check
+    const spec = getSpec(db, specId)!;
+    const validation = preBuildValidation(db, specId, spec.file_path, options.force ?? false);
+
+    if (!validation.allowed) {
+      if (validation.error) {
+        log.error(validation.error);
+        process.exit(1);
+      }
+      if (validation.warning) {
+        log.warn(validation.warning);
+        process.exit(1);
+      }
+    }
+
+    // Store content hash before build starts
+    try {
+      const hash = computeContentHash(spec.file_path);
+      updateSpecHash(db, specId, hash);
+    } catch {
+      // If file can't be read for hashing, continue anyway
+    }
+
     const logsDir = join(dfDir, "logs");
     const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary);
     const engine = new PipelineEngine(db, runtime, config);
@@ -80,6 +106,7 @@ export const buildCommand = new Command("build")
       mode: options.mode,
       budget: options.budgetUsd ? parseFloat(options.budgetUsd) : undefined,
       skipArchitect: options.skipArchitect,
+      force: options.force,
     });
 
     // Post-pipeline summary
