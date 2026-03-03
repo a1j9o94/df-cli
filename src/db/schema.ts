@@ -56,11 +56,13 @@ CREATE TABLE IF NOT EXISTS specs (
   file_path       TEXT NOT NULL,
   content_hash    TEXT NOT NULL DEFAULT '',
   scenario_count  INTEGER NOT NULL DEFAULT 0,
+  parent_spec_id  TEXT,
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_specs_status ON specs(status);
+CREATE INDEX IF NOT EXISTS idx_specs_parent ON specs(parent_spec_id);
 
 -- Buildplans
 CREATE TABLE IF NOT EXISTS buildplans (
