@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import type { SqliteDb } from "../db/index.js";
 import { createMessage } from "../db/queries/messages.js";
 import { extractFileContents, formatPreloadedFiles } from "./file-preload.js";
+import { extractVideoUrls } from "../utils/url-detection.js";
 
 // ============================================================
 // Conflict resolution prompt types and builder
@@ -219,6 +220,21 @@ function buildArchitectBody(agentId: string, context: Record<string, unknown>): 
     }
   }
 
+  // Detect video URLs in spec content for auto-callout
+  const videoUrls = extractVideoUrls(specContent);
+  const videoSection = videoUrls.length > 0
+    ? [
+        "",
+        "## Referenced Videos",
+        "",
+        "The spec references the following video URLs — use `dark research video` to extract context before decomposing:",
+        "",
+        ...videoUrls.map((url) => `- \`dark research video ${agentId} ${url}\``),
+        "",
+        "Extract transcripts and ask questions about each video to inform your decomposition.",
+      ]
+    : [];
+
   return [
     "# Architect Instructions",
     "",
@@ -246,6 +262,8 @@ function buildArchitectBody(agentId: string, context: Record<string, unknown>): 
     "Save research findings for other agents to reference:",
     `- Save text: dark research add ${agentId} --label "<label>" --content "<URL, code snippet, API docs excerpt, or decision rationale>" [--module <module-id>]`,
     `- Save file: dark research add ${agentId} --label "<label>" --file <path> [--module <module-id>]`,
+    `- Video research: dark research video ${agentId} <url> [--question "<q>"] — fetch transcript from YouTube/Loom videos and save as research artifact`,
+    ...videoSection,
     "",
     "If you cannot complete this work, call:",
     `dark agent fail ${agentId} --error "<description>"`,
