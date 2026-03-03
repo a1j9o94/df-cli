@@ -4,7 +4,7 @@ import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getAgent, updateAgentHeartbeat } from "../../db/queries/agents.js";
 import { createEvent } from "../../db/queries/events.js";
-import { recordCost } from "../../pipeline/budget.js";
+import { recordCost, estimateAndRecordCost } from "../../pipeline/budget.js";
 import { log } from "../../utils/logger.js";
 
 export const agentHeartbeatCommand = new Command("heartbeat")
@@ -26,6 +26,9 @@ export const agentHeartbeatCommand = new Command("heartbeat")
       log.error(`Agent not found: ${agentId}`);
       process.exit(1);
     }
+
+    // Estimate cost from elapsed time before updating heartbeat timestamp
+    estimateAndRecordCost(db, agentId);
 
     updateAgentHeartbeat(db, agentId);
 
