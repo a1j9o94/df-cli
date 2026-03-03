@@ -1,8 +1,34 @@
 ---
 name: overview-tab-shows-architecture
 type: functional
-spec_id: run_01KJNFM10CHHWZV5TVPXKE50XR
-created_by: agt_01KJNFM10EV9BXZCJNZKFZEN7F
+spec_id: run_01KJT1DSECDSZP9V2JPPS48CRC
+created_by: agt_01KJT1DSEEGBAKZSDD5AYGA6XR
 ---
 
-SETUP: Start dashboard with a database containing a completed run that has an active buildplan with at least 2 modules and 1 dependency edge (e.g. mod-A depends on mod-B). The buildplan should also have at least 1 risk entry. STEPS: 1. GET / (HTML) and select the completed run. 2. Verify the default tab is 'Overview' (not 'Agents' as currently). 3. On the Overview tab, verify: a) Spec goal text is displayed (first paragraph from the spec file). b) Module names and one-line descriptions are visible. c) A dependency visualization exists showing the flow between modules (e.g. 'data-layer → code-gen → http-api'). d) Risks from the buildplan are displayed. 4. GET /api/runs/:id/buildplan — verify response includes modules with title/description, dependencies array, and risks array. PASS CRITERIA: - Overview is the default active tab - Module names + descriptions visible in overview - Dependency flow visualization present - Risks section visible when buildplan has risks - Spec goal paragraph displayed
+SCENARIO: Overview tab shows architecture when buildplan exists.
+
+PRECONDITIONS:
+- Database has a completed run (run_test1) with an active buildplan
+- Buildplan has 2 modules: 'HTTP API Server' and 'Dashboard UI' with dependency: UI depends on API
+- Dashboard server is running
+
+TEST STEPS:
+1. Fetch GET / (HTML dashboard)
+2. Verify the tab bar contains an 'Overview' tab (should be the default/first tab)
+3. Verify the Overview tab panel exists and is the active/default panel
+4. Inspect the Overview tab rendering JavaScript
+5. Verify it fetches GET /api/runs/:id/buildplan to get module data
+6. Verify the overview renders module names and one-line descriptions (e.g. 'HTTP API Server', 'Dashboard UI')
+7. Verify a dependency flow visualization exists (e.g. showing mod-api-server -> mod-dashboard-ui)
+
+EXPECTED RESULTS:
+- Tab bar has 'Overview' button with data-tab='overview' (or similar)
+- Overview is the default active tab (not Agents)
+- Overview panel displays module names from buildplan
+- Overview panel displays module descriptions
+- A dependency visualization is present (text-based flow like 'A -> B' or similar visual)
+- Buildplan risks are shown if present
+
+PASS CRITERIA:
+- The HTML contains an Overview tab that is active by default
+- The JavaScript fetches buildplan data and renders module names, descriptions, and dependency edges
