@@ -11,7 +11,7 @@ import {
 
 const sampleConflictContent = `export function greet() {
   return "Hello from module A";
-}
+}`;
 
 const baseContext: ConflictPromptContext = {
   agentId: "agt_test123",
