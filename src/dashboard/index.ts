@@ -543,6 +543,44 @@ function generateStyles(): string {
     animation: pulse 1.5s ease-in-out infinite;
   }
 
+  /* --- Agent Spinner & Status Icons --- */
+
+  .agent-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent-green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  .agent-spinner.spawning {
+    border-top-color: var(--accent-purple);
+  }
+
+  .agent-status-icon {
+    display: inline-block;
+    font-size: 12px;
+    margin-right: 6px;
+    vertical-align: middle;
+    font-weight: 700;
+  }
+
+  .agent-status-icon.completed {
+    color: var(--accent-green);
+  }
+
+  .agent-status-icon.failed {
+    color: var(--accent-red);
+  }
+
+  .agent-status-icon.killed {
+    color: var(--accent-red);
+  }
+
   /* --- Phase Timeline --- */
 
   .phase-timeline {
@@ -821,6 +859,15 @@ function generateScript(apiBase: string): string {
     }
   }
 
+  function agentStatusIcon(status) {
+    if (status === "running") return '<span class="agent-spinner"></span>';
+    if (status === "spawning") return '<span class="agent-spinner spawning"></span>';
+    if (status === "completed") return '<span class="agent-status-icon completed">\u2713</span>';
+    if (status === "failed") return '<span class="agent-status-icon failed">\u2717</span>';
+    if (status === "killed") return '<span class="agent-status-icon killed">\u2717</span>';
+    return '<span class="agent-status-indicator ' + esc(status || "pending") + '"></span>';
+  }
+
   function renderAgents(agents) {
     const container = document.getElementById("agents-container");
     if (!agents || agents.length === 0) {
@@ -832,7 +879,7 @@ function generateScript(apiBase: string): string {
       var costDisplay = formatCostDisplay(a.cost, a.estimatedCost, a.isEstimate);
       return '<div class="agent-card">'
         + '<div class="agent-card-header">'
-        + '<span class="agent-name"><span class="agent-status-indicator ' + esc(statusClass) + '"></span>' + esc(a.name) + '</span>'
+        + '<span class="agent-name">' + agentStatusIcon(a.status) + esc(a.name) + '</span>'
         + statusBadge(a.status)
         + '</div>'
         + '<span class="agent-role">' + esc(a.role) + (a.moduleId ? ' \u2192 ' + esc(a.moduleId) : '') + '</span>'
