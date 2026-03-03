@@ -27,3 +27,44 @@ export function detectVideoUrls(text: string): string[] {
   // Deduplicate
   return [...new Set(matches)];
 }
+
+/**
+ * Build a "Video References" section for architect instructions.
+ *
+ * When a spec contains YouTube/Loom URLs, this section is appended to the
+ * architect's mail instructions, suggesting they use `dark research video`
+ * to extract context before decomposing.
+ *
+ * Returns empty string if no URLs are provided (don't show empty sections).
+ */
+export function buildVideoReferencesSection(
+  urls: string[],
+  agentId: string
+): string {
+  if (urls.length === 0) return "";
+
+  const urlList = urls
+    .map((url) => `  - ${url}`)
+    .join("\n");
+
+  const commands = urls
+    .map(
+      (url) =>
+        `  dark research video ${agentId} ${url}`
+    )
+    .join("\n");
+
+  return [
+    "",
+    "## Video References",
+    "",
+    "The spec references these videos — use `dark research video` to extract context before decomposing:",
+    "",
+    urlList,
+    "",
+    "Suggested commands:",
+    "",
+    commands,
+    "",
+  ].join("\n");
+}
