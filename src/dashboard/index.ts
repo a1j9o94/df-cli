@@ -447,6 +447,17 @@ function generateStyles(): string {
     white-space: nowrap;
   }
 
+  /* --- Run Card Alive Pulse --- */
+
+  .run-card.alive {
+    animation: glow-pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes glow-pulse {
+    0%, 100% { border-color: transparent; }
+    50% { border-color: rgba(63, 185, 80, 0.3); }
+  }
+
   /* --- Loading Spinner --- */
 
   .loading-spinner {
@@ -625,9 +636,10 @@ function generateScript(apiBase: string): string {
     }
     container.innerHTML = runs.map(function(run) {
       const isActive = run.id === selectedRunId ? " active" : "";
+      const isAlive = run.status === "running" ? " alive" : "";
       const progress = run.moduleCount > 0
         ? Math.round((run.completedCount / run.moduleCount) * 100) : 0;
-      return '<div class="run-card' + isActive + '" data-run-id="' + esc(run.id) + '">'
+      return '<div class="run-card' + isActive + isAlive + '" data-run-id="' + esc(run.id) + '">'
         + '<div class="run-card-header">'
         + '<span class="run-card-id">' + esc(run.id.slice(0, 16)) + '…</span>'
         + statusBadge(run.status)
@@ -663,18 +675,22 @@ function generateScript(apiBase: string): string {
     });
 
     await Promise.all([
-      loadRunDetail(runId),
-      loadAgents(runId),
-      loadModules(runId)
+      loadRunDetail(runId, true),
+      loadAgents(runId, true),
+      loadModules(runId, true)
     ]);
   }
 
-  async function loadRunDetail(runId) {
+  async function loadRunDetail(runId, showSpinner) {
+    var header = document.getElementById("run-header");
+    if (showSpinner) {
+      header.innerHTML = '<div class="loading-spinner">Loading run detail\u2026</div>';
+    }
     try {
       const run = await fetchJson("/api/runs/" + runId);
       renderRunHeader(run);
     } catch (err) {
-      document.getElementById("run-header").innerHTML =
+      header.innerHTML =
         '<div class="error-text">Error: ' + esc(err.message) + '</div>';
     }
   }
@@ -707,9 +723,11 @@ function generateScript(apiBase: string): string {
 
   // --- Agents ---
 
-  async function loadAgents(runId) {
+  async function loadAgents(runId, showSpinner) {
     var container = document.getElementById("agents-container");
-    container.innerHTML = '<div class="loading-spinner">Loading agents\u2026</div>';
+    if (showSpinner) {
+      container.innerHTML = '<div class="loading-spinner">Loading agents\u2026</div>';
+    }
     try {
       const agents = await fetchJson("/api/runs/" + runId + "/agents");
       renderAgents(agents);
@@ -747,9 +765,11 @@ function generateScript(apiBase: string): string {
 
   // --- Modules ---
 
-  async function loadModules(runId) {
+  async function loadModules(runId, showSpinner) {
     var container = document.getElementById("modules-container");
-    container.innerHTML = '<div class="loading-spinner">Loading modules\u2026</div>';
+    if (showSpinner) {
+      container.innerHTML = '<div class="loading-spinner">Loading modules\u2026</div>';
+    }
     try {
       const modules = await fetchJson("/api/runs/" + runId + "/modules");
       renderModules(modules);
@@ -770,6 +790,10 @@ function generateScript(apiBase: string): string {
         ? Math.round((m.depsSatisfied / m.depsTotal) * 100) : 100;
       const contractPct = m.contractsTotal > 0
         ? Math.round((m.contractsAcknowledged / m.contractsTotal) * 100) : 100;
+      var isEstimate = m.isEstimate === true;
+      var costDisplay = isEstimate && m.estimatedCost > 0
+        ? '<span class="cost-estimated">~' + formatCost(m.estimatedCost) + '</span>'
+        : formatCost(m.cost);
 
       var moduleCostDisplay = formatCostDisplay(m.cost, m.estimatedCost, m.isEstimate);
       return '<div class="module-card">'
@@ -811,9 +835,9 @@ function generateScript(apiBase: string): string {
     await loadRuns();
     if (selectedRunId) {
       await Promise.all([
-        loadRunDetail(selectedRunId),
-        loadAgents(selectedRunId),
-        loadModules(selectedRunId)
+        loadRunDetail(selectedRunId, false),
+        loadAgents(selectedRunId, false),
+        loadModules(selectedRunId, false)
       ]);
     }
   }
