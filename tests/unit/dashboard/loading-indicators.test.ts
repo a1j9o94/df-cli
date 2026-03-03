@@ -197,6 +197,47 @@ describe("Loading Spinner JS - Run Header", () => {
   });
 });
 
+describe("Auto-refresh suppresses loading spinners", () => {
+  const html = generateDashboardHtml();
+
+  it("loadAgents accepts skipSpinner parameter", () => {
+    expect(html).toMatch(/function loadAgents\(runId,?\s*skipSpinner\)/);
+  });
+
+  it("loadModules accepts skipSpinner parameter", () => {
+    expect(html).toMatch(/function loadModules\(runId,?\s*skipSpinner\)/);
+  });
+
+  it("loadRunDetail accepts skipSpinner parameter", () => {
+    expect(html).toMatch(/function loadRunDetail\(runId,?\s*skipSpinner\)/);
+  });
+
+  it("refresh() passes skipSpinner=true to loadAgents", () => {
+    // refresh function should pass true to skip spinner on auto-refresh
+    const refreshSection = html.substring(html.indexOf("async function refresh"));
+    expect(refreshSection).toMatch(/loadAgents\(selectedRunId,\s*true\)/);
+  });
+
+  it("refresh() passes skipSpinner=true to loadModules", () => {
+    const refreshSection = html.substring(html.indexOf("async function refresh"));
+    expect(refreshSection).toMatch(/loadModules\(selectedRunId,\s*true\)/);
+  });
+
+  it("refresh() passes skipSpinner=true to loadRunDetail", () => {
+    const refreshSection = html.substring(html.indexOf("async function refresh"));
+    expect(refreshSection).toMatch(/loadRunDetail\(selectedRunId,\s*true\)/);
+  });
+
+  it("loadAgents only shows spinner when skipSpinner is not set", () => {
+    // The spinner should be conditional on !skipSpinner
+    expect(html).toMatch(/loadAgents[\s\S]*?if\s*\(\s*!skipSpinner\s*\)/);
+  });
+
+  it("loadModules only shows spinner when skipSpinner is not set", () => {
+    expect(html).toMatch(/loadModules[\s\S]*?if\s*\(\s*!skipSpinner\s*\)/);
+  });
+});
+
 describe("Loading clears on success and error", () => {
   const html = generateDashboardHtml();
 

@@ -704,9 +704,11 @@ function generateScript(apiBase: string): string {
 
   // --- Agents ---
 
-  async function loadAgents(runId) {
+  async function loadAgents(runId, skipSpinner) {
     var container = document.getElementById("agents-container");
-    container.innerHTML = '<div class="loading-spinner">Loading agents\u2026</div>';
+    if (!skipSpinner) {
+      container.innerHTML = '<div class="loading-spinner">Loading agents\u2026</div>';
+    }
     try {
       const agents = await fetchJson("/api/runs/" + runId + "/agents");
       renderAgents(agents);
@@ -747,9 +749,11 @@ function generateScript(apiBase: string): string {
 
   // --- Modules ---
 
-  async function loadModules(runId) {
+  async function loadModules(runId, skipSpinner) {
     var container = document.getElementById("modules-container");
-    container.innerHTML = '<div class="loading-spinner">Loading modules\u2026</div>';
+    if (!skipSpinner) {
+      container.innerHTML = '<div class="loading-spinner">Loading modules\u2026</div>';
+    }
     try {
       const modules = await fetchJson("/api/runs/" + runId + "/modules");
       renderModules(modules);
@@ -810,9 +814,9 @@ function generateScript(apiBase: string): string {
     await loadRuns();
     if (selectedRunId) {
       await Promise.all([
-        loadRunDetail(selectedRunId),
-        loadAgents(selectedRunId),
-        loadModules(selectedRunId)
+        loadRunDetail(selectedRunId, true),
+        loadAgents(selectedRunId, true),
+        loadModules(selectedRunId, true)
       ]);
     }
   }
