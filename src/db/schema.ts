@@ -57,7 +57,6 @@ CREATE TABLE IF NOT EXISTS specs (
   content_hash    TEXT NOT NULL DEFAULT '',
   parent_spec_id  TEXT REFERENCES specs(id),
   scenario_count  INTEGER NOT NULL DEFAULT 0,
-  parent_spec_id  TEXT,
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
