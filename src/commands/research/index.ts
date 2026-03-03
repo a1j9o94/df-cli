@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { researchAddCommand } from "./add.js";
 import { researchListCommand } from "./list.js";
 import { researchShowCommand } from "./show.js";
+import { researchVideoCommand } from "./video.js";
 
 export const researchCommand = new Command("research")
   .description(
@@ -27,6 +28,13 @@ Tag to a module:
   $ dark research add <agent-id> --label "Payment API" \\
       --content "REST endpoint docs" --module payments
 
+Fetch video transcript:
+  $ dark research video <agent-id> https://www.youtube.com/watch?v=abc123
+
+Ask a question about a video:
+  $ dark research video <agent-id> https://www.youtube.com/watch?v=abc123 \\
+      --question "What library does this tutorial use for auth?"
+
 List research:
   $ dark research list --run-id <id>
   $ dark research list --run-id <id> --module payments
@@ -37,4 +45,5 @@ Show a specific artifact:
   )
   .addCommand(researchAddCommand)
   .addCommand(researchListCommand)
-  .addCommand(researchShowCommand);
+  .addCommand(researchShowCommand)
+  .addCommand(researchVideoCommand);

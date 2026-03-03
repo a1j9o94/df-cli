@@ -9,6 +9,10 @@ import { readFileSync } from "node:fs";
 import type { SqliteDb } from "../db/index.js";
 import { createMessage } from "../db/queries/messages.js";
 import { extractFileContents, formatPreloadedFiles } from "./file-preload.js";
+import {
+  detectVideoUrls,
+  buildVideoReferencesSection,
+} from "../commands/research/video-detect.js";
 
 // ============================================================
 // Conflict resolution prompt types and builder
@@ -219,6 +223,10 @@ function buildArchitectBody(agentId: string, context: Record<string, unknown>): 
     }
   }
 
+  // Detect video URLs in spec content and build references section
+  const videoUrls = specContent ? detectVideoUrls(specContent) : [];
+  const videoSection = buildVideoReferencesSection(videoUrls, agentId);
+
   return [
     "# Architect Instructions",
     "",
@@ -229,7 +237,7 @@ function buildArchitectBody(agentId: string, context: Record<string, unknown>): 
     "```",
     specContent || "(No spec content available — check the spec file manually)",
     "```",
-    "",
+    videoSection,
     "## Steps",
     `1. Read and analyze the spec above`,
     `2. Decompose into modules with clear boundaries and interface contracts`,
@@ -246,6 +254,7 @@ function buildArchitectBody(agentId: string, context: Record<string, unknown>): 
     "Save research findings for other agents to reference:",
     `- Save text: dark research add ${agentId} --label "<label>" --content "<URL, code snippet, API docs excerpt, or decision rationale>" [--module <module-id>]`,
     `- Save file: dark research add ${agentId} --label "<label>" --file <path> [--module <module-id>]`,
+    `- Fetch video: dark research video ${agentId} <url> [--question "<question>"] [--module <module-id>]`,
     "",
     "If you cannot complete this work, call:",
     `dark agent fail ${agentId} --error "<description>"`,
