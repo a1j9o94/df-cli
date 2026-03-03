@@ -9,12 +9,14 @@ import { serializeFrontmatter } from "../../utils/frontmatter.js";
 import { autoCommitFile } from "../../pipeline/auto-commit.js";
 import { log } from "../../utils/logger.js";
 import { gitCommitFile } from "../../utils/git-persistence.js";
+import { executeSpecCreateFrom } from "./create-from.js";
 
 export const specCreateCommand = new Command("create")
   .description("Create a new specification")
   .argument("<title>", "Specification title")
   .option("--from-template <name>", "Create from a template")
-  .action(async (title: string, _options: { fromTemplate?: string }) => {
+  .option("--from <spec-id>", "Create derived from an existing spec (copies content, sets parent reference)")
+  .action(async (title: string, options: { fromTemplate?: string; from?: string }) => {
     const dfDir = findDfDir();
     if (!dfDir) {
       log.error("Not in a Dark Factory project. Run 'df init' first.");
@@ -22,6 +24,37 @@ export const specCreateCommand = new Command("create")
     }
 
     const db = getDb(join(dfDir, "state.db"));
+
+    // Handle --from: derive from existing spec
+    if (options.from) {
+      try {
+        const spec = executeSpecCreateFrom(db, dfDir, title, options.from);
+
+        // Auto-commit
+        const projectRoot = dirname(dfDir);
+        const gitRelativePath = join(".df", spec.file_path);
+        const commitResult = autoCommitFile(
+          projectRoot,
+          gitRelativePath,
+          `Auto-commit: spec ${spec.id} created from ${options.from}`,
+        );
+        if (commitResult.success) {
+          log.info("  Spec committed to git history");
+        }
+
+        log.success(`Created spec: ${spec.id}`);
+        log.info(`  Title:  ${spec.title}`);
+        log.info(`  Parent: ${options.from}`);
+        log.info(`  File:   ${join(dfDir, spec.file_path)}`);
+        log.info(`  Edit the spec, then run: dark build ${spec.id}`);
+      } catch (err) {
+        log.error((err as Error).message);
+        process.exit(1);
+      }
+      return;
+    }
+
+    // Standard spec creation (no parent)
     const id = newSpecId();
     const fileName = `${id}.md`;
     const filePath = join("specs", fileName);
@@ -52,5 +85,5 @@ export const specCreateCommand = new Command("create")
 
     log.success(`Created spec: ${id}`);
     log.info(`  File: ${absPath}`);
-    log.info(`  Edit the spec, then run: df build ${id}`);
+    log.info(`  Edit the spec, then run: dark build ${id}`);
   });
