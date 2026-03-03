@@ -24,7 +24,9 @@ describe("Dashboard CSS: cost-estimated class", () => {
 
   test(".cost-estimated has italic font-style or muted color", () => {
     // The CSS should style .cost-estimated with font-style: italic and/or color: var(--text-muted)
-    expect(html).toMatch(/\.cost-estimated\s*\{[^}]*(font-style:\s*italic|color:\s*var\(--text-muted\))[^}]*\}/);
+    expect(html).toMatch(
+      /\.cost-estimated\s*\{[^}]*(font-style:\s*italic|color:\s*var\(--text-muted\))[^}]*\}/,
+    );
   });
 
   test("CSS has no external stylesheet dependencies", () => {
@@ -137,7 +139,7 @@ describe("Dashboard JS: status badges for cost context", () => {
 
   test("phase indicator is active when run is running", () => {
     expect(html).toContain(".phase-indicator.active");
-    expect(html).toContain("run.status === \"running\"");
+    expect(html).toContain('run.status === "running"');
   });
 });
 

@@ -147,7 +147,7 @@ describe("Poll returns estimated cost for running agents", () => {
   });
 
   test("running agent with cost_usd=0 gets estimatedCost > 0", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_cost/agents`);
+    const res = await fetch(`${server?.url}/api/runs/run_cost/agents`);
     expect(res.status).toBe(200);
     const data = await res.json();
     const running = data.find((a: Record<string, unknown>) => a.id === "agt_running");
@@ -160,17 +160,17 @@ describe("Poll returns estimated cost for running agents", () => {
   });
 
   test("running agent estimated cost approximates 5min * $0.05/min", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_cost/agents`);
+    const res = await fetch(`${server?.url}/api/runs/run_cost/agents`);
     const data = await res.json();
     const running = data.find((a: Record<string, unknown>) => a.id === "agt_running");
 
     // 5 minutes * $0.05/min = $0.25, allow some tolerance for test timing
-    expect(running.estimatedCost).toBeGreaterThan(0.20);
+    expect(running.estimatedCost).toBeGreaterThan(0.2);
     expect(running.estimatedCost).toBeLessThan(0.35);
   });
 
   test("completed agent with real cost has estimatedCost=0 and isEstimate=false", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_cost/agents`);
+    const res = await fetch(`${server?.url}/api/runs/run_cost/agents`);
     const data = await res.json();
     const completed = data.find((a: Record<string, unknown>) => a.id === "agt_completed");
 
@@ -182,7 +182,7 @@ describe("Poll returns estimated cost for running agents", () => {
   });
 
   test("pending agent has estimatedCost=0 and isEstimate=false", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_cost/agents`);
+    const res = await fetch(`${server?.url}/api/runs/run_cost/agents`);
     const data = await res.json();
     const pending = data.find((a: Record<string, unknown>) => a.id === "agt_pending");
 
@@ -194,7 +194,7 @@ describe("Poll returns estimated cost for running agents", () => {
   });
 
   test("all agents have estimatedCost and isEstimate fields", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_cost/agents`);
+    const res = await fetch(`${server?.url}/api/runs/run_cost/agents`);
     const data = await res.json();
 
     for (const agent of data) {
@@ -212,12 +212,45 @@ describe("Cost estimates update on successive polls", () => {
     db.prepare(
       `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("run_poll", "spec_poll", "running", "thorough", 4, 50.0, 0, 0, "build", 1, 3, "{}", now, now);
+    ).run(
+      "run_poll",
+      "spec_poll",
+      "running",
+      "thorough",
+      4,
+      50.0,
+      0,
+      0,
+      "build",
+      1,
+      3,
+      "{}",
+      now,
+      now,
+    );
 
     db.prepare(
       `INSERT INTO agents (id, run_id, role, name, status, pid, module_id, buildplan_id, tdd_phase, tdd_cycles, cost_usd, tokens_used, queue_wait_ms, total_active_ms, error, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("agt_poll", "run_poll", "builder", "builder-poll", "running", 5555, "mod-poll", null, "red", 1, 0, 0, 0, 0, null, now, now);
+    ).run(
+      "agt_poll",
+      "run_poll",
+      "builder",
+      "builder-poll",
+      "running",
+      5555,
+      "mod-poll",
+      null,
+      "red",
+      1,
+      0,
+      0,
+      0,
+      0,
+      null,
+      now,
+      now,
+    );
 
     server = await startServer({ port: 0, db });
   });
@@ -232,7 +265,7 @@ describe("Cost estimates update on successive polls", () => {
 
   test("successive polls return increasing estimatedCost for running agents", async () => {
     // First poll
-    const res1 = await fetch(`${server!.url}/api/runs/run_poll/agents`);
+    const res1 = await fetch(`${server?.url}/api/runs/run_poll/agents`);
     const data1 = await res1.json();
     const agent1 = data1.find((a: Record<string, unknown>) => a.id === "agt_poll");
     const e1 = agent1.estimatedCost as number;
@@ -241,7 +274,7 @@ describe("Cost estimates update on successive polls", () => {
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Second poll
-    const res2 = await fetch(`${server!.url}/api/runs/run_poll/agents`);
+    const res2 = await fetch(`${server?.url}/api/runs/run_poll/agents`);
     const data2 = await res2.json();
     const agent2 = data2.find((a: Record<string, unknown>) => a.id === "agt_poll");
     const e2 = agent2.estimatedCost as number;
@@ -261,18 +294,69 @@ describe("Run summary includes aggregated estimated cost", () => {
     db.prepare(
       `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("run_agg", "spec_agg", "running", "thorough", 4, 50.0, 1.0, 50000, "build", 1, 3, "{}", threeMinAgo, now);
+    ).run(
+      "run_agg",
+      "spec_agg",
+      "running",
+      "thorough",
+      4,
+      50.0,
+      1.0,
+      50000,
+      "build",
+      1,
+      3,
+      "{}",
+      threeMinAgo,
+      now,
+    );
 
     // 2 running agents with cost=0, created 3 min ago
     db.prepare(
       `INSERT INTO agents (id, run_id, role, name, status, pid, module_id, buildplan_id, tdd_phase, tdd_cycles, cost_usd, tokens_used, queue_wait_ms, total_active_ms, error, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("agt_r1", "run_agg", "builder", "builder-r1", "running", 1111, "mod-x", null, "green", 2, 0, 0, 0, 0, null, threeMinAgo, now);
+    ).run(
+      "agt_r1",
+      "run_agg",
+      "builder",
+      "builder-r1",
+      "running",
+      1111,
+      "mod-x",
+      null,
+      "green",
+      2,
+      0,
+      0,
+      0,
+      0,
+      null,
+      threeMinAgo,
+      now,
+    );
 
     db.prepare(
       `INSERT INTO agents (id, run_id, role, name, status, pid, module_id, buildplan_id, tdd_phase, tdd_cycles, cost_usd, tokens_used, queue_wait_ms, total_active_ms, error, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("agt_r2", "run_agg", "builder", "builder-r2", "running", 2222, "mod-y", null, "red", 1, 0, 0, 0, 0, null, threeMinAgo, now);
+    ).run(
+      "agt_r2",
+      "run_agg",
+      "builder",
+      "builder-r2",
+      "running",
+      2222,
+      "mod-y",
+      null,
+      "red",
+      1,
+      0,
+      0,
+      0,
+      0,
+      null,
+      threeMinAgo,
+      now,
+    );
 
     // 1 completed agent with cost=1.0
     db.prepare(
@@ -310,7 +394,7 @@ describe("Run summary includes aggregated estimated cost", () => {
   });
 
   test("RunSummary.estimatedCost > 0 when running agents exist", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_agg`);
+    const res = await fetch(`${server?.url}/api/runs/run_agg`);
     const data = await res.json();
 
     expect(typeof data.estimatedCost).toBe("number");
@@ -319,11 +403,11 @@ describe("Run summary includes aggregated estimated cost", () => {
 
   test("RunSummary.estimatedCost equals sum of per-agent estimates", async () => {
     // Get run summary
-    const runRes = await fetch(`${server!.url}/api/runs/run_agg`);
+    const runRes = await fetch(`${server?.url}/api/runs/run_agg`);
     const runData = await runRes.json();
 
     // Get individual agents
-    const agentsRes = await fetch(`${server!.url}/api/runs/run_agg/agents`);
+    const agentsRes = await fetch(`${server?.url}/api/runs/run_agg/agents`);
     const agentsData = await agentsRes.json();
 
     // Sum individual agent estimates
@@ -337,12 +421,12 @@ describe("Run summary includes aggregated estimated cost", () => {
   });
 
   test("RunSummary estimated cost approximates 2 agents * 3min * $0.05/min", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_agg`);
+    const res = await fetch(`${server?.url}/api/runs/run_agg`);
     const data = await res.json();
 
     // 2 running agents * 3 min * $0.05/min = $0.30
     // Allow some tolerance for timing
-    expect(data.estimatedCost).toBeGreaterThan(0.20);
+    expect(data.estimatedCost).toBeGreaterThan(0.2);
     expect(data.estimatedCost).toBeLessThan(0.45);
   });
 });
@@ -357,18 +441,69 @@ describe("Budget progress reflects estimated costs", () => {
     db.prepare(
       `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("run_budget", "spec_budget", "running", "thorough", 4, 10.0, 4.0, 80000, "build", 1, 3, "{}", tenMinAgo, now);
+    ).run(
+      "run_budget",
+      "spec_budget",
+      "running",
+      "thorough",
+      4,
+      10.0,
+      4.0,
+      80000,
+      "build",
+      1,
+      3,
+      "{}",
+      tenMinAgo,
+      now,
+    );
 
     // 2 running agents, created 10min ago, cost=0 -> each ~$0.50 estimated
     db.prepare(
       `INSERT INTO agents (id, run_id, role, name, status, pid, module_id, buildplan_id, tdd_phase, tdd_cycles, cost_usd, tokens_used, queue_wait_ms, total_active_ms, error, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("agt_b1", "run_budget", "builder", "builder-b1", "running", 3333, "mod-1", null, "green", 2, 0, 0, 0, 0, null, tenMinAgo, now);
+    ).run(
+      "agt_b1",
+      "run_budget",
+      "builder",
+      "builder-b1",
+      "running",
+      3333,
+      "mod-1",
+      null,
+      "green",
+      2,
+      0,
+      0,
+      0,
+      0,
+      null,
+      tenMinAgo,
+      now,
+    );
 
     db.prepare(
       `INSERT INTO agents (id, run_id, role, name, status, pid, module_id, buildplan_id, tdd_phase, tdd_cycles, cost_usd, tokens_used, queue_wait_ms, total_active_ms, error, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("agt_b2", "run_budget", "builder", "builder-b2", "running", 4444, "mod-2", null, "red", 1, 0, 0, 0, 0, null, tenMinAgo, now);
+    ).run(
+      "agt_b2",
+      "run_budget",
+      "builder",
+      "builder-b2",
+      "running",
+      4444,
+      "mod-2",
+      null,
+      "red",
+      1,
+      0,
+      0,
+      0,
+      0,
+      null,
+      tenMinAgo,
+      now,
+    );
 
     server = await startServer({ port: 0, db });
   });
@@ -382,7 +517,7 @@ describe("Budget progress reflects estimated costs", () => {
   });
 
   test("API returns cost and estimatedCost for budget calculation", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_budget`);
+    const res = await fetch(`${server?.url}/api/runs/run_budget`);
     const data = await res.json();
 
     expect(data.cost).toBe(4.0);
@@ -401,11 +536,11 @@ describe("Budget progress reflects estimated costs", () => {
   });
 
   test("estimated cost approximates 2 agents * 10min * $0.05/min", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_budget`);
+    const res = await fetch(`${server?.url}/api/runs/run_budget`);
     const data = await res.json();
 
     // 2 running agents * 10 min * $0.05/min = $1.00
-    expect(data.estimatedCost).toBeGreaterThan(0.80);
+    expect(data.estimatedCost).toBeGreaterThan(0.8);
     expect(data.estimatedCost).toBeLessThan(1.25);
   });
 });
@@ -420,16 +555,53 @@ describe("Estimate transitions to real cost", () => {
     const now = new Date().toISOString();
 
     // Create run
-    testDb.prepare(
-      `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+    testDb
+      .prepare(
+        `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("run_trans", "spec_trans", "running", "thorough", 4, 50.0, 0, 0, "build", 1, 3, "{}", fiveMinAgo, now);
+      )
+      .run(
+        "run_trans",
+        "spec_trans",
+        "running",
+        "thorough",
+        4,
+        50.0,
+        0,
+        0,
+        "build",
+        1,
+        3,
+        "{}",
+        fiveMinAgo,
+        now,
+      );
 
     // Running agent with no cost yet
-    testDb.prepare(
-      `INSERT INTO agents (id, run_id, role, name, status, pid, module_id, buildplan_id, tdd_phase, tdd_cycles, cost_usd, tokens_used, queue_wait_ms, total_active_ms, error, created_at, updated_at)
+    testDb
+      .prepare(
+        `INSERT INTO agents (id, run_id, role, name, status, pid, module_id, buildplan_id, tdd_phase, tdd_cycles, cost_usd, tokens_used, queue_wait_ms, total_active_ms, error, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("agt_trans", "run_trans", "builder", "builder-trans", "running", 6666, "mod-trans", null, "green", 3, 0, 0, 0, 0, null, fiveMinAgo, now);
+      )
+      .run(
+        "agt_trans",
+        "run_trans",
+        "builder",
+        "builder-trans",
+        "running",
+        6666,
+        "mod-trans",
+        null,
+        "green",
+        3,
+        0,
+        0,
+        0,
+        0,
+        null,
+        fiveMinAgo,
+        now,
+      );
 
     testServer = await startServer({ port: 0, db: testDb });
   });
@@ -444,7 +616,7 @@ describe("Estimate transitions to real cost", () => {
 
   test("running agent initially shows estimate, then shows real cost after completion", async () => {
     // First poll: agent is running with estimate
-    const res1 = await fetch(`${testServer!.url}/api/runs/run_trans/agents`);
+    const res1 = await fetch(`${testServer?.url}/api/runs/run_trans/agents`);
     const data1 = await res1.json();
     const agent1 = data1.find((a: Record<string, unknown>) => a.id === "agt_trans");
 
@@ -453,12 +625,14 @@ describe("Estimate transitions to real cost", () => {
     expect(agent1.cost).toBe(0);
 
     // Now simulate the agent completing with real cost
-    testDb.prepare(
-      `UPDATE agents SET status = 'completed', cost_usd = 1.5, updated_at = ? WHERE id = 'agt_trans'`,
-    ).run(new Date().toISOString());
+    testDb
+      .prepare(
+        `UPDATE agents SET status = 'completed', cost_usd = 1.5, updated_at = ? WHERE id = 'agt_trans'`,
+      )
+      .run(new Date().toISOString());
 
     // Second poll: agent is completed with real cost
-    const res2 = await fetch(`${testServer!.url}/api/runs/run_trans/agents`);
+    const res2 = await fetch(`${testServer?.url}/api/runs/run_trans/agents`);
     const data2 = await res2.json();
     const agent2 = data2.find((a: Record<string, unknown>) => a.id === "agt_trans");
 
@@ -477,13 +651,46 @@ describe("Spawning agent cost estimation", () => {
     db.prepare(
       `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("run_spawn", "spec_spawn", "running", "thorough", 4, 50.0, 0, 0, "build", 1, 3, "{}", twoMinAgo, now);
+    ).run(
+      "run_spawn",
+      "spec_spawn",
+      "running",
+      "thorough",
+      4,
+      50.0,
+      0,
+      0,
+      "build",
+      1,
+      3,
+      "{}",
+      twoMinAgo,
+      now,
+    );
 
     // Spawning agent (between pending and running) - should get estimated cost
     db.prepare(
       `INSERT INTO agents (id, run_id, role, name, status, pid, module_id, buildplan_id, tdd_phase, tdd_cycles, cost_usd, tokens_used, queue_wait_ms, total_active_ms, error, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("agt_spawn", "run_spawn", "builder", "builder-spawn", "spawning", 7777, "mod-spawn", null, null, 0, 0, 0, 0, 0, null, twoMinAgo, now);
+    ).run(
+      "agt_spawn",
+      "run_spawn",
+      "builder",
+      "builder-spawn",
+      "spawning",
+      7777,
+      "mod-spawn",
+      null,
+      null,
+      0,
+      0,
+      0,
+      0,
+      0,
+      null,
+      twoMinAgo,
+      now,
+    );
 
     server = await startServer({ port: 0, db });
   });
@@ -497,7 +704,7 @@ describe("Spawning agent cost estimation", () => {
   });
 
   test("spawning agent with cost=0 gets estimatedCost > 0", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_spawn/agents`);
+    const res = await fetch(`${server?.url}/api/runs/run_spawn/agents`);
     const data = await res.json();
     const agent = data.find((a: Record<string, unknown>) => a.id === "agt_spawn");
 
@@ -509,13 +716,13 @@ describe("Spawning agent cost estimation", () => {
   });
 
   test("spawning agent estimated cost approximates 2min * $0.05/min", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_spawn/agents`);
+    const res = await fetch(`${server?.url}/api/runs/run_spawn/agents`);
     const data = await res.json();
     const agent = data.find((a: Record<string, unknown>) => a.id === "agt_spawn");
 
     // 2 min * $0.05/min = $0.10
     expect(agent.estimatedCost).toBeGreaterThan(0.05);
-    expect(agent.estimatedCost).toBeLessThan(0.20);
+    expect(agent.estimatedCost).toBeLessThan(0.2);
   });
 });
 
@@ -528,19 +735,70 @@ describe("Failed/killed agent cost estimation", () => {
     db.prepare(
       `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("run_dead", "spec_dead", "running", "thorough", 4, 50.0, 0, 0, "build", 1, 3, "{}", fiveMinAgo, now);
+    ).run(
+      "run_dead",
+      "spec_dead",
+      "running",
+      "thorough",
+      4,
+      50.0,
+      0,
+      0,
+      "build",
+      1,
+      3,
+      "{}",
+      fiveMinAgo,
+      now,
+    );
 
     // Failed agent with zero cost — should NOT get estimated
     db.prepare(
       `INSERT INTO agents (id, run_id, role, name, status, pid, module_id, buildplan_id, tdd_phase, tdd_cycles, cost_usd, tokens_used, queue_wait_ms, total_active_ms, error, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("agt_failed", "run_dead", "builder", "builder-failed", "failed", null, "mod-f", null, "red", 1, 0, 0, 0, 120000, "Build error", fiveMinAgo, now);
+    ).run(
+      "agt_failed",
+      "run_dead",
+      "builder",
+      "builder-failed",
+      "failed",
+      null,
+      "mod-f",
+      null,
+      "red",
+      1,
+      0,
+      0,
+      0,
+      120000,
+      "Build error",
+      fiveMinAgo,
+      now,
+    );
 
     // Killed agent with zero cost — should NOT get estimated
     db.prepare(
       `INSERT INTO agents (id, run_id, role, name, status, pid, module_id, buildplan_id, tdd_phase, tdd_cycles, cost_usd, tokens_used, queue_wait_ms, total_active_ms, error, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("agt_killed", "run_dead", "builder", "builder-killed", "killed", null, "mod-k", null, null, 0, 0, 0, 0, 60000, "Killed by user", fiveMinAgo, now);
+    ).run(
+      "agt_killed",
+      "run_dead",
+      "builder",
+      "builder-killed",
+      "killed",
+      null,
+      "mod-k",
+      null,
+      null,
+      0,
+      0,
+      0,
+      0,
+      60000,
+      "Killed by user",
+      fiveMinAgo,
+      now,
+    );
 
     server = await startServer({ port: 0, db });
   });
@@ -554,7 +812,7 @@ describe("Failed/killed agent cost estimation", () => {
   });
 
   test("failed agent with cost=0 has estimatedCost=0", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_dead/agents`);
+    const res = await fetch(`${server?.url}/api/runs/run_dead/agents`);
     const data = await res.json();
     const agent = data.find((a: Record<string, unknown>) => a.id === "agt_failed");
 
@@ -566,7 +824,7 @@ describe("Failed/killed agent cost estimation", () => {
   });
 
   test("killed agent with cost=0 has estimatedCost=0", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_dead/agents`);
+    const res = await fetch(`${server?.url}/api/runs/run_dead/agents`);
     const data = await res.json();
     const agent = data.find((a: Record<string, unknown>) => a.id === "agt_killed");
 
@@ -648,13 +906,46 @@ describe("Running agent with real cost already set", () => {
     db.prepare(
       `INSERT INTO runs (id, spec_id, status, mode, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("run_real", "spec_real", "running", "thorough", 4, 50.0, 2.0, 50000, "build", 1, 3, "{}", threeMinAgo, now);
+    ).run(
+      "run_real",
+      "spec_real",
+      "running",
+      "thorough",
+      4,
+      50.0,
+      2.0,
+      50000,
+      "build",
+      1,
+      3,
+      "{}",
+      threeMinAgo,
+      now,
+    );
 
     // Running agent that already has a real cost (e.g., from heartbeat cost reporting)
     db.prepare(
       `INSERT INTO agents (id, run_id, role, name, status, pid, module_id, buildplan_id, tdd_phase, tdd_cycles, cost_usd, tokens_used, queue_wait_ms, total_active_ms, error, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run("agt_real_running", "run_real", "builder", "builder-real", "running", 8888, "mod-real", null, "green", 4, 2.0, 40000, 0, 180000, null, threeMinAgo, now);
+    ).run(
+      "agt_real_running",
+      "run_real",
+      "builder",
+      "builder-real",
+      "running",
+      8888,
+      "mod-real",
+      null,
+      "green",
+      4,
+      2.0,
+      40000,
+      0,
+      180000,
+      null,
+      threeMinAgo,
+      now,
+    );
 
     server = await startServer({ port: 0, db });
   });
@@ -668,7 +959,7 @@ describe("Running agent with real cost already set", () => {
   });
 
   test("running agent with real cost shows cost, not estimate", async () => {
-    const res = await fetch(`${server!.url}/api/runs/run_real/agents`);
+    const res = await fetch(`${server?.url}/api/runs/run_real/agents`);
     const data = await res.json();
     const agent = data.find((a: Record<string, unknown>) => a.id === "agt_real_running");
 
