@@ -16,6 +16,8 @@ export interface MergeResult {
   mergedBranches: string[];
   failedBranches: string[];
   errors: string[];
+  /** Per-branch results with conflict details (available when using mergeSingleBranch internally) */
+  branchResults?: MergeBranchResult[];
 }
 
 /**
@@ -264,8 +266,9 @@ export function mergeSingleBranch(
  * For each worktree:
  * 0. Sanitize the worktree (remove protected files, node_modules, commit uncommitted work)
  * 1. Rebase the worktree branch onto the current HEAD of the target branch
- * 2. If rebase succeeds, merge into the target branch
- * 3. If rebase fails (conflicts), record the failure and continue with remaining branches
+ * 2. If rebase succeeds, merge into the target using mergeSingleBranch()
+ * 3. If merge has conflicts, record the failure with conflict details
+ * 4. If merge succeeds, continue with the next branch
  *
  * Before any worktree processing:
  * - Sanitize the main repo (stash uncommitted changes, remove node_modules from tracking)
@@ -279,7 +282,7 @@ export function mergeSingleBranch(
  * @param worktreePaths - Paths to worktree directories to merge
  * @param mainRepoPath - Path to the main repository
  * @param targetBranch - The branch to merge into (e.g., "main")
- * @returns MergeResult with details of merged and failed branches
+ * @returns MergeResult with details of merged and failed branches, plus per-branch results
  */
 export function rebaseAndMerge(
   worktreePaths: string[],
@@ -289,6 +292,7 @@ export function rebaseAndMerge(
   const mergedBranches: string[] = [];
   const failedBranches: string[] = [];
   const errors: string[] = [];
+  const branchResults: MergeBranchResult[] = [];
 
   // Pre-merge: Sanitize the main repo (stash uncommitted changes)
   const mainSanitize = sanitizeMainRepo(mainRepoPath);
@@ -300,6 +304,7 @@ export function rebaseAndMerge(
         try { return getWorktreeBranch(p); } catch { return p; }
       }),
       errors: [`Main repo sanitization failed: ${mainSanitize.error}`],
+      branchResults: [],
     };
   }
 
@@ -310,98 +315,44 @@ export function rebaseAndMerge(
       // Step 0: Sanitize the worktree before rebase
       const sanitizeResult = sanitizeWorktree(wtPath);
       if (!sanitizeResult.success) {
-        failedBranches.push(branch);
         const dirtyInfo = sanitizeResult.remainingDirtyFiles?.length
           ? `: dirty files: ${sanitizeResult.remainingDirtyFiles.join(", ")}`
           : "";
-        errors.push(
-          sanitizeResult.error ??
-            `Worktree sanitization failed for ${branch}${dirtyInfo}`,
-        );
+        const errorMsg = sanitizeResult.error ??
+          `Worktree sanitization failed for ${branch}${dirtyInfo}`;
+        failedBranches.push(branch);
+        errors.push(errorMsg);
+        branchResults.push({
+          success: false,
+          conflicted: false,
+          branch,
+          error: errorMsg,
+        });
         continue;
       }
 
-      // Step 1: Rebase onto current target HEAD
+      // Step 1: Try rebasing onto current target HEAD for a clean linear history.
+      // If rebase fails (conflicts), fall back to direct merge which handles
+      // 3-way conflicts better and leaves conflict markers on disk.
       const rebaseResult = rebaseWorktreeBranch(wtPath, targetBranch);
 
-      if (!rebaseResult.success) {
-        failedBranches.push(branch);
-        errors.push(rebaseResult.error ?? `Rebase of ${branch} failed`);
-        continue;
-      }
+      // Step 2: Merge the branch into target using the isolated merge strategy.
+      // If rebase succeeded, this will be a clean fast-forward-like merge.
+      // If rebase failed, we skip it and try a direct 3-way merge instead,
+      // which can detect and report conflicts properly.
+      const mergeResult = mergeSingleBranch(mainRepoPath, branch);
+      branchResults.push(mergeResult);
 
-      // Step 2: Merge the rebased branch into target using --no-commit for sanitization
-      try {
-        // Use --no-commit so we can inspect and sanitize staged files before committing
-        execSync(`git merge ${branch} --no-commit --no-ff`, {
-          cwd: mainRepoPath,
-          stdio: "pipe",
-          env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
-        });
-
-        // Step 3: Sanitize — remove any protected files from the staged merge
-        const stagedFiles = execSync("git diff --cached --name-only HEAD", {
-          cwd: mainRepoPath,
-          encoding: "utf-8",
-        }).trim().split("\n").filter(Boolean);
-
-        const protectedFiles = getProtectedFiles(stagedFiles);
-
-        if (protectedFiles.length > 0) {
-          // Unstage and remove protected files from the merge
-          for (const pf of protectedFiles) {
-            try {
-              // Reset the file to the pre-merge state (HEAD version, or remove if new)
-              execSync(`git reset HEAD -- "${pf}"`, {
-                cwd: mainRepoPath,
-                stdio: "pipe",
-              });
-              // Remove the file from the working directory if it was added by the merge
-              const fullPath = join(mainRepoPath, pf);
-              if (existsSync(fullPath)) {
-                // Check if this file existed before the merge on the target branch
-                try {
-                  execSync(`git show HEAD:"${pf}"`, {
-                    cwd: mainRepoPath,
-                    stdio: "pipe",
-                  });
-                  // File existed before — restore it to its pre-merge state
-                  execSync(`git checkout HEAD -- "${pf}"`, {
-                    cwd: mainRepoPath,
-                    stdio: "pipe",
-                  });
-                } catch {
-                  // File did not exist before — remove it from working tree
-                  unlinkSync(fullPath);
-                  // Try to remove empty parent directories (non-recursive to avoid
-                  // accidentally deleting directories that contain other files)
-                  try {
-                    const dir = dirname(fullPath);
-                    // Only remove if directory is empty — non-recursive rmSync
-                    if (readdirSync(dir).length === 0) {
-                      rmSync(dir);
-                    }
-                  } catch {
-                    // ignore — directory may not be empty or may not exist
-                  }
-                }
-              }
-            } catch {
-              // If individual file cleanup fails, continue with others
-            }
-          }
-        }
-
-        // Step 4: Commit the sanitized merge
-        execSync(`git commit --no-edit -m "Merge branch '${branch}'"`, {
-          cwd: mainRepoPath,
-          stdio: "pipe",
-          env: { ...process.env, GIT_WORK_TREE: mainRepoPath },
-        });
+      if (mergeResult.success) {
         mergedBranches.push(branch);
-      } catch (err) {
+      } else {
         failedBranches.push(branch);
-        errors.push(err instanceof Error ? err.message : `Merge of ${branch} into ${targetBranch} failed`);
+        if (mergeResult.conflicted) {
+          const conflictFiles = mergeResult.conflictedFiles?.join(", ") ?? "unknown files";
+          errors.push(`Merge of ${branch} has conflicts in: ${conflictFiles}`);
+        } else {
+          errors.push(mergeResult.error ?? `Merge of ${branch} failed`);
+        }
       }
     }
   } finally {
@@ -416,5 +367,6 @@ export function rebaseAndMerge(
     mergedBranches,
     failedBranches,
     errors,
+    branchResults,
   };
 }

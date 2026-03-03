@@ -16,7 +16,9 @@ import { tmpdir } from "node:os";
 
 import {
   mergeSingleBranch,
+  rebaseAndMerge,
   type MergeBranchResult,
+  type MergeResult,
 } from "../../../src/pipeline/rebase-merge.js";
 
 let repoDir: string;
@@ -321,5 +323,54 @@ describe("sequential merge with conflict detection", () => {
     expect(fileContent).toContain("module A changes");
     expect(fileContent).toContain("module B changes");
     expect(readFileSync(join(repoDir, "c.txt"), "utf-8")).toContain("module C");
+  });
+});
+
+describe("rebaseAndMerge returns branchResults with conflict info", () => {
+  test("includes branchResults array in MergeResult", () => {
+    const wt1 = createWorktreeBranch(repoDir, "feat-br1");
+    writeFileSync(join(wt1, "br1.txt"), "branch 1\n");
+    execSync("git add -A", { cwd: wt1, stdio: "pipe" });
+    execSync('git commit -m "Branch 1"', { cwd: wt1, stdio: "pipe" });
+
+    const result = rebaseAndMerge([wt1], repoDir, "main");
+    expect(result.success).toBe(true);
+    expect(result.branchResults).toBeDefined();
+    expect(result.branchResults!.length).toBe(1);
+    expect(result.branchResults![0].success).toBe(true);
+    expect(result.branchResults![0].branch).toBe("feat-br1");
+    expect(result.branchResults![0].conflicted).toBe(false);
+  });
+
+  test("branchResults includes conflicted branch info", () => {
+    const wt1 = createWorktreeBranch(repoDir, "feat-ok2");
+    const wt2 = createWorktreeBranch(repoDir, "feat-conflict2");
+
+    // wt1: modify file.txt
+    writeFileSync(join(wt1, "file.txt"), "ok changes\n");
+    execSync("git add -A", { cwd: wt1, stdio: "pipe" });
+    execSync('git commit -m "OK changes"', { cwd: wt1, stdio: "pipe" });
+
+    // wt2: also modify file.txt differently
+    writeFileSync(join(wt2, "file.txt"), "conflict changes\n");
+    execSync("git add -A", { cwd: wt2, stdio: "pipe" });
+    execSync('git commit -m "Conflict changes"', { cwd: wt2, stdio: "pipe" });
+
+    const result = rebaseAndMerge([wt1, wt2], repoDir, "main");
+
+    // Overall: fail because of second branch
+    expect(result.success).toBe(false);
+    expect(result.branchResults).toBeDefined();
+    expect(result.branchResults!.length).toBe(2);
+
+    // First branch: success
+    expect(result.branchResults![0].success).toBe(true);
+    expect(result.branchResults![0].conflicted).toBe(false);
+
+    // Second branch: conflicted
+    expect(result.branchResults![1].success).toBe(false);
+    expect(result.branchResults![1].conflicted).toBe(true);
+    expect(result.branchResults![1].conflictedFiles).toBeDefined();
+    expect(result.branchResults![1].conflictedFiles!).toContain("file.txt");
   });
 });
