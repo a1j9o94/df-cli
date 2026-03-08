@@ -47,3 +47,7 @@ export function newMergeQueueId(): string {
 export function newResearchId(): string {
   return `rsch_${ulid()}`;
 }
+
+export function newBlockerId(): string {
+  return `blk_${ulid()}`;
+}
