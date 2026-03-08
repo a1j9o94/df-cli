@@ -1,32 +1,32 @@
 ---
 name: agent-list-json-valid
 type: functional
-spec_id: run_01KJQEP7BHVFD7GS7YYJDWFWJH
-created_by: agt_01KJQEP7BJ05Z2KCGS05N3R3ZW
+spec_id: run_01KK6XEX73VFTR66TYX35KP469
+created_by: agt_01KK6XEX74FRYJEDHG0GSWNB2C
 ---
 
-## Test: Agent list JSON is valid
+SCENARIO: agent list --json produces valid JSON with control characters in system_prompt
 
-### Preconditions
-- Dark Factory project initialized with state.db
-- At least 2 agents exist in the database, one with a system_prompt containing:
-  - Literal newline characters (multi-line prompt)
-  - Tab characters
-  - Backslash sequences
-  - Unicode characters
-  - Single and double quotes
+SETUP:
+1. Initialize a dark factory project (df init or use existing .df directory)
+2. Create a run with a spec
+3. Create an agent with a system_prompt containing: newlines (\n), tabs (\t), null bytes (\x00), and all control characters 0x00-0x1F
 
-### Steps
+STEPS:
 1. Run: dark agent list --json
-2. Pipe output to: python3 -c "import sys,json; data=json.load(sys.stdin); print('valid:', len(data))"
-3. Pipe output to: echo '<output>' | jq .
-4. In Node.js: JSON.parse(output) must succeed
+2. Capture stdout to a variable/file
+3. Parse with JSON.parse() in Node/Bun - must NOT throw
+4. Parse with: echo '<output>' | python3 -c 'import sys,json; json.load(sys.stdin)' - must exit 0
+5. Parse with: echo '<output>' | jq . - must exit 0
 
-### Expected Output
-- Step 2: python3 exits 0, prints valid count
-- Step 3: jq exits 0, pretty-prints the array
-- Step 4: JSON.parse returns a valid array of agent objects
+EXPECTED:
+- All three parsers succeed without error
+- Output is a JSON array of agent objects
+- Each agent object has fields: id, run_id, role, name, status, etc.
+- system_prompt field is NOT present in any agent object (excluded by default)
 
-### Pass/Fail Criteria
-- PASS: All three parsers accept the JSON output without errors
-- FAIL: Any parser throws a parse error
+PASS CRITERIA:
+- JSON.parse() succeeds
+- Python json.loads() succeeds
+- jq exits 0
+- No system_prompt field in output
