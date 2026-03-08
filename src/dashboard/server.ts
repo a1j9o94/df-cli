@@ -10,6 +10,9 @@ import { computeElapsedMs, estimateCost } from "../utils/agent-enrichment.js";
 import { PHASE_ORDER, shouldSkipPhase, type PhaseName } from "../pipeline/phases.js";
 import { parseFrontmatter, serializeFrontmatter } from "../utils/frontmatter.js";
 import { newSpecId, newRunId } from "../utils/id.js";
+import { listBlockersByRun, getBlocker, resolveBlocker } from "../db/queries/blockers.js";
+import { encryptSecret } from "../utils/secrets.js";
+import type { BlockerStatus } from "../types/blocker.js";
 
 // --- Contract: ServerExport ---
 
@@ -942,6 +945,50 @@ function handleGetSpecRuns(db: InstanceType<typeof Database>, specId: string): R
   return jsonResponse(runs);
 }
 
+// --- Blocker API handlers ---
+
+function handleListBlockers(
+  db: InstanceType<typeof Database>,
+  runId: string,
+  status?: BlockerStatus
+): Response {
+  const blockers = listBlockersByRun(db, runId, status);
+  return jsonResponse(blockers);
+}
+
+async function handleResolveBlocker(
+  db: InstanceType<typeof Database>,
+  blockerId: string,
+  req: Request
+): Promise<Response> {
+  const existing = getBlocker(db, blockerId);
+  if (!existing) {
+    return errorResponse(`Blocker not found: ${blockerId}`, 404);
+  }
+
+  const body = await req.json() as {
+    value?: string;
+    env_key?: string;
+    env_value?: string;
+  };
+
+  let resolvedValue: string | undefined;
+
+  if (existing.type === "secret" && body.env_key && body.env_value) {
+    // Encrypt the secret value before storing
+    resolvedValue = encryptSecret(body.env_value);
+  } else if (body.value !== undefined) {
+    resolvedValue = body.value;
+  }
+
+  const blocker = resolveBlocker(db, blockerId, {
+    value: resolvedValue,
+    resolved_by: "dashboard",
+  });
+
+  return jsonResponse({ success: true, blocker });
+}
+
 // --- URL Router ---
 
 async function route(
@@ -1018,6 +1065,22 @@ async function route(
   const runMatch = path.match(/^\/api\/runs\/([^/]+)$/);
   if (runMatch) {
     return handleGetRun(db, runMatch[1]);
+  }
+
+  // --- Blocker API routes (must be before generic runSubMatch) ---
+
+  const blockerResolveMatch = path.match(/^\/api\/runs\/([^/]+)\/blockers\/([^/]+)\/resolve$/);
+  if (blockerResolveMatch && req.method === "POST") {
+    const [, runId, blockerId] = blockerResolveMatch;
+    return handleResolveBlocker(db, blockerId, req);
+  }
+
+  const blockerListMatch = path.match(/^\/api\/runs\/([^/]+)\/blockers$/);
+  if (blockerListMatch) {
+    const runId = blockerListMatch[1];
+    const url = new URL(req.url);
+    const status = url.searchParams.get("status") as BlockerStatus | null;
+    return handleListBlockers(db, runId, status ?? undefined);
   }
 
   const runSubMatch = path.match(/^\/api\/runs\/([^/]+)\/([^/]+)$/);
