@@ -1,36 +1,37 @@
 ---
 name: cli-export-markdown
 type: functional
-spec_id: run_01KJSYMVTRZA22SC742GEMEWDJ
-created_by: agt_01KJSYMVTT7H090YHJERTJN6FG
+spec_id: run_01KK7R4Y1NWJRH426C68FK58CZ
+created_by: agt_01KK7R4Y1TEX0SQCM76106T1F2
 ---
 
-## CLI Export Markdown
+Preconditions: A completed run exists with 3 modules, all scenarios passed, and highlights.json populated.
 
-### Preconditions
-- A completed run exists with run ID known
-- The run has at least 2 modules, each with test results
-- highlights.json exists with entries
-- At least one screenshot exists (if visual run)
-
-### Test Steps
+Steps:
 1. Run: dark run output <run-id>
-2. Verify stdout output contains:
-   - Header line: '# Run Output: <spec title>'
-   - '## Modules Built (<count>)' section
-   - For each module: module name, files list, test count, decisions
+2. Verify stdout contains formatted output with:
+   - Run title header
+   - 'Modules Built (3)' section
+   - Per-module: name, files created/modified, test count, decisions
+   - Scenarios summary line (e.g., '8/8 passed')
 3. Run: dark run output <run-id> --export
-4. Verify file created at .df/runs/<run-id>/output.md
-5. Read the file and verify it contains the same content as stdout
-6. Verify the path is printed to stdout
+4. Verify output says file was written and prints path
+5. Verify .df/runs/<run-id>/output.md exists
+6. Read the markdown file and verify:
+   - Contains module summaries with files and test counts
+   - Contains scenario results
+   - Is valid markdown (headers, lists, code blocks)
 
-### Expected Output
-- Readable markdown output with module summaries
-- Scenario results summary line: 'Scenarios: X/Y passed'
-- Export writes to .df/runs/<run-id>/output.md
+Pass criteria:
+- CLI prints readable formatted output to stdout
+- --export writes valid markdown file to correct path
+- File path is printed after export
+- Markdown contains all module summaries and scenario results
+- Markdown is well-structured with proper headers and formatting
 
-### Pass Criteria
-- dark run output <run-id> prints formatted markdown to stdout
-- --export flag creates output.md file at the correct path
-- Module section lists files, test counts, and decisions
-- Scenarios summary shows pass/total count
+Fail criteria:
+- CLI command not recognized or errors
+- stdout output missing module details
+- --export doesn't create file
+- Markdown file is empty or malformed
+- File written to wrong location
