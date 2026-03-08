@@ -61,9 +61,9 @@ export const continueCommand = new Command("continue")
           log.error(`Run not found: ${runId}`);
           process.exit(1);
         }
-        if (run.status !== "failed" && run.status !== "running") {
+        if (run.status !== "failed" && run.status !== "running" && run.status !== "paused") {
           log.error(
-            `Run ${runId} is not resumable (status: ${run.status}). Only failed or stale running runs can be resumed.`,
+            `Run ${runId} is not resumable (status: ${run.status}). Only failed, paused, or stale running runs can be resumed.`,
           );
           process.exit(1);
         }
