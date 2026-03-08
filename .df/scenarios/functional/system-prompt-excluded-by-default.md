@@ -1,39 +1,29 @@
 ---
 name: system-prompt-excluded-by-default
 type: functional
-spec_id: run_01KJQEP7BHVFD7GS7YYJDWFWJH
-created_by: agt_01KJQEP7BJ05Z2KCGS05N3R3ZW
+spec_id: run_01KK6XEX73VFTR66TYX35KP469
+created_by: agt_01KK6XEX74FRYJEDHG0GSWNB2C
 ---
 
-## Test: system_prompt excluded from --json output by default
+SCENARIO: system_prompt excluded from --json output by default across all agent-related commands
 
-### Preconditions
-- Dark Factory project initialized with state.db
-- At least 1 agent exists with a non-null system_prompt field
+SETUP:
+1. Create agents with non-empty system_prompt values (multiline text with special chars)
 
-### Steps
+STEPS:
 1. Run: dark agent list --json
-2. Parse the JSON output
-3. Inspect each agent object in the returned array
-4. Check for the presence of the 'system_prompt' key
+2. Verify output does NOT contain the key 'system_prompt' anywhere
+3. Run: dark agent show <agent-id> --json
+4. Verify output does NOT contain 'system_prompt'
+5. Run: dark status --json
+6. If status includes agent data, verify nested agent objects do NOT contain 'system_prompt'
 
-### Expected Output
-- The JSON array contains agent objects
-- NO agent object contains a 'system_prompt' key
-- All other AgentRecord fields are present (id, run_id, role, name, status, pid, module_id, cost_usd, tokens_used, etc.)
+EXPECTED:
+- All three commands produce valid JSON
+- None of the JSON outputs contain a 'system_prompt' key at any nesting level
+- All other agent fields (id, run_id, role, name, status, pid, etc.) ARE present
 
-### Verification Command
-dark agent list --json | python3 -c "
-import sys, json
-agents = json.load(sys.stdin)
-for a in agents:
-    assert 'system_prompt' not in a, f'system_prompt found in agent {a["id"]}'
-    assert 'id' in a, 'id field missing'
-    assert 'role' in a, 'role field missing'
-    assert 'status' in a, 'status field missing'
-print('PASS: system_prompt correctly excluded from all', len(agents), 'agents')
-"
-
-### Pass/Fail Criteria
-- PASS: No agent object in the JSON output contains system_prompt field
-- FAIL: Any agent object contains system_prompt field
+PASS CRITERIA:
+- JSON.parse(output) succeeds for all three commands
+- Object.keys check or grep confirms no 'system_prompt' in any output
+- Agent identifying fields (id, name, role) are present
