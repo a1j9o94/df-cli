@@ -1,36 +1,23 @@
 ---
 name: create-spec-from-dashboard
 type: functional
-spec_id: run_01KJT1DSG8KTH91RNPN25VTA7Q
-created_by: agt_01KJT1DSG9535H9MNFRT5150J0
+spec_id: run_01KK6BYC9GJ9F5XNE49PW7SN3S
+created_by: agt_01KK6BYC9JZPT9DBGBS867HCTJ
 ---
 
-Test: Create a new spec from the dashboard UI.
+Precondition: Dashboard server running, .df/specs/ directory exists, state.db initialized.
 
-PRECONDITIONS:
-- Dark Factory project initialized (dark init)
-- Dashboard server running (dark dashboard)
-- No existing specs required
+Steps:
+1. Send POST /api/specs with body: {"description": "Add a caching layer for the API responses"}
+2. Verify response has status 201 and JSON body with fields: id (string, starts with spec_), title (string, non-empty), file_path (string, matches specs/*.md), status ("draft")
+3. Verify a file exists at .df/<file_path> returned in step 2
+4. Read the file and verify:
+   a. YAML frontmatter contains: id matching returned id, status: draft, type: feature
+   b. Body contains a # Title heading (non-empty)
+   c. Body contains a ## Goal section with content derived from the description
+   d. Body contains a ## Requirements section with at least one bullet point
+   e. Body contains a ## Scenarios section (can be placeholder)
+5. Query GET /api/specs and verify the new spec appears in the list with status: draft
+6. Query GET /api/specs/:id and verify full content is returned (markdown body + parsed frontmatter)
 
-STEPS:
-1. Open dashboard in browser at http://localhost:<port>
-2. Verify sidebar shows spec-centric view (not run-centric)
-3. Locate and click 'New Spec' button in sidebar header
-4. In the creation modal/panel, type: 'Add a caching layer for the API responses'
-5. Click submit/create button
-
-EXPECTED RESULTS:
-- A new spec file is created in .df/specs/ directory
-- The spec file contains valid YAML frontmatter with: id (spec_XXXX format), title derived from description, status: draft, type: feature, version: 0.1.0
-- The spec body contains a '## Goal' section populated from the description text
-- The spec body contains a '## Requirements' section with bullet-list requirements derived from the description
-- The spec body contains a '## Scenarios' section (can be placeholder)
-- The spec is registered in the SQLite database (specs table) with status 'draft'
-- After creation, the spec opens in the inline editor for refinement
-
-VERIFICATION:
-- Check .df/specs/ directory for new file: ls .df/specs/*.md
-- Read the new spec file and verify frontmatter and sections
-- Query DB: SELECT * FROM specs WHERE status = 'draft' ORDER BY created_at DESC LIMIT 1
-- Verify API: GET /api/specs should list the new spec
-- Verify API: GET /api/specs/:id should return the full markdown content
+Pass criteria: All verifications pass. Spec file on disk matches database record. Title is inferred from description (not empty/generic).
