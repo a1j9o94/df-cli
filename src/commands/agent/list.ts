@@ -2,8 +2,12 @@ import { Command } from "commander";
 import { join } from "node:path";
 import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
-import { listAgents } from "../../db/queries/agents.js";
-import { formatJson, formatStatus } from "../../utils/format.js";
+import { listAgentsFiltered } from "../../db/queries/agent-queries.js";
+import { formatAgentListEntry } from "../../utils/format-agent-list.js";
+import { formatJson } from "../../utils/format.js";
+import { summarizeAgentCounts } from "../../utils/agent-enrichment.js";
+import { getWorktreeFilesChanged } from "../../utils/worktree-files.js";
+import { isProcessAlive } from "../../utils/pid-check.js";
 import { log } from "../../utils/logger.js";
 
 /** Fields excluded from --json output by default (large, rarely useful in list views) */
@@ -13,9 +17,18 @@ export const agentListCommand = new Command("list")
   .description("List agents")
   .option("--run-id <id>", "Filter by run ID")
   .option("--role <role>", "Filter by role")
+  .option("--active", "Only show agents with live PIDs")
+  .option("--module <id>", "Filter by module ID")
   .option("--json", "Output as JSON")
   .option("--verbose", "Include system_prompt in JSON output")
-  .action(async (options: { runId?: string; role?: string; json?: boolean; verbose?: boolean }) => {
+  .action(async (options: {
+    runId?: string;
+    role?: string;
+    active?: boolean;
+    module?: string;
+    json?: boolean;
+    verbose?: boolean;
+  }) => {
     const dfDir = findDfDir();
     if (!dfDir) {
       log.error("Not in a Dark Factory project. Run 'df init' first.");
@@ -23,7 +36,18 @@ export const agentListCommand = new Command("list")
     }
 
     const db = getDb(join(dfDir, "state.db"));
-    const agents = listAgents(db, options.runId, options.role);
+
+    let agents = listAgentsFiltered(db, {
+      runId: options.runId,
+      role: options.role,
+      active: options.active,
+      moduleId: options.module,
+    });
+
+    // If --active is set, additionally filter by live PID
+    if (options.active) {
+      agents = agents.filter((a) => isProcessAlive(a.pid));
+    }
 
     if (options.json) {
       const excludeFields = options.verbose ? [] : AGENT_EXCLUDED_FIELDS;
@@ -36,11 +60,11 @@ export const agentListCommand = new Command("list")
       return;
     }
 
-    console.log(`Agents (${agents.length}):\n`);
+    const counts = summarizeAgentCounts(agents);
+    console.log(`Agents (${agents.length}: ${counts.summary}):\n`);
+
     for (const a of agents) {
-      const pid = a.pid ? ` pid=${a.pid}` : "";
-      const mod = a.module_id ? ` module=${a.module_id}` : "";
-      const cost = a.cost_usd > 0 ? ` $${a.cost_usd.toFixed(2)}` : "";
-      console.log(`  ${a.id}  ${a.name} (${a.role})  ${formatStatus(a.status)}${pid}${mod}${cost}`);
+      const filesChanged = getWorktreeFilesChanged(a.worktree_path);
+      console.log(formatAgentListEntry(a, { filesChanged }));
     }
   });
