@@ -1,8 +1,29 @@
 ---
 name: add-custom-label-mapping
 type: change
-spec_id: run_01KJSS4TD4WH5VKGWK6YWSWJZQ
-created_by: agt_01KJSS4TD5H3A6M3NHC0H95JFZ
+spec_id: run_01KK713FAZE5AV73F5HB66BPVF
+created_by: agt_01KK713FB00321PM7C8TQ1YDQZ
 ---
 
-Modification: Allow users to define custom label-to-type and label-to-priority mappings in .df/config.yaml.\n\nExample config.yaml addition:\nlabel_mapping:\n  type:\n    incident: bug\n    improvement: feature\n    story: feature\n  priority:\n    blocker: critical\n    minor: low\n    trivial: low\n\nExpected changes required:\n1. Read .df/config.yaml in the label mapper function (src/importers/spec-mapper.ts) — add config reading at the top of the label mapping function\n2. Merge user-defined mappings with defaults (user mappings take precedence)\n3. No schema changes to IssueData, IssueImporter, or SpecFrontmatter\n\nFiles that should NOT need changes:\n- src/importers/github.ts (fetcher doesn't care about label mapping)\n- src/importers/types.ts (interface unchanged)\n- src/importers/registry.ts (registry unchanged)\n- src/commands/spec/create.ts (CLI unchanged)\n- Any pipeline, db, or utils files\n\nEstimated effort: ~20 lines added to spec-mapper.ts (read config, merge mappings).\n\nPass criteria: Custom label mapping requires changes ONLY in the spec mapper module. No changes to fetcher, registry, CLI, or interfaces.
+Changeability test: Adding custom label-to-type/priority mappings from .df/config.yaml.
+
+Modification: Allow users to define custom label mappings in .df/config.yaml like:
+  label_mappings:
+    type:
+      'needs-fix': bug
+      'idea': feature
+    priority:
+      'fire': critical
+      'nice-to-have': low
+
+Verification:
+- Only src/importers/label-mapper.ts needs to change (read config, merge with defaults)
+- No changes to src/importers/github.ts (fetcher)
+- No changes to src/importers/spec-generator.ts
+- No changes to src/importers/import-spec.ts
+- No changes to src/commands/spec/create.ts
+
+Expected effort: ~15-20 lines added to label-mapper.ts to load and merge config
+Affected areas: label-mapper.ts only, plus reading from .df/config.yaml via existing getConfig() utility
+
+Pass criteria: Custom label mappings can be added by only modifying label-mapper.ts to read config — no changes to fetcher, generator, or CLI command.
