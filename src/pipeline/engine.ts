@@ -14,6 +14,8 @@ import { checkBudget } from "./budget.js";
 import { log } from "../utils/logger.js";
 import { getArchitectPrompt } from "../agents/prompts/architect.js";
 import { getEvaluatorPrompt } from "../agents/prompts/evaluator.js";
+import { findDfDir } from "../utils/config.js";
+import { dirname } from "node:path";
 
 // Extracted module imports
 import { sendInstructions } from "./instructions.js";
@@ -308,11 +310,14 @@ export class PipelineEngine {
       case "architect": {
         const spec = getSpec(this.db, run.spec_id);
         const specFilePath = spec?.file_path ?? "";
+        const projectRoot = this.getProjectRoot();
 
         await executeAgentPhase(this.db, this.runtime, runId, "architect", (agentId) =>
           getArchitectPrompt({ specId: run.spec_id, runId, agentId, specFilePath }),
           { specFilePath },
           sendInstructionsFn,
+          undefined,
+          projectRoot,
         );
         break;
       }
@@ -325,29 +330,41 @@ export class PipelineEngine {
         await executeBuildPhase(this.db, this.runtime, this.config, runId);
         break;
 
-      case "integrate":
+      case "integrate": {
+        const projectRoot = this.getProjectRoot();
         await executeAgentPhase(this.db, this.runtime, runId, "integration-tester", (agentId) =>
           getEvaluatorPrompt({ specId: run.spec_id, runId, agentId, scenarioIds: [], mode: "functional" }),
           {},
           sendInstructionsFn,
+          undefined,
+          projectRoot,
         );
         break;
+      }
 
-      case "evaluate-functional":
+      case "evaluate-functional": {
+        const projectRoot = this.getProjectRoot();
         await executeAgentPhase(this.db, this.runtime, runId, "evaluator", (agentId) =>
           getEvaluatorPrompt({ specId: run.spec_id, runId, agentId, scenarioIds: [], mode: "functional" }),
           {},
           sendInstructionsFn,
+          undefined,
+          projectRoot,
         );
         break;
+      }
 
-      case "evaluate-change":
+      case "evaluate-change": {
+        const projectRoot = this.getProjectRoot();
         await executeAgentPhase(this.db, this.runtime, runId, "evaluator", (agentId) =>
           getEvaluatorPrompt({ specId: run.spec_id, runId, agentId, scenarioIds: [], mode: "change" }),
           {},
           sendInstructionsFn,
+          undefined,
+          projectRoot,
         );
         break;
+      }
 
       case "merge": {
         await executeMergePhase(this.db, this.runtime, this.config, runId,
@@ -400,6 +417,14 @@ export class PipelineEngine {
       updateRunStatus(this.db, runId, "failed", `Max iterations reached. Last error: ${error}`);
       createEvent(this.db, runId, "run-failed", { error, iterations: run.iteration });
     }
+  }
+
+  /**
+   * Get the project root directory (parent of .df/).
+   */
+  private getProjectRoot(): string | undefined {
+    const dfDir = findDfDir();
+    return dfDir ? dirname(dfDir) : undefined;
   }
 
   private sleep(ms: number): Promise<void> {

@@ -30,10 +30,12 @@ ${modeDesc}
 3. Read each scenario file from .df/scenarios/functional/ and .df/scenarios/change/
 4. Execute each scenario against the code
 5. Score each scenario: pass (1.0) or fail (0.0)
-6. If you discover edge cases or failure patterns, create new scenarios to catch them in future iterations:
+6. Between scenarios, send a heartbeat to signal you're still working:
+   dark agent heartbeat ${context.agentId}
+7. If you discover edge cases or failure patterns, create new scenarios to catch them in future iterations:
    dark scenario create ${context.agentId} --name "<name>" --type functional --content "<test steps>"
-7. Report your results: dark agent report-result ${context.agentId} --passed <true|false> --score <0.0-1.0>
-8. Mark yourself complete: dark agent complete ${context.agentId}
+8. Report your results: dark agent report-result ${context.agentId} --passed <true|false> --score <0.0-1.0>
+9. Mark yourself complete: dark agent complete ${context.agentId}
 
 IMPORTANT: You MUST call report-result before calling complete. The complete command will reject if no results have been reported.
 

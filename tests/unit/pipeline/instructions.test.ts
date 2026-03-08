@@ -448,4 +448,11 @@ describe("sendInstructions — research CLI references", () => {
     const messages = getMessagesForAgent(db, agentId);
     expect(messages[0].body).toContain("dark research show");
   });
+
+  test("evaluator instructions include heartbeat reminder", () => {
+    sendInstructions(db, runId, agentId, "evaluator", {});
+
+    const messages = getMessagesForAgent(db, agentId);
+    expect(messages[0].body).toContain("dark agent heartbeat");
+  });
 });

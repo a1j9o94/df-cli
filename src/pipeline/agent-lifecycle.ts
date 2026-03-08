@@ -163,6 +163,7 @@ export async function executeAgentPhase(
     context: Record<string, unknown>,
   ) => void,
   pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
+  cwd?: string,
 ): Promise<void> {
   const MAX_RESUME_ATTEMPTS = 3;
 
@@ -196,6 +197,7 @@ export async function executeAgentPhase(
       name: agent.name,
       system_prompt: prompt,
       resume_session_id: sessionId,
+      worktree_path: cwd,
     });
 
     updateAgentPid(db, agent.id, handle.pid);
