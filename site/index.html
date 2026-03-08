@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dark Factory — AI agents that build software</title>
+  <meta name="description" content="A build orchestration system that decomposes software specs into independently buildable modules, runs parallel LLM-powered builders, validates against holdout scenarios, and merges results.">
+  <link rel="stylesheet" href="./styles.css">
+  <style>body { background: #0a0a0a; }</style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav>
+    <div class="nav-inner">
+      <a href="#hero" class="logo"><span>dark</span> factory</a>
+      <ul class="nav-links">
+        <li><a href="#how-it-works">How it works</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#cli">CLI</a></li>
+        <li><a href="#get-started">Get started</a></li>
+        <li><a href="https://github.com/a1j9o94/df-cli">GitHub</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section id="hero">
+    <h1>Dark Factory</h1>
+    <p class="tagline">AI agents that build software — decompose specs into modules, build in parallel, validate against holdout scenarios, merge with confidence.</p>
+    <div class="cta-group">
+      <a href="https://github.com/a1j9o94/df-cli" class="btn btn-primary">
+        View on GitHub
+      </a>
+      <a href="#get-started" class="btn btn-secondary">
+        Get Started
+      </a>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section id="how-it-works">
+    <h2>How it works</h2>
+    <p class="section-subtitle">An 8-phase pipeline that takes a specification and produces validated, merged code.</p>
+
+    <div class="pipeline-flow">
+      <div class="pipeline-step">
+        <span class="step-label">scout</span>
+        <span class="arrow">&rarr;</span>
+      </div>
+      <div class="pipeline-step">
+        <span class="step-label">architect</span>
+        <span class="arrow">&rarr;</span>
+      </div>
+      <div class="pipeline-step">
+        <span class="step-label">plan-review</span>
+        <span class="arrow">&rarr;</span>
+      </div>
+      <div class="pipeline-step">
+        <span class="step-label">build</span>
+        <span class="arrow">&rarr;</span>
+      </div>
+      <div class="pipeline-step">
+        <span class="step-label">integrate</span>
+        <span class="arrow">&rarr;</span>
+      </div>
+      <div class="pipeline-step">
+        <span class="step-label">evaluate</span>
+        <span class="arrow">&rarr;</span>
+      </div>
+      <div class="pipeline-step">
+        <span class="step-label">merge</span>
+      </div>
+    </div>
+
+    <div class="phase-grid">
+      <div class="phase-card">
+        <div class="phase-number">01</div>
+        <h3>Scout</h3>
+        <p>Index the codebase so agents understand the project structure, conventions, and patterns.</p>
+      </div>
+      <div class="phase-card">
+        <div class="phase-number">02</div>
+        <h3>Architect</h3>
+        <p>Decompose the spec into modules with interface contracts, a dependency DAG, and integration strategy.</p>
+      </div>
+      <div class="phase-card">
+        <div class="phase-number">03</div>
+        <h3>Plan Review</h3>
+        <p>Auto-approve small plans. Present complex decompositions for human review before building.</p>
+      </div>
+      <div class="phase-card">
+        <div class="phase-number">04</div>
+        <h3>Build</h3>
+        <p>Spawn parallel builders, each in its own git worktree, bound by typed interface contracts.</p>
+      </div>
+      <div class="phase-card">
+        <div class="phase-number">05</div>
+        <h3>Integrate</h3>
+        <p>Merge worktrees and run checkpoint tests to verify modules compose correctly.</p>
+      </div>
+      <div class="phase-card">
+        <div class="phase-number">06</div>
+        <h3>Evaluate</h3>
+        <p>Run holdout scenarios the builders never saw. Test changeability with fresh builders.</p>
+      </div>
+      <div class="phase-card">
+        <div class="phase-number">07</div>
+        <h3>Iterate</h3>
+        <p>If evaluation fails, retry from build phase with feedback. Up to max_iterations attempts.</p>
+      </div>
+      <div class="phase-card">
+        <div class="phase-number">08</div>
+        <h3>Merge</h3>
+        <p>Integrate into the target branch with post-merge validation. Ship it.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Screenshots -->
+  <section id="screenshots">
+    <h2>See it in action</h2>
+    <p class="section-subtitle">Dashboard views showing the pipeline, module grid, and agent timeline.</p>
+
+    <div class="screenshot-grid">
+      <div class="screenshot-card">
+        <div class="screenshot-placeholder">pipeline-view.png</div>
+        <div class="caption">Pipeline view — phases, gates, and progress at a glance</div>
+      </div>
+      <div class="screenshot-card">
+        <div class="screenshot-placeholder">module-grid.png</div>
+        <div class="caption">Module grid — parallel builders with TDD status</div>
+      </div>
+      <div class="screenshot-card">
+        <div class="screenshot-placeholder">agent-timeline.png</div>
+        <div class="caption">Agent timeline — lifecycle of every agent in the run</div>
+      </div>
+      <div class="screenshot-card">
+        <div class="screenshot-placeholder">roadmap.png</div>
+        <div class="caption">Roadmap — spec dependency graph and build ordering</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features">
+    <h2>Key features</h2>
+    <p class="section-subtitle">The primitives that make parallel AI builds reliable.</p>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">&#x2693;</div>
+        <h3>Parallel Builders</h3>
+        <p>Multiple AI builders work simultaneously in isolated git worktrees. No shared mutable state. Integration happens after builds complete.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1F50D;</div>
+        <h3>Holdout Scenarios</h3>
+        <p>Test scenarios builders never see. Validate what the human actually wants, not what the builder thought they wanted.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1F4DC;</div>
+        <h3>Contract-Driven Decomposition</h3>
+        <p>Typed interface contracts define module boundaries. Builders implement to contracts without coordinating with each other.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1F4B0;</div>
+        <h3>Budget Control</h3>
+        <p>Every agent reports cost. The pipeline respects budgets, surfaces tradeoffs, and prevents runaway spending.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1F500;</div>
+        <h3>TDD Cycles</h3>
+        <p>Builders follow red-green-refactor cycles. Tests are written first, then minimal code to pass, then cleanup.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1F4E8;</div>
+        <h3>Agent Mail System</h3>
+        <p>SQLite-backed messaging between agents. Durable, inspectable, debuggable. No direct process communication.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLI Examples -->
+  <section id="cli">
+    <h2>CLI examples</h2>
+    <p class="section-subtitle">Everything you need from the command line.</p>
+
+    <div class="cli-examples">
+      <div class="cli-block">
+        <div class="cli-header">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          <span class="cli-title">Build a spec</span>
+        </div>
+        <pre><code><span class="comment"># Create a spec</span>
+<span class="prompt">$</span> <span class="command">dark spec create</span> <span class="string">"Add JWT authentication"</span>
+
+<span class="comment"># Run the full pipeline</span>
+<span class="prompt">$</span> <span class="command">dark build</span> <span class="flag">spec_01ABC123</span>
+
+<span class="comment"># Watch progress</span>
+<span class="prompt">$</span> <span class="command">dark status</span></code></pre>
+      </div>
+      <div class="cli-block">
+        <div class="cli-header">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          <span class="cli-title">Dashboard &amp; monitoring</span>
+        </div>
+        <pre><code><span class="comment"># Launch the live dashboard</span>
+<span class="prompt">$</span> <span class="command">dark dash</span>
+
+<span class="comment"># Check agent status</span>
+<span class="prompt">$</span> <span class="command">dark agent list</span> <span class="flag">--run-id</span> <span class="string">run_01XYZ</span>
+
+<span class="comment"># View pipeline phases</span>
+<span class="prompt">$</span> <span class="command">dark status</span> <span class="flag">--json</span></code></pre>
+      </div>
+      <div class="cli-block">
+        <div class="cli-header">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          <span class="cli-title">Architecture &amp; contracts</span>
+        </div>
+        <pre><code><span class="comment"># Analyze a spec</span>
+<span class="prompt">$</span> <span class="command">dark architect analyze</span> <span class="flag">spec_01ABC123</span>
+
+<span class="comment"># View interface contracts</span>
+<span class="prompt">$</span> <span class="command">dark contract list</span> <span class="flag">--run-id</span> <span class="string">run_01XYZ</span>
+
+<span class="comment"># Check contract compliance</span>
+<span class="prompt">$</span> <span class="command">dark contract check</span> <span class="flag">ctr_01DEF</span></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Get Started -->
+  <section id="get-started">
+    <h2>Get started</h2>
+    <p class="section-subtitle">Up and running in under a minute.</p>
+
+    <div class="quickstart">
+      <div class="step">
+        <div class="step-number">1.</div>
+        <div class="step-content">
+          <p>Clone the repo</p>
+          <code>git clone https://github.com/a1j9o94/df-cli.git &amp;&amp; cd df-cli</code>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">2.</div>
+        <div class="step-content">
+          <p>Install dependencies</p>
+          <code>bun install</code>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">3.</div>
+        <div class="step-content">
+          <p>Initialize your project</p>
+          <code>dark init --name my-project</code>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">4.</div>
+        <div class="step-content">
+          <p>Create a spec and build</p>
+          <code>dark spec create "My feature" &amp;&amp; dark build &lt;spec-id&gt;</code>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-inner">
+      <ul class="footer-links">
+        <li><a href="https://github.com/a1j9o94/df-cli">GitHub</a></li>
+        <li><a href="https://github.com/a1j9o94/df-cli/blob/main/LICENSE">MIT License</a></li>
+        <li><a href="https://github.com/a1j9o94/df-cli/issues">Issues</a></li>
+      </ul>
+      <p class="copyright">Built with Dark Factory. MIT License.</p>
+    </div>
+  </footer>
+
+</body>
+</html>
