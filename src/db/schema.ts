@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS runs (
   max_iterations  INTEGER NOT NULL DEFAULT 3,
   config          TEXT NOT NULL DEFAULT '{}',
   error           TEXT,
+  paused_at       TEXT,
+  pause_reason    TEXT,
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
