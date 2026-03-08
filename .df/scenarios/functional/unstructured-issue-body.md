@@ -1,8 +1,23 @@
 ---
 name: unstructured-issue-body
 type: functional
-spec_id: run_01KJSS4TD4WH5VKGWK6YWSWJZQ
-created_by: agt_01KJSS4TD5H3A6M3NHC0H95JFZ
+spec_id: run_01KK713FAZE5AV73F5HB66BPVF
+created_by: agt_01KK713FB00321PM7C8TQ1YDQZ
 ---
 
-Setup: GitHub issue with plain text body containing no markdown headers, no checkboxes, no numbered lists. Body is: 'The search feature is slow when there are more than 10,000 results. We need to add pagination or virtual scrolling to improve performance. Users have reported waiting 5+ seconds for results to render.'\n\nSteps:\n1. Run: dark spec create --from-github https://github.com/org/repo/issues/999\n2. Read the generated spec file\n3. Verify:\n   a. ## Goal section contains the entire body text\n   b. ## Requirements section exists but contains a placeholder (e.g., 'TODO: Add requirements' or similar placeholder text)\n   c. ## Scenarios section exists but contains a placeholder\n4. Verify stdout summary indicates 0 requirements extracted and 0 scenarios extracted\n\nPass criteria: Unstructured body goes entirely into Goal section. Requirements and Scenarios sections exist as placeholders. No parsing errors.
+Test: Issue with plain text body (no sections/checkboxes/headers) uses entire body as Goal with placeholder Requirements/Scenarios.
+
+Setup:
+- Mock issue with body: 'The application sometimes hangs when processing large files. Users have reported this happening with files over 100MB.'
+- labels: [], comments: []
+
+Steps:
+1. Call importAndCreateSpec
+2. Verify result.requirementsCount === 0
+3. Verify result.scenariosCount === 0
+4. Read generated spec content
+5. Verify '## Goal' section contains the entire body text
+6. Verify '## Requirements' section contains 'TODO' placeholder text
+7. Verify '## Scenarios' > '### Functional' contains 'TODO' placeholder text
+
+Pass criteria: Entire unstructured body becomes the Goal. Requirements and Scenarios sections have placeholder/TODO entries.
