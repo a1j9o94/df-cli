@@ -2,7 +2,7 @@
 id: spec_01KJND896B6Y30SQ43SW8N1M0D
 title: "Fix dark dash: server falls back to raw JSON instead of rendering the dashboard UI"
 type: bug
-status: draft
+status: completed
 version: 0.1.0
 priority: high
 ---

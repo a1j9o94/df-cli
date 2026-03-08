@@ -2,7 +2,7 @@
 id: spec_01KJNG4MSN2NMD5RRC9AVHT8GY
 title: Sequential merge strategy for parallel builds modifying the same files
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: critical
 ---

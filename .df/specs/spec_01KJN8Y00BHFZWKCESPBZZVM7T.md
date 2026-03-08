@@ -2,7 +2,7 @@
 id: spec_01KJN8Y00BHFZWKCESPBZZVM7T
 title: "Implement dark dash: localhost dashboard for pipeline visibility"
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: medium
 ---
