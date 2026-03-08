@@ -99,8 +99,8 @@ describe("Dashboard Pause - API", () => {
     const res = await fetch(`${server.url}/api/runs/run_running1`);
     const run = await res.json();
     expect(run.status).toBe("running");
-    expect(run.pauseReason).toBeUndefined();
-    expect(run.pausedAt).toBeUndefined();
+    expect(run.pauseReason).toBeNull();
+    expect(run.pausedAt).toBeNull();
     expect(run.resumeCommand).toBeUndefined();
   });
 
@@ -122,7 +122,7 @@ describe("Dashboard Pause - API", () => {
     expect(failed).toBeDefined();
     expect(running).toBeDefined();
     expect(paused!.pauseReason).toBe("budget_exceeded");
-    expect(failed!.pauseReason).toBeUndefined();
+    expect(failed!.pauseReason).toBeNull();
   });
 
   test("manual pause shows correct reason", async () => {
@@ -258,8 +258,8 @@ describe("Dashboard Pause - Run without pause columns", () => {
     const res = await fetch(`${server.url}/api/runs/run_completed1`);
     const run = await res.json();
     expect(run.status).toBe("completed");
-    expect(run.pauseReason).toBeUndefined();
-    expect(run.pausedAt).toBeUndefined();
+    expect(run.pauseReason).toBeNull();
+    expect(run.pausedAt).toBeNull();
     expect(run.resumeCommand).toBeUndefined();
   });
 });
