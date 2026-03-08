@@ -1,25 +1,24 @@
 ---
 name: add-dependency
 type: functional
-spec_id: run_01KJT1DSC7RYMZBNXACN9871DA
-created_by: agt_01KJT1DSC9A3PD8YJAG21ECY1N
+spec_id: run_01KK7R4Y6S9X8AQA0BPDTRZ039
+created_by: agt_01KK7R4Y6VS8TXZ8FQ3TWGRQTG
 ---
 
-SCENARIO: Add dependency between specs
-PRECONDITIONS:
-- Dark Factory project initialized with state.db
-- Two specs exist: spec_A (status=draft, no dependencies) and spec_B (status=draft, no dependencies)
+PRECONDITION: Two specs A and B exist in draft status with no dependencies.
+
 STEPS:
-1. Run: dark spec add-dep <spec_B_id> --on <spec_A_id>
+1. Run: dark spec add-dep <B-id> --on <A-id>
 2. Run: dark spec blocked
 3. Run: dark spec ready
-4. Run: dark spec deps <spec_B_id>
+
 EXPECTED:
-- Step 1: Command succeeds with confirmation message
-- Step 2: spec_B appears in blocked list, showing it is blocked by spec_A
-- Step 3: spec_A appears in ready list (no unmet deps), spec_B does NOT appear
-- Step 4: Shows spec_A as a dependency of spec_B
-VALIDATION:
-- DB table spec_dependencies has row: (spec_id=spec_B, depends_on_spec_id=spec_A)
-- SpecFrontmatter of spec_B file contains depends_on: [spec_A_id]
-PASS CRITERIA: All 4 expected outputs match. spec_B is blocked, spec_A is ready.
+- Step 1 succeeds with confirmation message
+- Step 2 output includes spec B, showing it is blocked by spec A
+- Step 3 output includes spec A (no unmet deps) but NOT spec B
+- The spec B frontmatter file (.df/specs/<B-id>.md) now contains 'depends_on: [<A-id>]' in YAML
+- The spec_dependencies table has a row (spec_id=B, depends_on_spec_id=A)
+
+PASS/FAIL:
+- PASS if all expected conditions are met
+- FAIL if B appears in ready list, or A appears in blocked list, or frontmatter not updated
