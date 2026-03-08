@@ -4,14 +4,11 @@ import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { listAgentsFiltered } from "../../db/queries/agent-queries.js";
 import { formatAgentListEntry } from "../../utils/format-agent-list.js";
-import { formatJson } from "../../utils/format.js";
+import { formatJson, AGENT_DEFAULT_EXCLUDED_FIELDS } from "../../utils/format.js";
 import { summarizeAgentCounts } from "../../utils/agent-enrichment.js";
 import { getWorktreeFilesChanged } from "../../utils/worktree-files.js";
 import { isProcessAlive } from "../../utils/pid-check.js";
 import { log } from "../../utils/logger.js";
-
-/** Fields excluded from --json output by default (large, rarely useful in list views) */
-const AGENT_EXCLUDED_FIELDS = ["system_prompt"];
 
 export const agentListCommand = new Command("list")
   .description("List agents")
@@ -50,7 +47,7 @@ export const agentListCommand = new Command("list")
     }
 
     if (options.json) {
-      const excludeFields = options.verbose ? [] : AGENT_EXCLUDED_FIELDS;
+      const excludeFields = options.verbose ? [] : [...AGENT_DEFAULT_EXCLUDED_FIELDS];
       console.log(formatJson(agents, { excludeFields }));
       return;
     }

@@ -3,7 +3,7 @@ import { findDfDir } from "../utils/config.js";
 import { getDb } from "../db/index.js";
 import { listRuns } from "../db/queries/runs.js";
 import { getRunWithSpecTitle } from "../db/queries/status-queries.js";
-import { formatJson } from "../utils/format.js";
+import { formatJson, AGENT_DEFAULT_EXCLUDED_FIELDS } from "../utils/format.js";
 import { formatStatusDetail, formatStatusSummaryLine } from "../utils/format-status-detail.js";
 import { log } from "../utils/logger.js";
 import { join } from "node:path";
@@ -11,9 +11,6 @@ import { getRunQueueInfo } from "../pipeline/queue-visibility.js";
 import { checkDbHealth } from "../pipeline/db-health.js";
 import { getModuleProgress } from "../db/queries/status-queries.js";
 import { listAgents } from "../db/queries/agents.js";
-
-/** Fields excluded from --json output by default (large, rarely useful in status views) */
-const STATUS_EXCLUDED_FIELDS = ["system_prompt"];
 
 export const statusCommand = new Command("status")
   .description("Show current pipeline status")
@@ -46,7 +43,7 @@ export const statusCommand = new Command("status")
 
     const db = getDb(join(dfDir, "state.db"));
     const runs = listRuns(db);
-    const excludeFields = options.verbose ? [] : STATUS_EXCLUDED_FIELDS;
+    const excludeFields = options.verbose ? [] : [...AGENT_DEFAULT_EXCLUDED_FIELDS];
 
     if (runs.length === 0) {
       if (options.json) {
