@@ -668,6 +668,11 @@ function route(
     });
   }
 
+  // Hello endpoint
+  if (path === "/hello") {
+    return jsonResponse({ message: "Hello, world!" });
+  }
+
   // HTML root
   if (path === "/" || path === "") {
     return htmlResponse(getDashboardHtml());
