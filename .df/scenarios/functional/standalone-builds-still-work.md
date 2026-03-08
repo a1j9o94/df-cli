@@ -1,33 +1,28 @@
 ---
 name: standalone-builds-still-work
 type: functional
-spec_id: run_01KJT1F6D5K21YTBJJ2QG4QY7E
-created_by: agt_01KJT1F6D7F50TK3PWRMAKQHN9
+spec_id: run_01KK7SEAH0J838RH3SWCBR48SQ
+created_by: agt_01KK7SEAH1RRSGYDNFYKMRG751
 ---
 
-# Standalone Builds Still Work
+## Test: Standalone Builds Still Work
 
-## Preconditions
-- Workspace with frontend/ and backend/ member projects
-- backend/ has its own .df/ directory from dark init
-- backend/ has at least one spec in backend/.df/specs/
+### Preconditions
+- Workspace initialized with backend/ and frontend/
+- backend/ has its own .df/ with a standalone spec
 
-## Steps
+### Steps
 1. cd backend/
-2. Run: dark build <spec-id> (a backend-only spec)
-3. Observe that the build uses backend/.df/ NOT .df-workspace/
+2. Run dark build <backend-spec-id> (using backend's own .df/)
+3. Verify build runs using backend/.df/ configuration
+4. Verify build does NOT use .df-workspace/ at all
 
-## Expected Output
-1. The build runs entirely within backend/.df/
-2. backend/.df/state.db is updated with the run
-3. .df-workspace/state.db is NOT modified
-4. Builders get worktrees from backend/.git
-5. The pipeline completes normally as it would without any workspace
-6. dark status from backend/ shows the run correctly
+### Expected Output
+- Build succeeds using backend/.df/ only
+- Worktrees created in backend/.df/worktrees/
+- No workspace-level state is modified
+- dark status shows only backend project runs
 
-## Pass Criteria
-- findDfDir() resolves to backend/.df/ when cwd is backend/
-- No workspace-level state is touched
-- Build pipeline phases execute normally (scout, architect, build, evaluate, merge)
-- Existing dark init + dark build workflow is completely unaffected
-- No new CLI flags or options are required for standalone builds
+### Pass/Fail
+- PASS: Standalone build works exactly as before workspace existed
+- FAIL: Build errors, references workspace config, or creates worktrees outside backend/
