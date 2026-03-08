@@ -1,24 +1,25 @@
 ---
 name: build-from-dashboard
 type: functional
-spec_id: run_01KK6BYC9GJ9F5XNE49PW7SN3S
-created_by: agt_01KK6BYC9JZPT9DBGBS867HCTJ
+spec_id: run_01KK6D0A338WWPKA9YNGG3S1WB
+created_by: agt_01KK6D0A34XA7984X9D1YCNN6W
 ---
 
-Precondition: A draft spec exists with known id. No active builds running for this spec.
-
-Steps:
-1. Send POST /api/builds with body: {"specId": "<spec-id>"}
-2. Verify response status 200/201 with JSON containing: runId (string), specId (matching input)
-3. Query the runs table in the database and verify a new run exists with:
-   a. spec_id matching the spec
-   b. status is 'pending' or 'running'
-4. GET /api/specs/:id/runs and verify the new run appears in the list
-5. Verify the spec status in the database has transitioned (e.g., to 'building')
-
-Error case:
-6. Send POST /api/builds again for the same spec while build is active
-7. Verify response indicates build already in progress (status 409 or error message)
-8. Verify no duplicate run was created
-
-Pass criteria: Build starts successfully. Run record created. Duplicate build rejected.
+SCENARIO: Start a build from the dashboard UI
+PRECONDITIONS: A spec exists with status 'draft'. No active builds running for this spec.
+STEPS:
+1. Open dashboard
+2. Click on the draft spec in the sidebar
+3. Verify a 'Build' button is visible in the spec view
+4. Click the 'Build' button
+5. Observe the dashboard behavior after clicking
+EXPECTED RESULTS:
+- POST /api/builds is called with the spec ID in the request body
+- Server-side: a new run is created in the runs table linked to this spec
+- Server-side: the pipeline starts (equivalent to 'dark build <spec-id>')
+- The POST /api/builds response includes the new run ID
+- The dashboard transitions to the run view for the newly started build
+- The spec status changes to 'building' in the sidebar
+- The Build button becomes disabled while the run is active
+PASS CRITERIA: Run created in database; pipeline initiated; dashboard shows run view; build button disabled
+ERROR CASE: If build fails to start (e.g., spec not found, spec already building), an error message is shown inline in the dashboard (not a silent failure)
