@@ -1,28 +1,8 @@
 ---
 name: dashboard-at-dark-localhost
 type: functional
-spec_id: run_01KK7R4Y3B77CAE5MQ8GM7S7SW
-created_by: agt_01KK7R4Y3C4YG0KKRD2WMYE2DX
+spec_id: run_01KK7SEJH6D58E9S9R87F3FWM1
+created_by: agt_01KK7SEJH73MEGYRXSXR203WXG
 ---
 
-Test: Dashboard serves at dark.localhost when portless is available.
-
-Setup:
-1. Ensure portless package is installed (in node_modules or globally)
-2. No --no-portless flag passed
-
-Steps:
-1. Run dark dash (or invoke createDashAction programmatically with returnHandle=true)
-2. Observe the returned ServerHandle
-
-Expected:
-- ServerHandle.url should be 'http://dark.localhost' (not 'http://localhost:3141')
-- The server should still be listening on port 3141
-- The browser open command should be called with 'http://dark.localhost'
-- Log output should show 'Dashboard running at http://dark.localhost'
-
-Verification:
-- HTTP GET to http://localhost:3141 should return 200 with dashboard HTML
-- The portless mapping from dark.localhost to localhost:3141 should be registered
-
-Pass criteria: ServerHandle.url contains 'dark.localhost' and server responds on port 3141
+Preconditions: portless package is installed as a dependency. Steps: 1. Run 'dark dash' command. 2. Verify server starts on port 3141. 3. Verify portless registers dark.localhost mapping to localhost:3141. 4. Verify browser opens http://dark.localhost (not http://localhost:3141). 5. Verify the dashboard HTML page loads correctly at http://dark.localhost. 6. Verify the ServerHandle.url returns 'http://dark.localhost'. Pass criteria: Browser opens dark.localhost, page loads with dashboard content, no errors in console.
