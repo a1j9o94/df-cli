@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { SCHEMA_SQL } from "../db/schema.js";
 import { findDfDir } from "../utils/config.js";
@@ -7,7 +7,8 @@ import { generateDashboardHtml } from "./index.js";
 import { getRunQueueInfo, type RunQueueInfo } from "../pipeline/queue-visibility.js";
 import { computeElapsedMs, estimateCost } from "../utils/agent-enrichment.js";
 import { PHASE_ORDER, shouldSkipPhase, type PhaseName } from "../pipeline/phases.js";
-import { parseFrontmatter } from "../utils/frontmatter.js";
+import { parseFrontmatter, serializeFrontmatter } from "../utils/frontmatter.js";
+import { newSpecId, newRunId } from "../utils/id.js";
 
 // --- Contract: ServerExport ---
 
@@ -131,7 +132,7 @@ function jsonResponse(data: unknown, status = 200): Response {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     },
   });
@@ -646,13 +647,280 @@ function handleGetPhases(db: InstanceType<typeof Database>, runId: string): Resp
   return jsonResponse(phases);
 }
 
+// --- Spec API Helpers ---
+
+/** Check if a spec is locked (has at least one completed run) */
+function isSpecLocked(db: InstanceType<typeof Database>, specId: string): boolean {
+  const completedRun = db
+    .prepare("SELECT COUNT(*) as cnt FROM runs WHERE spec_id = ? AND status = 'completed'")
+    .get(specId) as { cnt: number };
+  return completedRun.cnt > 0;
+}
+
+/** Generate a title from a description string */
+function titleFromDescription(description: string): string {
+  const firstSentence = description.split(/[.!?\n]/)[0].trim();
+  if (firstSentence.length <= 80) return firstSentence;
+  return firstSentence.substring(0, 77) + "...";
+}
+
+/** Generate spec markdown content from a description */
+function generateSpecContent(description: string): { title: string; content: string } {
+  const title = titleFromDescription(description);
+  const lines = description.split(/[.!?\n]/).map(s => s.trim()).filter(Boolean);
+  const requirements = lines.length > 1
+    ? lines.map(line => `- ${line}`).join("\n")
+    : `- ${description.trim()}`;
+
+  const body = `# ${title}
+
+## Goal
+
+${description.trim()}
+
+## Requirements
+
+${requirements}
+
+## Scenarios
+
+<!-- Scenarios will be filled by the architect -->
+`;
+
+  return { title, content: body };
+}
+
+// --- Contract: SpecListAPI ---
+
+function handleListSpecs(db: InstanceType<typeof Database>): Response {
+  const rows = db
+    .prepare("SELECT * FROM specs ORDER BY created_at DESC")
+    .all() as Record<string, unknown>[];
+
+  const specs = rows.map((s) => ({
+    id: s.id as string,
+    title: s.title as string,
+    status: s.status as string,
+    lastModified: s.updated_at as string,
+    scenarioCount: s.scenario_count as number,
+    createdAt: s.created_at as string,
+  }));
+
+  return jsonResponse(specs);
+}
+
+// --- Contract: SpecDetailAPI ---
+
+function handleGetSpecDetail(db: InstanceType<typeof Database>, specId: string): Response {
+  const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as Record<string, unknown> | null;
+  if (!spec) {
+    return errorResponse(`Spec not found: ${specId}`, 404);
+  }
+
+  const filePath = spec.file_path as string;
+  const resolvedPath = resolve(filePath);
+  if (!existsSync(resolvedPath)) {
+    return errorResponse(`Spec file not found: ${filePath}`, 404);
+  }
+
+  const raw = readFileSync(resolvedPath, "utf-8");
+  const { data: frontmatter, body } = parseFrontmatter<Record<string, unknown>>(raw);
+  const locked = isSpecLocked(db, specId);
+
+  return jsonResponse({
+    id: specId,
+    title: (frontmatter.title as string) ?? (spec.title as string),
+    type: (frontmatter.type as string) ?? null,
+    status: (frontmatter.status as string) ?? (spec.status as string),
+    version: (frontmatter.version as string) ?? null,
+    priority: (frontmatter.priority as string) ?? null,
+    content: body.trim(),
+    isLocked: locked,
+  });
+}
+
+// --- Contract: SpecCreateAPI ---
+
+async function handleCreateSpec(db: InstanceType<typeof Database>, req: Request): Promise<Response> {
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return errorResponse("Invalid JSON body", 400);
+  }
+
+  const description = body.description as string | undefined;
+  if (!description || description.trim().length === 0) {
+    return errorResponse("Missing or empty 'description' field", 400);
+  }
+
+  const specId = newSpecId();
+  const { title, content } = generateSpecContent(description.trim());
+
+  const frontmatterData = {
+    id: specId,
+    title,
+    type: "feature",
+    status: "draft",
+    version: "0.1.0",
+    priority: "medium",
+  };
+
+  const fullContent = serializeFrontmatter(frontmatterData, content);
+
+  // Resolve specs directory
+  let specsDir: string;
+  const dfDir = findDfDir();
+  if (dfDir) {
+    specsDir = join(dfDir, "specs");
+  } else {
+    specsDir = join(process.cwd(), ".df", "specs");
+  }
+
+  if (!existsSync(specsDir)) {
+    mkdirSync(specsDir, { recursive: true });
+  }
+
+  const filePath = join(specsDir, `${specId}.md`);
+  writeFileSync(filePath, fullContent);
+
+  // Register in database
+  const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  db.prepare(
+    `INSERT INTO specs (id, title, status, file_path, content_hash, scenario_count, created_at, updated_at)
+     VALUES (?, ?, 'draft', ?, '', 0, ?, ?)`,
+  ).run(specId, title, filePath, ts, ts);
+
+  return jsonResponse(
+    {
+      id: specId,
+      title,
+      status: "draft",
+      content: content.trim(),
+      filePath,
+    },
+    201,
+  );
+}
+
+// --- Contract: SpecUpdateAPI ---
+
+async function handleUpdateSpec(db: InstanceType<typeof Database>, specId: string, req: Request): Promise<Response> {
+  const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as Record<string, unknown> | null;
+  if (!spec) {
+    return errorResponse(`Spec not found: ${specId}`, 404);
+  }
+
+  if (isSpecLocked(db, specId)) {
+    return errorResponse("This spec is locked — it has a completed build. Create a new spec to make changes.", 403);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return errorResponse("Invalid JSON body", 400);
+  }
+
+  const content = body.content as string | undefined;
+  if (content === undefined || content === null) {
+    return errorResponse("Missing 'content' field", 400);
+  }
+
+  const filePath = spec.file_path as string;
+  const resolvedPath = resolve(filePath);
+
+  // Read existing frontmatter to preserve it
+  let frontmatterData: Record<string, unknown> = {};
+  if (existsSync(resolvedPath)) {
+    const existing = readFileSync(resolvedPath, "utf-8");
+    const { data } = parseFrontmatter<Record<string, unknown>>(existing);
+    frontmatterData = data;
+  }
+
+  const fullContent = serializeFrontmatter(frontmatterData, content);
+  writeFileSync(resolvedPath, fullContent);
+
+  // Update database timestamp
+  const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  db.prepare("UPDATE specs SET updated_at = ? WHERE id = ?").run(ts, specId);
+
+  return jsonResponse({
+    id: specId,
+    title: (frontmatterData.title as string) ?? (spec.title as string),
+    status: (frontmatterData.status as string) ?? (spec.status as string),
+    content: content.trim(),
+  });
+}
+
+// --- Contract: BuildCreateAPI ---
+
+async function handleCreateBuild(db: InstanceType<typeof Database>, req: Request): Promise<Response> {
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return errorResponse("Invalid JSON body", 400);
+  }
+
+  const specId = body.specId as string | undefined;
+  if (!specId) {
+    return errorResponse("Missing 'specId' field", 400);
+  }
+
+  const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as Record<string, unknown> | null;
+  if (!spec) {
+    return errorResponse(`Spec not found: ${specId}`, 404);
+  }
+
+  // Check for active builds
+  const activeRun = db
+    .prepare("SELECT id FROM runs WHERE spec_id = ? AND status IN ('pending', 'running')")
+    .get(specId) as { id: string } | null;
+  if (activeRun) {
+    return errorResponse(`Spec already has an active build: ${activeRun.id}`, 409);
+  }
+
+  const runId = newRunId();
+  const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  db.prepare(
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, max_iterations, config, created_at, updated_at)
+     VALUES (?, ?, 'pending', 0, 4, 50.0, 3, '{}', ?, ?)`,
+  ).run(runId, specId, ts, ts);
+
+  return jsonResponse(
+    {
+      runId,
+      specId,
+      status: "pending",
+    },
+    201,
+  );
+}
+
+// --- Contract: SpecRunsAPI ---
+
+function handleGetSpecRuns(db: InstanceType<typeof Database>, specId: string): Response {
+  const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as Record<string, unknown> | null;
+  if (!spec) {
+    return errorResponse(`Spec not found: ${specId}`, 404);
+  }
+
+  const rows = db
+    .prepare("SELECT * FROM runs WHERE spec_id = ? ORDER BY created_at DESC")
+    .all(specId) as Record<string, unknown>[];
+
+  const runs = rows.map((r) => toRunSummary(db, r));
+  return jsonResponse(runs);
+}
+
 // --- URL Router ---
 
-function route(
+async function route(
   db: InstanceType<typeof Database>,
   req: Request,
   getDashboardHtml: () => string,
-): Response {
+): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
 
@@ -662,7 +930,7 @@ function route(
       status: 204,
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
       },
     });
@@ -678,7 +946,41 @@ function route(
     return htmlResponse(getDashboardHtml());
   }
 
-  // API routes
+  // --- Spec API routes ---
+
+  if (path === "/api/specs" && req.method === "POST") {
+    return handleCreateSpec(db, req);
+  }
+
+  if (path === "/api/specs" && req.method === "GET") {
+    return handleListSpecs(db);
+  }
+
+  if (path === "/api/builds" && req.method === "POST") {
+    return handleCreateBuild(db, req);
+  }
+
+  const specMatch = path.match(/^\/api\/specs\/([^/]+)$/);
+  if (specMatch) {
+    const specId = specMatch[1];
+    if (req.method === "PUT") {
+      return handleUpdateSpec(db, specId, req);
+    }
+    return handleGetSpecDetail(db, specId);
+  }
+
+  const specSubMatch = path.match(/^\/api\/specs\/([^/]+)\/([^/]+)$/);
+  if (specSubMatch) {
+    const [, specId, sub] = specSubMatch;
+    switch (sub) {
+      case "runs":
+        return handleGetSpecRuns(db, specId);
+      default:
+        return errorResponse(`Unknown sub-resource: ${sub}`, 404);
+    }
+  }
+
+  // --- Run API routes ---
   if (path === "/api/runs") {
     return handleListRuns(db);
   }
@@ -749,9 +1051,9 @@ export async function startServer(config: ServerConfig): Promise<ServerHandle> {
 
   const server = Bun.serve({
     port,
-    fetch(req: Request): Response {
+    async fetch(req: Request): Promise<Response> {
       try {
-        return route(db, req, getDashboardHtml);
+        return await route(db, req, getDashboardHtml);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Internal server error";
         return errorResponse(message, 500);
