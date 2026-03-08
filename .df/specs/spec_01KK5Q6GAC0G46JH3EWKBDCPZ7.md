@@ -11,19 +11,19 @@ priority: medium
 
 ## Goal
 
-Describe what this spec should accomplish.
+Add a `/hello` GET endpoint to the project that returns `{ "message": "Hello, world!" }` as JSON.
 
 ## Requirements
 
-- [ ] Requirement 1
-- [ ] Requirement 2
+- [x] Add a GET handler for `/hello` that returns JSON `{ "message": "Hello, world!" }`
+- [x] Add a unit test that verifies the endpoint returns 200 and the correct JSON body
 
 ## Scenarios
 
 ### Functional
 
-1. **Scenario name**: Description of the test scenario.
+1. **Hello endpoint returns correct JSON**: Send a GET request to `/hello` and verify the response body is `{ "message": "Hello, world!" }` with status 200 and content-type `application/json`.
 
 ### Changeability
 
-1. **Modification scenario**: Description of a change that should be easy to make.
+1. **Change greeting message**: Modify the greeting from "Hello, world!" to "Hi there!" and verify only one file needs to change.
