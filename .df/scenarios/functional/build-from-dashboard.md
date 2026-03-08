@@ -1,46 +1,24 @@
 ---
 name: build-from-dashboard
 type: functional
-spec_id: run_01KJT1DSG8KTH91RNPN25VTA7Q
-created_by: agt_01KJT1DSG9535H9MNFRT5150J0
+spec_id: run_01KK6BYC9GJ9F5XNE49PW7SN3S
+created_by: agt_01KK6BYC9JZPT9DBGBS867HCTJ
 ---
 
-Test: Start a build from the dashboard UI.
+Precondition: A draft spec exists with known id. No active builds running for this spec.
 
-PRECONDITIONS:
-- Dark Factory project initialized
-- Dashboard running
-- A draft spec exists with valid content (goal, requirements, scenarios sections)
-- No active build running for this spec
+Steps:
+1. Send POST /api/builds with body: {"specId": "<spec-id>"}
+2. Verify response status 200/201 with JSON containing: runId (string), specId (matching input)
+3. Query the runs table in the database and verify a new run exists with:
+   a. spec_id matching the spec
+   b. status is 'pending' or 'running'
+4. GET /api/specs/:id/runs and verify the new run appears in the list
+5. Verify the spec status in the database has transitioned (e.g., to 'building')
 
-STEPS:
-1. Open dashboard
-2. Click on a draft spec in the sidebar to open it
-3. Verify a 'Build' button is visible in the spec detail panel
-4. Click the 'Build' button
-5. Observe the dashboard response
+Error case:
+6. Send POST /api/builds again for the same spec while build is active
+7. Verify response indicates build already in progress (status 409 or error message)
+8. Verify no duplicate run was created
 
-EXPECTED RESULTS:
-- POST /api/builds is called with the spec ID in the request body
-- Server-side: a new run is created in the runs table with spec_id set
-- Server-side: equivalent to running 'dark build <spec-id>' — pipeline starts
-- The dashboard transitions to show the run view for the newly started build
-- The API returns the new run ID in the response
-- The run appears in the runs list / sidebar
-
-VERIFICATION:
-- Query DB: SELECT * FROM runs WHERE spec_id = '<spec-id>' ORDER BY created_at DESC LIMIT 1
-- The run status should be 'pending' or 'running'
-- The spec status may transition to 'building'
-- GET /api/specs/:id/runs should list the new run
-
-ERROR HANDLING:
-6. If the build fails to start (e.g., spec not found, already building), verify:
-   - Error message is shown inline in the dashboard (not silent failure)
-   - The error is descriptive (not just 'Internal server error')
-
-PASS CRITERIA:
-- Build triggers successfully from UI
-- Run created in database
-- Dashboard shows the active run
-- Error states handled with visible messages
+Pass criteria: Build starts successfully. Run record created. Duplicate build rejected.
