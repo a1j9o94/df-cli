@@ -11,6 +11,7 @@ export type AgentStatus =
   | "spawning"
   | "running"
   | "paused"
+  | "blocked"
   | "completed"
   | "failed"
   | "killed"
