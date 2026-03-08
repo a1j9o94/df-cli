@@ -56,10 +56,6 @@ interface RunSummary {
     ahead: number;
     total: number;
   };
-  /** Present only when the run is paused */
-  pauseReason?: string;
-  /** ISO timestamp of when the run was paused */
-  pausedAt?: string;
   /** Pre-filled CLI command to resume this run (present only when paused) */
   resumeCommand?: string;
 }

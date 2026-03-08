@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { importAndCreateSpec } from "../../../src/importers/import-spec.js";
 import { ImporterRegistry } from "../../../src/importers/registry.js";
-import { GitHubIssueImporter } from "../../../src/importers/github/importer.js";
 import { GitHubImporter, type ExecFn } from "../../../src/importers/github.js";
 import { createDefaultRegistry } from "../../../src/importers/index.js";
 import { generateSpecFromIssue } from "../../../src/importers/spec-generator.js";
