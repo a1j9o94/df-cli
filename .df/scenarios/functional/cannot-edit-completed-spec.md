@@ -1,40 +1,21 @@
 ---
 name: cannot-edit-completed-spec
 type: functional
-spec_id: run_01KJT1DSG8KTH91RNPN25VTA7Q
-created_by: agt_01KJT1DSG9535H9MNFRT5150J0
+spec_id: run_01KK6BYC9GJ9F5XNE49PW7SN3S
+created_by: agt_01KK6BYC9JZPT9DBGBS867HCTJ
 ---
 
-Test: Completed specs are immutable in the editor.
+Precondition: A spec exists with status 'completed' (has at least one run where all scenarios passed). Its id is known.
 
-PRECONDITIONS:
-- Dark Factory project initialized
-- Dashboard running
-- A spec exists with at least one completed run (all scenarios passed)
-- This spec should have status that reflects completion
+Steps:
+1. GET /api/specs/:id — verify status is completed
+2. Send PUT /api/specs/:id with body: {"content": "<any modified content>"}
+3. Verify response status is 403 or 409 (not 200)
+4. Verify response body contains an error message indicating the spec is locked/immutable
+5. Read the file on disk and verify it has NOT been modified (content unchanged)
+6. In the dashboard HTML (GET /), verify the UI includes:
+   a. A 'Locked' badge or indicator on completed specs
+   b. Editor fields are non-editable (readonly/disabled attributes)
+   c. Explanation text about creating a new spec to make changes
 
-SETUP (if needed):
-- Create a spec and manually set its status to completed in DB, or ensure a run with status 'completed' exists for the spec
-- SQL: INSERT INTO runs (id, spec_id, status) VALUES ('run_test', '<spec-id>', 'completed')
-
-STEPS:
-1. Open dashboard
-2. In the spec sidebar, identify the completed spec (should show a 'Locked' badge)
-3. Click on the completed spec to open it in the main panel
-4. Verify the editor fields are NON-EDITABLE (textarea should be disabled/readonly or contenteditable=false)
-5. Verify a 'Locked' badge is visible on the spec
-6. Verify explanation text is shown: 'This spec has a completed build. Create a new spec to make changes.'
-7. Attempt to type in the editor - no changes should be accepted
-
-EXPECTED RESULTS:
-- Editor textarea/fields are readonly or disabled
-- 'Locked' badge is visually prominent
-- Explanation text is displayed
-- No save button or build button visible for locked specs
-- PUT /api/specs/:id should reject updates for completed specs (return 403 or 409)
-
-PASS CRITERIA:
-- UI prevents editing completed specs
-- API rejects content updates to completed specs
-- Visual indicators (badge + explanation) are present
-- Spec file on disk is not modified
+Pass criteria: PUT rejected with appropriate error. File unchanged. UI shows locked state.
