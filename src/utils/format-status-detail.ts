@@ -1,10 +1,12 @@
 import type { SqliteDb } from "../db/index.js";
 import type { RunWithSpecTitle } from "../db/queries/status-queries.js";
 import type { AgentRecord } from "../types/agent.js";
+import type { EventRecord } from "../types/event.js";
 import { getModuleProgress } from "../db/queries/status-queries.js";
 import { formatModuleProgressInline } from "./format-module-progress.js";
-import { summarizeAgentCounts } from "./agent-enrichment.js";
+import { summarizeAgentCounts, computeElapsedMs } from "./agent-enrichment.js";
 import { formatStatus } from "./format.js";
+import { formatElapsed } from "./time-format.js";
 import { getRunQueueInfo, formatQueueStatus } from "../pipeline/queue-visibility.js";
 
 export interface FormatStatusDetailOptions {
@@ -59,8 +61,58 @@ export function formatStatusDetail(
     lines.push(`  Modules:   ${inline}`);
   }
 
-  // Detail mode: cost breakdown by role
+  // Detail mode: phase timeline, module grid, evaluation, cost breakdown
   if (options.detail) {
+    // Phase timeline
+    const phaseEvents = db.prepare(
+      "SELECT * FROM events WHERE run_id = ? AND type IN ('phase-started', 'phase-completed') ORDER BY created_at ASC, rowid ASC"
+    ).all(run.id) as EventRecord[];
+
+    if (phaseEvents.length > 0) {
+      lines.push("");
+      lines.push("  Phase timeline:");
+      const phaseTimeline = buildPhaseTimeline(phaseEvents);
+      for (const phase of phaseTimeline) {
+        if (phase.elapsed) {
+          lines.push(`    ${phase.name}: ${formatElapsed(phase.elapsed)}${phase.active ? " (active)" : ""}`);
+        } else {
+          lines.push(`    ${phase.name}: (active)`);
+        }
+      }
+    }
+
+    // Module grid/details
+    if (moduleProgress.length > 0) {
+      lines.push("");
+      lines.push("  Module details:");
+      for (const mod of moduleProgress) {
+        const agent = mod.agentName ?? "-";
+        const elapsed = mod.elapsedMs > 0 ? formatElapsed(mod.elapsedMs) : "-";
+        const cost = mod.costUsd > 0 ? `$${mod.costUsd.toFixed(2)}` : "-";
+        lines.push(`    ${mod.moduleId}: ${mod.status}  builder=${agent}  elapsed=${elapsed}  cost=${cost}`);
+      }
+    }
+
+    // Evaluation results
+    const evalEvents = db.prepare(
+      "SELECT * FROM events WHERE run_id = ? AND type IN ('evaluation-passed', 'evaluation-failed') ORDER BY created_at DESC"
+    ).all(run.id) as EventRecord[];
+
+    lines.push("");
+    if (evalEvents.length > 0) {
+      lines.push("  Evaluation:");
+      for (const evt of evalEvents) {
+        const data = evt.data ? JSON.parse(evt.data) : {};
+        const mode = data.mode ?? "unknown";
+        const score = data.score !== undefined ? ` score=${data.score}` : "";
+        const passed = data.passed !== undefined ? ` passed=${data.passed}/${data.total}` : "";
+        lines.push(`    ${mode}: ${evt.type === "evaluation-passed" ? "PASSED" : "FAILED"}${score}${passed}`);
+      }
+    } else {
+      lines.push("  Evaluation: Not yet evaluated");
+    }
+
+    // Cost breakdown by role
     lines.push("");
     lines.push("  Cost by role:");
     const costByRole = new Map<string, number>();
@@ -94,4 +146,50 @@ export function formatStatusSummaryLine(
     : `spec=${run.spec_id}`;
 
   return `  ${run.id}  ${formatStatus(run.status)}  ${specDisplay}  phase=${phaseDisplay}${queueStr ? ` ${queueStr}` : ""}  agents=${counts.summary}  $${run.cost_usd.toFixed(2)}/$${run.budget_usd.toFixed(2)}`;
+}
+
+interface PhaseTimelineEntry {
+  name: string;
+  elapsed: number; // ms, 0 if still active
+  active: boolean;
+}
+
+/**
+ * Build phase timeline from phase-started and phase-completed events.
+ */
+function buildPhaseTimeline(events: EventRecord[]): PhaseTimelineEntry[] {
+  const phases = new Map<string, { startedAt: string; completedAt?: string }>();
+  const phaseOrder: string[] = [];
+
+  for (const evt of events) {
+    const data = evt.data ? JSON.parse(evt.data) : {};
+    const phaseName = data.phase;
+    if (!phaseName) continue;
+
+    if (evt.type === "phase-started") {
+      if (!phases.has(phaseName)) {
+        phaseOrder.push(phaseName);
+      }
+      phases.set(phaseName, { startedAt: evt.created_at, ...phases.get(phaseName), });
+      // Re-set startedAt in case of duplicate events
+      const existing = phases.get(phaseName)!;
+      existing.startedAt = evt.created_at;
+    } else if (evt.type === "phase-completed") {
+      const existing = phases.get(phaseName);
+      if (existing) {
+        existing.completedAt = evt.created_at;
+      }
+    }
+  }
+
+  return phaseOrder.map(name => {
+    const phase = phases.get(name)!;
+    if (phase.completedAt) {
+      const elapsed = new Date(phase.completedAt).getTime() - new Date(phase.startedAt).getTime();
+      return { name, elapsed, active: false };
+    }
+    // Still active
+    const elapsed = Date.now() - new Date(phase.startedAt).getTime();
+    return { name, elapsed: 0, active: true };
+  });
 }
