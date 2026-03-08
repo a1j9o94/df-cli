@@ -1,35 +1,35 @@
 ---
 name: highlights-filter-noise
 type: functional
-spec_id: run_01KJSYMVTRZA22SC742GEMEWDJ
-created_by: agt_01KJSYMVTT7H090YHJERTJN6FG
+spec_id: run_01KK7R4Y1NWJRH426C68FK58CZ
+created_by: agt_01KK7R4Y1TEX0SQCM76106T1F2
 ---
 
-## Highlights Filter Noise
+Preconditions: A completed run with agent logs in .df/logs/<agent-id>.jsonl containing a mix of: (a) highlight-worthy events (module creation, test results, decisions), and (b) noise (raw Claude reasoning, token counts, internal agent coordination messages, tool call details).
 
-### Preconditions
-- A completed run with agent logs containing mixed content:
-  - Structured events (module_created, scenario_passed/failed, key decisions)
-  - Raw Claude reasoning text (thinking, chain of thought)
-  - Token count summaries (cost_usd, tokens_used fields)
-  - Internal agent coordination messages (mail check, heartbeat)
-  - Tool use events (Bash, Read, Write calls)
+Steps:
+1. Read raw agent log JSONL and confirm it contains both signal and noise
+2. Read .df/runs/<run-id>/highlights.json
+3. Verify highlights ONLY contain these event types: module_created, scenario_passed, scenario_failed, key_decision, error_recovery, integration
+4. Verify highlights do NOT contain:
+   - Raw Claude reasoning or thinking text
+   - Token count summaries
+   - Internal agent coordination (mail send/check commands)
+   - Tool call input/output details
+   - Cost calculations
+   - Heartbeat messages
+5. Verify each highlight entry has: type, timestamp, and relevant metadata (module, description, scenario name as applicable)
+6. Load dashboard Output tab and verify displayed highlights match the filtered set
 
-### Test Steps
-1. Read .df/runs/<run-id>/highlights.json
-2. Parse each entry and verify its type field
-3. Verify ONLY these types appear: module_created, scenario_passed, scenario_failed, key_decision, error_recovery, integration
-4. Verify NO entries contain:
-   - Raw Claude reasoning or chain-of-thought text
-   - Token count or cost information
-   - Internal agent coordination (mail check, heartbeat, agent complete)
-   - Tool input/output dumps
-5. Check GET /api/runs/<run-id>/highlights returns the same filtered set
-6. Verify each highlight has: type, description, timestamp fields
-7. Verify descriptions are human-readable summaries, not raw log lines
+Pass criteria:
+- Highlights contain only the 6 specified event types
+- No raw Claude output leaked into highlights
+- No token/cost/coordination noise in highlights
+- Each entry is well-structured with required fields
+- Dashboard renders only curated highlights
 
-### Pass Criteria
-- highlights.json contains ONLY the 6 allowed event types
-- Zero entries with raw reasoning, token counts, or coordination messages
-- Each entry has type, description, and timestamp
-- API endpoint returns the same data as the file
+Fail criteria:
+- Raw agent reasoning appears in highlights
+- Token counts or cost data in highlights
+- Internal mail/coordination messages in highlights
+- Highlight entries missing type or timestamp fields
