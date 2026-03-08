@@ -4,6 +4,7 @@ import { program } from "commander";
 import { initCommand } from "./commands/init.js";
 import { buildCommand } from "./commands/build.js";
 import { continueCommand } from "./commands/continue.js";
+import { pauseCommand } from "./commands/pause.js";
 import { statusCommand } from "./commands/status.js";
 import { runCommand } from "./commands/run/index.js";
 import { specCommand } from "./commands/spec/index.js";
@@ -80,6 +81,7 @@ Examples:
 program.addCommand(initCommand);
 program.addCommand(buildCommand);
 program.addCommand(continueCommand);
+program.addCommand(pauseCommand);
 program.addCommand(statusCommand);
 program.addCommand(runCommand);
 program.addCommand(specCommand);

@@ -186,7 +186,7 @@ export class PipelineEngine {
     const run = getRun(this.db, runId);
     if (!run) throw new Error(`Run not found: ${runId}`);
 
-    // Check resumability: failed, paused, or stale running runs
+    // Check resumability: failed, paused, or stale running runs are all resumable
     if (run.status === "completed") {
       throw new Error(`Run ${runId} is not resumable: status is 'completed'`);
     }

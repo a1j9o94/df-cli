@@ -1,19 +1,84 @@
 import { join } from "node:path";
 import { Command } from "commander";
 import { getDb } from "../db/index.js";
+import type { SqliteDb } from "../db/index.js";
 import { listAgents } from "../db/queries/agents.js";
 import { getRun } from "../db/queries/runs.js";
+import type { RunRecord } from "../types/run.js";
 import { PipelineEngine } from "../pipeline/engine.js";
 import { getResumableRuns } from "../pipeline/resume.js";
 import { ClaudeCodeRuntime } from "../runtime/claude-code.js";
 import { findDfDir, getConfig } from "../utils/config.js";
 import { log } from "../utils/logger.js";
 
+/**
+ * Validate that a run exists and is in a resumable state (failed, paused, or stale running).
+ * Contract: PauseStateContract
+ */
+export function validateContinueRun(
+  db: SqliteDb,
+  runId: string,
+): { valid: boolean; error?: string } {
+  const run = getRun(db, runId);
+  if (!run) {
+    return { valid: false, error: `Run not found: ${runId}` };
+  }
+  const resumableStatuses = ["failed", "paused", "running"];
+  if (!resumableStatuses.includes(run.status)) {
+    return {
+      valid: false,
+      error: `Run ${runId} is not resumable (status: ${run.status}). Only failed, paused, or stale running runs can be resumed.`,
+    };
+  }
+  return { valid: true };
+}
+
+/**
+ * Validate that the new budget exceeds the current spend for a paused run.
+ * Contract: PauseStateContract
+ */
+export function validateBudgetForPausedRun(
+  db: SqliteDb,
+  runId: string,
+  newBudgetUsd: number,
+): { valid: boolean; error?: string } {
+  const run = getRun(db, runId);
+  if (!run) {
+    return { valid: false, error: `Run not found: ${runId}` };
+  }
+  if (newBudgetUsd <= run.cost_usd) {
+    return {
+      valid: false,
+      error: `New budget ($${newBudgetUsd}) must exceed current spend ($${run.cost_usd.toFixed(2)}).`,
+    };
+  }
+  return { valid: true };
+}
+
+/**
+ * Format a user-friendly resume message based on run status.
+ * Shows budget context for paused runs.
+ * Contract: PauseSequenceContract
+ */
+export function formatPauseResumeMessage(
+  run: RunRecord,
+  newBudgetUsd?: number,
+): string {
+  if (run.status === "paused") {
+    const spentStr = `$${run.cost_usd.toFixed(2)} spent`;
+    const budgetStr = newBudgetUsd !== undefined
+      ? `, new budget: $${newBudgetUsd}`
+      : "";
+    return `[dark] Resuming paused run ${run.id} (${spentStr}${budgetStr})`;
+  }
+  return `[dark] Resuming run ${run.id}...`;
+}
+
 export const continueCommand = new Command("continue")
-  .description("Resume a failed pipeline run from the last completed phase")
-  .argument("[run-id]", "Run ID to resume (auto-selects if only one failed run exists)")
+  .description("Resume a paused, failed, or stale pipeline run from the last completed phase")
+  .argument("[run-id]", "Run ID to resume (auto-selects if only one resumable run exists)")
   .option("--from-phase <phase>", "Override: resume from a specific phase")
-  .option("--budget-usd <amount>", "Override budget cap in USD")
+  .option("--budget-usd <amount>", "New total budget in USD (must exceed current spend)")
   .action(
     async (
       runIdArg: string | undefined,
@@ -36,7 +101,7 @@ export const continueCommand = new Command("continue")
       if (!runId) {
         const resumable = getResumableRuns(db);
         if (resumable.length === 0) {
-          log.error("No resumable runs found. There are no failed or stale runs.");
+          log.error("No resumable runs found. There are no failed, paused, or stale runs.");
           process.exit(1);
         }
         if (resumable.length === 1) {
@@ -56,16 +121,23 @@ export const continueCommand = new Command("continue")
         }
       } else {
         // Validate the run exists and is resumable
-        const run = getRun(db, runId);
-        if (!run) {
-          log.error(`Run not found: ${runId}`);
+        const validation = validateContinueRun(db, runId);
+        if (!validation.valid) {
+          log.error(validation.error!);
           process.exit(1);
         }
-        if (run.status !== "failed" && run.status !== "running" && run.status !== "paused") {
-          log.error(
-            `Run ${runId} is not resumable (status: ${run.status}). Only failed, paused, or stale running runs can be resumed.`,
-          );
-          process.exit(1);
+      }
+
+      // For paused runs with a new budget, validate budget > current spend
+      const newBudget = options.budgetUsd ? Number.parseFloat(options.budgetUsd) : undefined;
+      if (newBudget !== undefined) {
+        const run = getRun(db, runId!);
+        if (run && run.status === "paused") {
+          const budgetValidation = validateBudgetForPausedRun(db, runId!, newBudget);
+          if (!budgetValidation.valid) {
+            log.error(budgetValidation.error!);
+            process.exit(1);
+          }
         }
       }
 
@@ -73,7 +145,13 @@ export const continueCommand = new Command("continue")
       const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary);
       const engine = new PipelineEngine(db, runtime, config);
 
-      console.log(`[dark] Resuming pipeline run ${runId}...`);
+      // Display context-aware resume message
+      const currentRun = getRun(db, runId!);
+      if (currentRun) {
+        console.log(formatPauseResumeMessage(currentRun, newBudget));
+      } else {
+        console.log(`[dark] Resuming pipeline run ${runId}...`);
+      }
 
       const resultRunId = await engine.resume({
         runId: runId!,

@@ -1,14 +1,55 @@
 import { join } from "node:path";
 import { Command } from "commander";
 import { getDb } from "../db/index.js";
-import { getRun, listRuns } from "../db/queries/runs.js";
-import { pauseRun } from "../pipeline/pause.js";
-import { ClaudeCodeRuntime } from "../runtime/claude-code.js";
-import { findDfDir, getConfig } from "../utils/config.js";
+import type { SqliteDb } from "../db/index.js";
+import { getRun, updateRunStatus } from "../db/queries/runs.js";
+import { createEvent } from "../db/queries/events.js";
+import type { RunRecord } from "../types/run.js";
+import { findDfDir } from "../utils/config.js";
 import { log } from "../utils/logger.js";
 
+/**
+ * Validate that a run exists and can be paused.
+ * Only running runs can be paused.
+ * Contract: PauseStateContract
+ */
+export function validatePauseRun(
+  db: SqliteDb,
+  runId: string,
+): { valid: boolean; error?: string } {
+  const run = getRun(db, runId);
+  if (!run) {
+    return { valid: false, error: `Run not found: ${runId}` };
+  }
+  if (run.status === "paused") {
+    return { valid: false, error: `Run ${runId} is already paused.` };
+  }
+  if (run.status !== "running" && run.status !== "pending") {
+    return {
+      valid: false,
+      error: `Run ${runId} is not pausable (status: ${run.status}). Only running runs can be paused.`,
+    };
+  }
+  return { valid: true };
+}
+
+/**
+ * Get the most recent running run (for `dark pause` without a run-id).
+ * Contract: PauseSequenceContract
+ */
+export function getPausableRun(db: SqliteDb): RunRecord | null {
+  const row = db.prepare(
+    `SELECT * FROM runs WHERE status = 'running' ORDER BY created_at DESC LIMIT 1`
+  ).get() as Record<string, unknown> | null;
+  if (!row) return null;
+  return {
+    ...row,
+    skip_change_eval: row.skip_change_eval === 1,
+  } as RunRecord;
+}
+
 export const pauseCommand = new Command("pause")
-  .description("Pause a running build — agents suspended, state preserved, resume available")
+  .description("Pause a running build \u2014 agents suspended, state preserved, resume available")
   .argument("[run-id]", "Run ID to pause (auto-selects if only one running build)")
   .addHelpText("after", `
 Examples:
@@ -29,55 +70,31 @@ with "dark continue".
         process.exit(1);
       }
 
-      const config = getConfig(dfDir);
       const db = getDb(join(dfDir, "state.db"));
 
       // Resolve run ID
       let runId = runIdArg;
       if (!runId) {
-        // Find the most recent running run
-        const allRuns = listRuns(db);
-        const runningRuns = allRuns.filter((r) => r.status === "running");
-
-        if (runningRuns.length === 0) {
-          log.error("No running builds to pause.");
-          process.exit(1);
-        }
-        if (runningRuns.length === 1) {
-          runId = runningRuns[0].id;
-          log.info(`Auto-selected run: ${runId}`);
-        } else {
-          log.error("Multiple running builds found. Specify which one to pause:");
-          for (const r of runningRuns) {
-            console.log(
-              `  ${r.id}  spec=${r.spec_id}  phase=${r.current_phase}  cost=$${r.cost_usd.toFixed(2)}`,
-            );
-          }
-          process.exit(1);
-        }
-      } else {
-        // Validate the run exists
-        const run = getRun(db, runId);
+        const run = getPausableRun(db);
         if (!run) {
-          log.error(`Run not found: ${runId}`);
+          log.error("No running builds found to pause.");
           process.exit(1);
         }
-        if (run.status !== "running") {
-          log.error(
-            `Run ${runId} is not running (status: ${run.status}). Only running builds can be paused.`,
-          );
-          process.exit(1);
-        }
+        runId = run.id;
+        log.info(`Auto-selected run: ${runId}`);
       }
 
-      const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary);
-      const result = await pauseRun(db, runtime, runId!, "manual");
-
-      if (!result.success) {
-        log.error(`Failed to pause: ${result.error}`);
+      // Validate
+      const validation = validatePauseRun(db, runId);
+      if (!validation.valid) {
+        log.error(validation.error!);
         process.exit(1);
       }
 
-      // pauseRun already prints the console output
+      // Pause the run
+      updateRunStatus(db, runId, "paused", "manual");
+      createEvent(db, runId, "run-paused", { reason: "manual" });
+
+      console.log(`[dark] Run ${runId} paused manually. Resume with: dark continue ${runId}`);
     },
   );
