@@ -1,4 +1,6 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes, createHash } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 16;
@@ -74,4 +76,19 @@ export function maskSecret(value: string): string {
   if (value.length === 0) return "";
   if (value.length <= 4) return "*".repeat(value.length);
   return "*".repeat(value.length - 4) + value.slice(-4);
+}
+
+/**
+ * Get or generate the project encryption key.
+ * Stored in .df/secret.key (should be gitignored).
+ */
+export function getEncryptionKey(dfDir: string): string {
+  const keyPath = join(dfDir, "secret.key");
+  if (existsSync(keyPath)) {
+    return readFileSync(keyPath, "utf-8").trim();
+  }
+  // Generate a new key
+  const key = randomBytes(32).toString("hex");
+  writeFileSync(keyPath, key, { mode: 0o600 });
+  return key;
 }

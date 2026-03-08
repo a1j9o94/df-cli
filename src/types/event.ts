@@ -47,7 +47,9 @@ export type EventType =
   | "state-db-backed-up"
   | "state-db-restored"
   | "state-db-backup-removed"
-  | "module-redecomposed";
+  | "module-redecomposed"
+  | "agent-blocked"
+  | "blocker-resolved";
 
 export interface EventRecord {
   id: string;

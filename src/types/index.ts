@@ -44,3 +44,10 @@ export type {
   ResearchArtifactRecord,
   ResearchArtifactCreateInput,
 } from "./research.js";
+
+export type {
+  BlockerType,
+  BlockerStatus,
+  BlockerRecord,
+  BlockerCreateInput,
+} from "./blocker.js";
