@@ -16,4 +16,3 @@ dist/
 build/
 .env
 .env.local
-.df/secret.key

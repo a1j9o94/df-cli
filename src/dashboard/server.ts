@@ -7,6 +7,7 @@ import { formatJson } from "../utils/format.js";
 import { generateDashboardHtml } from "./index.js";
 import { getRunQueueInfo, type RunQueueInfo } from "../pipeline/queue-visibility.js";
 import { computeElapsedMs, estimateCost } from "../utils/agent-enrichment.js";
+import { ErrorTracker } from "./error-tracker.js";
 import { PHASE_ORDER, shouldSkipPhase, type PhaseName } from "../pipeline/phases.js";
 import { parseFrontmatter, serializeFrontmatter } from "../utils/frontmatter.js";
 import { newSpecId, newRunId } from "../utils/id.js";
@@ -989,12 +990,70 @@ async function handleResolveBlocker(
   return jsonResponse({ success: true, blocker });
 }
 
+// --- Contract: HealthEndpointResponse ---
+
+interface HealthEndpointResponse {
+  uptime: number;
+  memoryUsage: number;
+  status: "healthy" | "degraded";
+  dbConnected: boolean;
+  version: string;
+  errorCount: number;
+}
+
+function handleHealth(
+  db: InstanceType<typeof Database>,
+  errorTracker: ErrorTracker,
+  startTime: number,
+): Response {
+  let dbConnected = false;
+  try {
+    db.prepare("SELECT 1").get();
+    dbConnected = true;
+  } catch {
+    dbConnected = false;
+  }
+
+  const uptimeSeconds = (Date.now() - startTime) / 1000;
+  const memoryMB = process.memoryUsage().rss / (1024 * 1024);
+  const errorCount = errorTracker.getErrorCount();
+
+  const body: HealthEndpointResponse = {
+    uptime: uptimeSeconds,
+    memoryUsage: memoryMB,
+    status: dbConnected ? "healthy" : "degraded",
+    dbConnected,
+    version: "0.1.0",
+    errorCount,
+  };
+
+  // --- Contract: XErrorCountHeader ---
+  return new Response(formatJson(body), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "X-Error-Count": String(errorCount),
+    },
+  });
+}
+
+// --- Contract: ErrorsEndpointResponse ---
+
+function handleErrors(errorTracker: ErrorTracker): Response {
+  return jsonResponse(errorTracker.getErrors());
+}
+
 // --- URL Router ---
 
 async function route(
   db: InstanceType<typeof Database>,
   req: Request,
   getDashboardHtml: () => string,
+  errorTracker: ErrorTracker,
+  startTime: number,
   specsDir?: string | null,
 ): Promise<Response> {
   const url = new URL(req.url);
@@ -1015,6 +1074,16 @@ async function route(
   // Hello endpoint
   if (path === "/hello") {
     return jsonResponse({ message: "Hello, world!" });
+  }
+
+  // Health endpoint
+  if (path === "/api/health") {
+    return handleHealth(db, errorTracker, startTime);
+  }
+
+  // Errors endpoint
+  if (path === "/api/errors") {
+    return handleErrors(errorTracker);
   }
 
   // HTML root
@@ -1141,13 +1210,17 @@ export async function startServer(config: ServerConfig): Promise<ServerHandle> {
 
   const getDashboardHtml = () => generateDashboardHtml({ projectName: "Dark Factory" });
   const specsDir = config.specsDir ?? null;
+  const errorTracker = new ErrorTracker();
+  const startTime = Date.now();
 
   const server = Bun.serve({
     port,
     async fetch(req: Request): Promise<Response> {
       try {
-        return await route(db, req, getDashboardHtml, specsDir);
+        return await route(db, req, getDashboardHtml, errorTracker, startTime, specsDir);
       } catch (err) {
+        const url = new URL(req.url);
+        errorTracker.capture(err instanceof Error ? err : new Error(String(err)), url.pathname, req.method);
         const message = err instanceof Error ? err.message : "Internal server error";
         return errorResponse(message, 500);
       }
