@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { parseGitHubIssueUrl } from "../../../src/importers/github/url-parser.js";
+import { parseGitHubIssueUrl } from "../../../src/importers/github.js";
 
 describe("parseGitHubIssueUrl", () => {
   test("parses a standard GitHub issue URL", () => {
