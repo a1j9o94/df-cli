@@ -43,6 +43,10 @@ interface RunSummary {
   completedCount: number;
   estimatedCost: number;
   error?: string;
+  /** Reason the run was paused, null if not paused */
+  pauseReason: string | null;
+  /** Timestamp when the run was paused, null if not paused */
+  pausedAt: string | null;
   createdAt: string;
   tokensUsed: number;
   /** Present only when the run is in the merge queue */
@@ -248,6 +252,8 @@ function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unkno
     moduleCount,
     completedCount,
     estimatedCost: runEstimatedCost,
+    pauseReason: (r.pause_reason as string) ?? null,
+    pausedAt: (r.paused_at as string) ?? null,
     createdAt: r.created_at as string,
     tokensUsed: r.tokens_used as number,
   };
