@@ -11,7 +11,7 @@ export type {
   ClaudeResult,
 } from "./agent.js";
 
-export type { RunStatus, RunRecord, RunCreateInput } from "./run.js";
+export type { RunStatus, RunRecord, RunCreateInput, PauseReason } from "./run.js";
 
 export type { SpecStatus, SpecRecord, SpecFrontmatter } from "./spec.js";
 

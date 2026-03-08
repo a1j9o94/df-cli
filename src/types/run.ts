@@ -6,6 +6,8 @@ export type RunStatus =
   | "failed"
   | "cancelled";
 
+export type PauseReason = "budget_exceeded" | "manual";
+
 export interface RunRecord {
   id: string;
   spec_id: string;
@@ -20,6 +22,8 @@ export interface RunRecord {
   max_iterations: number;
   config: string;
   error: string | null;
+  paused_at: string | null;
+  pause_reason: PauseReason | null;
   created_at: string;
   updated_at: string;
 }

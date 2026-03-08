@@ -11,6 +11,8 @@ function hydrateRun(row: Record<string, unknown>): RunRecord {
   return {
     ...row,
     skip_change_eval: row.skip_change_eval === 1,
+    paused_at: (row.paused_at as string) ?? null,
+    pause_reason: (row.pause_reason as string) ?? null,
   } as RunRecord;
 }
 
