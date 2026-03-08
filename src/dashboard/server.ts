@@ -995,7 +995,9 @@ async function route(
   db: InstanceType<typeof Database>,
   req: Request,
   getDashboardHtml: () => string,
-  specsDir?: string | null,
+  specsDir: string | null | undefined,
+  startedAt: number,
+  errorTracker: ErrorTracker,
 ): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
@@ -1015,6 +1017,39 @@ async function route(
   // Hello endpoint
   if (path === "/hello") {
     return jsonResponse({ message: "Hello, world!" });
+  }
+
+  // Health endpoint
+  if (path === "/api/health") {
+    let dbConnected = false;
+    try {
+      db.prepare("SELECT 1").get();
+      dbConnected = true;
+    } catch {
+      dbConnected = false;
+    }
+
+    const uptimeSeconds = Math.floor((Date.now() - startedAt) / 1000);
+    const memoryMB = Math.round((process.memoryUsage.rss() / (1024 * 1024)) * 100) / 100;
+    const errorCount = errorTracker.getErrorCount();
+
+    const health: HealthEndpointResponse = {
+      uptime: uptimeSeconds,
+      memoryUsage: memoryMB,
+      status: dbConnected ? "healthy" : "degraded",
+      dbConnected,
+      version: "0.1.0",
+      errorCount,
+    };
+
+    const resp = jsonResponse(health);
+    resp.headers.set("X-Error-Count", String(errorCount));
+    return resp;
+  }
+
+  // Errors endpoint
+  if (path === "/api/errors") {
+    return jsonResponse(errorTracker.getErrors());
   }
 
   // HTML root
@@ -1111,10 +1146,60 @@ async function route(
   return errorResponse(`Not found: ${path}`, 404);
 }
 
+// --- Contract: HealthEndpointResponse ---
+
+export interface HealthEndpointResponse {
+  uptime: number;
+  memoryUsage: number;
+  status: "healthy" | "degraded";
+  dbConnected: boolean;
+  version: string;
+  errorCount: number;
+}
+
+// --- Contract: ErrorTrackerShape ---
+
+export interface ErrorEntry {
+  timestamp: string;
+  path: string;
+  method: string;
+  error: string;
+  stack: string;
+}
+
+export interface ErrorTracker {
+  errors: ErrorEntry[];
+  trackError(entry: ErrorEntry): void;
+  getErrors(): ErrorEntry[];
+  getErrorCount(): number;
+}
+
+function createErrorTracker(): ErrorTracker {
+  const errors: ErrorEntry[] = [];
+  return {
+    errors,
+    trackError(entry: ErrorEntry) {
+      errors.push(entry);
+    },
+    getErrors() {
+      return errors;
+    },
+    getErrorCount() {
+      return errors.length;
+    },
+  };
+}
+
+// --- Contract: ServerStartedAt ---
+
+// The server records its start time to compute uptime
+
 // --- Server startup ---
 
 export async function startServer(config: ServerConfig): Promise<ServerHandle> {
   const port = config.port;
+  const startedAt = Date.now();
+  const errorTracker = createErrorTracker();
 
   // Get or create DB
   let db: InstanceType<typeof Database>;
@@ -1146,10 +1231,19 @@ export async function startServer(config: ServerConfig): Promise<ServerHandle> {
     port,
     async fetch(req: Request): Promise<Response> {
       try {
-        return await route(db, req, getDashboardHtml, specsDir);
+        return await route(db, req, getDashboardHtml, specsDir, startedAt, errorTracker);
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Internal server error";
-        return errorResponse(message, 500);
+        const url = new URL(req.url);
+        const errorMessage = err instanceof Error ? err.message : "Internal server error";
+        const errorStack = err instanceof Error ? (err.stack ?? "") : "";
+        errorTracker.trackError({
+          timestamp: new Date().toISOString(),
+          path: url.pathname,
+          method: req.method,
+          error: errorMessage,
+          stack: errorStack,
+        });
+        return errorResponse(errorMessage, 500);
       }
     },
   });
