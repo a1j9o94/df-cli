@@ -1,40 +1,36 @@
 ---
 name: url-auto-detection-in-spec
 type: functional
-spec_id: run_01KJT1F6B8P7286PNQFFEBC6YK
-created_by: agt_01KJT1F6BAHQ9P8AXSQ37AZDAF
+spec_id: run_01KK7SEAMQH4864S3Q22NACE6H
+created_by: agt_01KK7SEAMS9TJ2REHZD0ZZYG49
 ---
 
-## Scenario: URL auto-detection in spec
+## Scenario: URL auto-detection in spec content
 
 ### Preconditions
-- Dark Factory project initialized
-- A spec exists with YouTube/Loom URLs embedded in its body
+- A Dark Factory project is initialized
+- A spec exists with YouTube URL(s) embedded in its body text
 
 ### Steps
-1. Create a spec with this content: 'See the tutorial at https://www.youtube.com/watch?v=abc123 for implementation details. Also review the walkthrough at https://www.loom.com/share/xyz789.'
-2. Start a build run for this spec
-3. Check the architect agent's mail: dark mail check --agent <architect-id>
-4. Verify the mail body contains a section calling out the detected URLs
-5. Verify the mail mentions both the YouTube URL and the Loom URL
-6. Verify the mail suggests using 'dark research video' to extract context from each URL
-7. Create a spec with NO video URLs in its body
-8. Start a build run for this spec
-9. Check the architect's mail
-10. Verify there is NO video URL section (don't show empty sections)
+1. Create a spec with body containing: "See this tutorial: https://www.youtube.com/watch?v=abc123 for implementation details"
+2. Start a build run for this spec (triggers architect phase)
+3. Inspect the architect's mail instructions (dark mail check --agent <architect-id>)
+4. Verify the mail body contains:
+   - A "Video References" section
+   - The detected URL: https://www.youtube.com/watch?v=abc123
+   - A suggested command: dark research video <agent-id> https://www.youtube.com/watch?v=abc123
+5. Also verify the architect system prompt contains a "Referenced Videos" section with the URL
 
-### Expected Output
-- When spec contains YouTube/Loom URLs: architect mail includes a 'Video References' section listing them
-- The section suggests: 'The spec references these videos — use dark research video to extract context before decomposing'
-- When spec has no video URLs: no video section appears in the mail
+### Additional verification
+6. Create a second spec with NO video URLs
+7. Start a build run for the second spec
+8. Verify the architect's mail instructions do NOT contain a "Video References" section
 
-### URL Detection Patterns (must match)
-- https://www.youtube.com/watch?v=abc123
-- https://youtube.com/watch?v=abc123
-- https://youtu.be/abc123
-- https://www.loom.com/share/abc123
-- http://loom.com/share/abc123
+### URL formats to test
+- https://www.youtube.com/watch?v=abc123 (standard YouTube)
+- https://youtu.be/abc123 (short YouTube)
+- https://www.loom.com/share/abc123def456 (Loom)
 
 ### Pass/Fail Criteria
-- PASS: URLs detected in spec, called out in architect mail with dark research video suggestion
-- FAIL: URLs not detected, or no suggestion to use dark research video, or empty section shown for specs without URLs
+- PASS: Video URLs are detected in spec content and surfaced in architect instructions with pre-formatted commands. No video section when spec has no URLs.
+- FAIL: URLs not detected, section missing, commands not formatted, or section appears when no URLs present
