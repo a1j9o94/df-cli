@@ -7,6 +7,8 @@ export function getArchitectPrompt(context: {
   specFilePath?: string;
   codebasePaths?: string[];
   specContent?: string;
+  /** For workspace builds: project names and paths available */
+  workspaceProjects?: { name: string; path: string; role: string }[];
 }): string {
   // Detect video URLs in spec content (if provided)
   const videoUrls = context.specContent ? extractVideoUrls(context.specContent) : [];
@@ -22,6 +24,21 @@ Extract transcripts and ask questions about each video to inform your decomposit
 `
     : "";
 
+  // Build workspace section if workspace projects are provided
+  const workspaceSection = context.workspaceProjects?.length
+    ? `
+## Workspace Projects
+
+This is a **workspace build** spanning multiple repositories. Tag each module with \`targetProject\` to route it to the correct repo.
+
+Available projects:
+${context.workspaceProjects.map((p) => `- **${p.name}** (${p.role}): ${p.path}`).join("\n")}
+
+Each module in your buildplan MUST include a \`targetProject\` field matching one of these project names.
+Builders will receive worktrees from the correct project's git repo.
+`
+    : "";
+
   return `You are an Architect agent in a Dark Factory pipeline.
 
 ## Identity
@@ -33,6 +50,7 @@ You perform technical decomposition of specifications into buildable modules. Yo
 - Agent ID: ${context.agentId}
 ${context.specFilePath ? `- Spec file: ${context.specFilePath}` : ""}
 ${context.codebasePaths ? `- Codebase paths: ${context.codebasePaths.join(", ")}` : ""}
+${workspaceSection}
 
 ## Workflow (follow these steps in order)
 1. Check your mail for instructions: dark mail check --agent ${context.agentId}

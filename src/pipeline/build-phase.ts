@@ -29,6 +29,8 @@ import { createWorktree, removeWorktree, getWorktreeCommits, worktreeHasCommits 
 import { getFailedBuilderWorktree } from "./resume.js";
 import { findDfDir } from "../utils/config.js";
 import { existsSync } from "node:fs";
+import { resolveModuleProject, createProjectWorktree } from "./workspace-build.js";
+import type { WorkspaceConfig, CrossRepoModule } from "../types/workspace.js";
 
 /** Default poll interval (5s). Can be overridden via options for testing. */
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
@@ -37,6 +39,9 @@ const DEFAULT_POLL_INTERVAL_MS = 5_000;
 export interface BuildPhaseOptions {
   /** Override poll interval (ms). Useful for testing. */
   pollIntervalMs?: number;
+  /** Workspace configuration for cross-repo builds. When set, modules with
+   *  targetProject will create worktrees from the corresponding project repo. */
+  workspaceConfig?: WorkspaceConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +206,7 @@ export async function executeBuildPhase(
   const plan: Buildplan = JSON.parse(bp.plan);
   const completedModules = new Set<string>();
   const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null }>();
+  const workspaceConfig = options?.workspaceConfig;
 
   // Resolve project root for worktree creation
   const dfDir = findDfDir();
@@ -218,20 +224,35 @@ export async function executeBuildPhase(
     for (const moduleId of ready.slice(0, slotsAvailable)) {
       const mod = plan.modules.find((m) => m.id === moduleId)!;
 
-      // Create worktree for this builder in /tmp/ to isolate from .df/scenarios/
+      // Create worktree — workspace-aware if module has targetProject
       const runShort = runId.slice(0, 8);
       const suffix = Date.now().toString(36);
-      const branchName = `df-build/${runShort}/${moduleId}-${suffix}`;
-      const worktreeDir = join(tmpdir(), "df-worktrees", `${moduleId}-${suffix}`);
       let worktreePath: string | null = null;
 
-      try {
-        const wt = createWorktree(projectRoot, branchName, worktreeDir);
-        worktreePath = wt.path;
-        log.info(`Worktree created for ${moduleId}: ${worktreePath}`);
-      } catch (err) {
-        log.warn(`Failed to create worktree for ${moduleId}, using project root: ${err}`);
-        worktreePath = projectRoot;
+      if (mod.targetProject && workspaceConfig) {
+        // Cross-repo: create worktree from the target project's repo
+        try {
+          const projectRef = resolveModuleProject(mod as CrossRepoModule, workspaceConfig);
+          const wt = createProjectWorktree(projectRef, moduleId, `df-build/${runShort}`);
+          worktreePath = wt.path;
+          log.info(`Workspace worktree created for ${moduleId} (project: ${mod.targetProject}): ${worktreePath}`);
+        } catch (err) {
+          log.warn(`Failed to create workspace worktree for ${moduleId}, falling back to project root: ${err}`);
+          worktreePath = projectRoot;
+        }
+      } else {
+        // Standard: create worktree from the current repo
+        const branchName = `df-build/${runShort}/${moduleId}-${suffix}`;
+        const worktreeDir = join(tmpdir(), "df-worktrees", `${moduleId}-${suffix}`);
+
+        try {
+          const wt = createWorktree(projectRoot, branchName, worktreeDir);
+          worktreePath = wt.path;
+          log.info(`Worktree created for ${moduleId}: ${worktreePath}`);
+        } catch (err) {
+          log.warn(`Failed to create worktree for ${moduleId}, using project root: ${err}`);
+          worktreePath = projectRoot;
+        }
       }
 
       // Get contracts for this module
@@ -437,6 +458,7 @@ export async function executeResumeBuildPhase(
   // Start with previously completed modules pre-populated
   const completedModules = new Set<string>(previouslyCompletedModules);
   const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null }>();
+  const workspaceConfig = options?.workspaceConfig;
 
   log.info(`Resuming build: ${completedModules.size} modules already completed, ${plan.modules.length - completedModules.size} remaining`);
 
@@ -469,6 +491,18 @@ export async function executeResumeBuildPhase(
           log.info(`Reusing worktree for ${moduleId} with ${previousCommits.length} previous commits: ${worktreePath}`);
         } else {
           log.info(`Reusing worktree for ${moduleId} (no previous commits): ${worktreePath}`);
+        }
+      } else if (mod.targetProject && workspaceConfig) {
+        // Cross-repo: create worktree from the target project's repo
+        const runShort = runId.slice(0, 8);
+        try {
+          const projectRef = resolveModuleProject(mod as CrossRepoModule, workspaceConfig);
+          const wt = createProjectWorktree(projectRef, moduleId, `df-build/${runShort}`);
+          worktreePath = wt.path;
+          log.info(`Workspace worktree created for ${moduleId} (project: ${mod.targetProject}): ${worktreePath}`);
+        } catch (err) {
+          log.warn(`Failed to create workspace worktree for ${moduleId}, falling back to project root: ${err}`);
+          worktreePath = projectRoot;
         }
       } else {
         // Create a fresh worktree

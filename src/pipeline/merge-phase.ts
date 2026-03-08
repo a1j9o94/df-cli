@@ -100,7 +100,10 @@ export async function executeMergePhase(
 
   const targetBranch = config.project.branch;
 
-  // Collect worktree paths from completed builders (with module info)
+  // Collect worktree paths from completed builders (with module info).
+  // For workspace builds, builders from different projects will have worktrees
+  // rooted in their respective project repos. The merge phase handles each
+  // project's worktrees against that project's target branch.
   const completedBuilders = db.prepare(
     "SELECT worktree_path, module_id, name FROM agents WHERE run_id = ? AND role = 'builder' AND status = 'completed' AND worktree_path IS NOT NULL"
   ).all(runId) as { worktree_path: string; module_id: string | null; name: string }[];
