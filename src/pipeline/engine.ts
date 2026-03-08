@@ -11,6 +11,7 @@ import type { PhaseName } from "./phases.js";
 import { getResumePoint, getCompletedModules } from "./resume.js";
 import type { ResumeOptions } from "./resume.js";
 import { checkBudget } from "./budget.js";
+import { checkBudgetThresholds, pauseRun, BUDGET_WARNING_THRESHOLD } from "./pause.js";
 import { log } from "../utils/logger.js";
 import { getArchitectPrompt } from "../agents/prompts/architect.js";
 import { getEvaluatorPrompt } from "../agents/prompts/evaluator.js";
@@ -112,10 +113,25 @@ export class PipelineEngine {
           }
         }
 
-        // Budget check
-        const budget = checkBudget(this.db, run.id);
-        if (budget.overBudget) {
-          log.warn(`Budget exceeded: $${budget.spentUsd.toFixed(2)} / $${budget.budgetUsd.toFixed(2)}`);
+        // Budget threshold check — may pause or warn
+        const budgetResult = checkBudgetThresholds(this.db, run.id);
+        if (budgetResult.action === "pause") {
+          await pauseRun(this.db, this.runtime, run.id, "budget_exceeded");
+          return run.id;
+        }
+        if (budgetResult.action === "warning") {
+          createEvent(this.db, run.id, "budget-warning", {
+            threshold: BUDGET_WARNING_THRESHOLD,
+            spent_usd: budgetResult.spentUsd,
+            budget_usd: budgetResult.budgetUsd,
+            percent_used: budgetResult.percentUsed,
+          });
+          log.warn(
+            `Budget warning: $${budgetResult.spentUsd.toFixed(2)} of $${budgetResult.budgetUsd.toFixed(2)} spent (${Math.round(budgetResult.percentUsed)}%). Build will pause at $${budgetResult.budgetUsd.toFixed(2)}.`
+          );
+          console.log(
+            `[dark] Budget warning: $${budgetResult.spentUsd.toFixed(2)} of $${budgetResult.budgetUsd.toFixed(2)} spent (${Math.round(budgetResult.percentUsed)}%). Build will pause at $${budgetResult.budgetUsd.toFixed(2)}.`
+          );
         }
       }
 
@@ -170,12 +186,21 @@ export class PipelineEngine {
     const run = getRun(this.db, runId);
     if (!run) throw new Error(`Run not found: ${runId}`);
 
-    // Check resumability: only failed or stale running runs
+    // Check resumability: failed, paused, or stale running runs
     if (run.status === "completed") {
       throw new Error(`Run ${runId} is not resumable: status is 'completed'`);
     }
     if (run.status === "cancelled") {
       throw new Error(`Run ${runId} is not resumable: status is 'cancelled'`);
+    }
+
+    // Paused runs: validate new budget if provided
+    if (run.status === "paused") {
+      if (budgetUsd !== undefined && budgetUsd <= run.cost_usd) {
+        throw new Error(
+          `New budget ($${budgetUsd}) must exceed current spend ($${run.cost_usd.toFixed(2)}).`
+        );
+      }
     }
 
     // If currently "running", check for active agents — can't resume while agents are live
@@ -269,10 +294,25 @@ export class PipelineEngine {
           }
         }
 
-        // Budget check
-        const budget = checkBudget(this.db, runId);
-        if (budget.overBudget) {
-          log.warn(`Budget exceeded: $${budget.spentUsd.toFixed(2)} / $${budget.budgetUsd.toFixed(2)}`);
+        // Budget threshold check — may pause or warn
+        const budgetResult = checkBudgetThresholds(this.db, runId);
+        if (budgetResult.action === "pause") {
+          await pauseRun(this.db, this.runtime, runId, "budget_exceeded");
+          return runId;
+        }
+        if (budgetResult.action === "warning") {
+          createEvent(this.db, runId, "budget-warning", {
+            threshold: BUDGET_WARNING_THRESHOLD,
+            spent_usd: budgetResult.spentUsd,
+            budget_usd: budgetResult.budgetUsd,
+            percent_used: budgetResult.percentUsed,
+          });
+          log.warn(
+            `Budget warning: $${budgetResult.spentUsd.toFixed(2)} of $${budgetResult.budgetUsd.toFixed(2)} spent (${Math.round(budgetResult.percentUsed)}%). Build will pause at $${budgetResult.budgetUsd.toFixed(2)}.`
+          );
+          console.log(
+            `[dark] Budget warning: $${budgetResult.spentUsd.toFixed(2)} of $${budgetResult.budgetUsd.toFixed(2)} spent (${Math.round(budgetResult.percentUsed)}%). Build will pause at $${budgetResult.budgetUsd.toFixed(2)}.`
+          );
         }
       }
 

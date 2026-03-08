@@ -17,6 +17,7 @@ import { expertiseCommand } from "./commands/expertise/index.js";
 import { scenarioCommand } from "./commands/scenario/index.js";
 import { researchCommand } from "./commands/research/index.js";
 import { dashCommand } from "./commands/dash.js";
+import { pauseCommand } from "./commands/pause.js";
 
 program
   .name("dark")
@@ -51,7 +52,7 @@ mail system. The orchestrator manages their lifecycle, budget, and phase gates.
   .addHelpText("after", `
 Command groups:
 
-  Workflow        init, build, continue, status, run, dash — project setup and pipeline execution
+  Workflow        init, build, continue, pause, status, run, dash — project setup and pipeline execution
   Specs           spec create/show/list — define what to build
   Architecture    architect, contract — decomposition and interface contracts
   Scenarios       scenario create/list — holdout test scenarios (created by architect)
@@ -92,5 +93,6 @@ program.addCommand(expertiseCommand);
 program.addCommand(scenarioCommand);
 program.addCommand(researchCommand);
 program.addCommand(dashCommand);
+program.addCommand(pauseCommand);
 
 program.parse();
