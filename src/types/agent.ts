@@ -10,6 +10,7 @@ export type AgentStatus =
   | "pending"
   | "spawning"
   | "running"
+  | "paused"
   | "completed"
   | "failed"
   | "killed"
