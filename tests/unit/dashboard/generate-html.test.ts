@@ -117,7 +117,7 @@ describe("generateDashboardHtml - UI structure", () => {
 
   it("has a runs list section", () => {
     const html = generateDashboardHtml();
-    expect(html).toContain("runs-list");
+    expect(html).toContain("specs-list");
   });
 
   it("has a run detail section", () => {

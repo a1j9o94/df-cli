@@ -551,7 +551,7 @@ describe("Dashboard Server", () => {
       // Must have dark theme background from real UI
       expect(html).toContain("#0d1117");
       // Must have sidebar with runs list
-      expect(html).toContain('id="runs-list"');
+      expect(html).toContain('id="specs-list"');
       // Must have auto-refresh indicator (pulsing green dot)
       expect(html).toContain("auto-refresh-indicator");
       // Must have status badges CSS
