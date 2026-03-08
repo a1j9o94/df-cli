@@ -47,16 +47,47 @@ export function generateDashboardHtml(config?: DashboardConfig): string {
         </div>
         <div class="specs-container" id="specs-container">
           <div class="loading">Loading specs...</div>
+<<<<<<< HEAD
+=======
+        </div>
+        <h2 class="section-title" style="margin-top:16px">Runs</h2>
+        <div class="runs-container" id="runs-container">
+          <div class="loading">Loading runs...</div>
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
         </div>
       </section>
       <section class="content" id="run-detail">
         <div class="empty-state" id="empty-state">
+<<<<<<< HEAD
           <p>Select a spec to view details</p>
         </div>
         <div class="spec-detail-panel" id="spec-detail-panel" style="display:none">
           <div id="spec-detail-header"></div>
           <div class="spec-runs" id="spec-runs"></div>
+=======
+          <p>Select a spec or run to view details</p>
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
         </div>
+        <!-- Spec Editor Panel -->
+        <div class="spec-editor-panel" id="spec-editor-panel" style="display:none">
+          <div class="spec-editor-header">
+            <div class="spec-editor-title" id="spec-editor-title"></div>
+            <div class="spec-editor-controls">
+              <span class="locked-badge" id="locked-badge" style="display:none">Locked</span>
+              <span class="spec-saved-indicator" id="spec-saved-indicator" style="display:none">Saved</span>
+              <button class="spec-save-btn" id="spec-save-btn">Save</button>
+              <button class="spec-build-btn" id="spec-build-btn">Build</button>
+            </div>
+          </div>
+          <div class="locked-explanation" id="locked-explanation" style="display:none">This spec has a completed build. Create a new spec to make changes.</div>
+          <div class="spec-editor-split">
+            <div class="spec-editor-raw-container">
+              <textarea class="spec-editor-raw" id="spec-editor-raw" placeholder="Spec markdown content..."></textarea>
+            </div>
+            <div class="spec-editor-preview" id="spec-editor-preview"></div>
+          </div>
+        </div>
+        <!-- Run Detail Panel (existing) -->
         <div class="detail-panels" id="detail-panels" style="display:none">
           <div class="run-header" id="run-header"></div>
           <div class="phase-timeline" id="phases-container"></div>
@@ -90,6 +121,18 @@ export function generateDashboardHtml(config?: DashboardConfig): string {
         </div>
       </section>
     </main>
+    <!-- Create Spec Modal -->
+    <div class="modal-overlay" id="create-spec-modal" style="display:none">
+      <div class="modal-content">
+        <h3>New Spec</h3>
+        <p class="modal-description">Describe what to build in plain language:</p>
+        <textarea class="spec-description-input" id="spec-description-input" rows="5" placeholder="e.g., Add a caching layer for the API responses"></textarea>
+        <div class="modal-actions">
+          <button class="modal-cancel" id="create-spec-cancel">Cancel</button>
+          <button class="modal-submit" id="create-spec-submit">Create Spec</button>
+        </div>
+      </div>
+    </div>
   </div>
   ${generateScript(apiBase)}
 </body>
@@ -867,7 +910,11 @@ function generateStyles(): string {
     color: var(--text-muted);
   }
 
+<<<<<<< HEAD
   /* --- Spec Sidebar --- */
+=======
+  /* --- Sidebar Header with New Spec Button --- */
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
 
   .sidebar-header {
     display: flex;
@@ -890,6 +937,7 @@ function generateStyles(): string {
     border: none;
     border-radius: 4px;
     cursor: pointer;
+<<<<<<< HEAD
     transition: opacity 0.15s;
   }
 
@@ -913,6 +961,27 @@ function generateStyles(): string {
 
   .spec-card {
     padding: 10px 12px;
+=======
+  }
+
+  .new-spec-btn:hover {
+    opacity: 0.9;
+  }
+
+  /* --- Spec Cards in Sidebar --- */
+
+  .spec-group-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    padding: 8px 4px 4px;
+  }
+
+  .spec-card {
+    padding: 8px 12px;
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
     border-radius: 6px;
     cursor: pointer;
     margin-bottom: 4px;
@@ -929,6 +998,7 @@ function generateStyles(): string {
     border-color: var(--accent-blue);
   }
 
+<<<<<<< HEAD
   .spec-card-header {
     display: flex;
     justify-content: space-between;
@@ -936,12 +1006,17 @@ function generateStyles(): string {
     margin-bottom: 4px;
   }
 
+=======
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
   .spec-card-title {
     font-size: 13px;
     font-weight: 500;
     color: var(--text-primary);
     margin-bottom: 2px;
+<<<<<<< HEAD
     line-height: 1.3;
+=======
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -949,11 +1024,16 @@ function generateStyles(): string {
 
   .spec-card-meta {
     display: flex;
+<<<<<<< HEAD
     gap: 8px;
+=======
+    justify-content: space-between;
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
     font-size: 11px;
     color: var(--text-secondary);
   }
 
+<<<<<<< HEAD
   .spec-pass-rate {
     font-size: 11px;
     font-family: var(--font-mono);
@@ -976,6 +1056,196 @@ function generateStyles(): string {
     margin-bottom: 8px;
   }
 
+=======
+  /* --- Spec Editor Panel --- */
+
+  .spec-editor-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .spec-editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .spec-editor-title {
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .spec-editor-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .locked-badge {
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-yellow);
+    background: rgba(210, 153, 34, 0.15);
+    border-radius: 4px;
+  }
+
+  .spec-saved-indicator {
+    font-size: 11px;
+    color: var(--accent-green);
+    font-weight: 500;
+  }
+
+  .spec-save-btn, .spec-build-btn {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+
+  .spec-build-btn {
+    background: var(--accent-green);
+    color: #000;
+    border: none;
+  }
+
+  .spec-build-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .locked-explanation {
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 8px 0;
+    font-style: italic;
+  }
+
+  .spec-editor-split {
+    display: flex;
+    flex: 1;
+    gap: 12px;
+    min-height: 400px;
+  }
+
+  .spec-editor-raw-container {
+    flex: 1;
+    display: flex;
+  }
+
+  .spec-editor-raw {
+    flex: 1;
+    padding: 12px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    resize: none;
+  }
+
+  .spec-editor-raw:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .spec-editor-preview {
+    flex: 1;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow-y: auto;
+  }
+
+  /* --- Modal --- */
+
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+
+  .modal-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    width: 500px;
+    max-width: 90vw;
+  }
+
+  .modal-content h3 {
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+
+  .modal-description {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+
+  .spec-description-input {
+    width: 100%;
+    padding: 10px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    resize: vertical;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .modal-cancel {
+    padding: 6px 14px;
+    font-size: 12px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .modal-submit {
+    padding: 6px 14px;
+    font-size: 12px;
+    background: var(--accent-blue);
+    color: var(--text-primary);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
   @media (max-width: 768px) {
     .main {
       flex-direction: column;
@@ -1001,7 +1271,9 @@ function generateScript(apiBase: string): string {
   let selectedRunId = null;
   let selectedSpecId = null;
   let refreshTimer = null;
+  let autoSaveTimer = null;
   const REFRESH_INTERVAL = 5000;
+  const AUTO_SAVE_DEBOUNCE = 3000;
 
   // Data-driven tab definitions — to add a new tab, add an entry here
   var TAB_DEFS = [
@@ -1054,12 +1326,20 @@ function generateScript(apiBase: string): string {
     return String(num);
   }
 
+<<<<<<< HEAD
   // --- Fetch and render specs list (sidebar) ---
 
   async function loadSpecs() {
     try {
       var data = await fetchJson("/api/specs");
       var specs = data.specs || data;
+=======
+  // --- Spec Management ---
+
+  async function loadSpecs() {
+    try {
+      var specs = await fetchJson("/api/specs");
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
       renderSpecsList(specs);
     } catch (err) {
       document.getElementById("specs-container").innerHTML =
@@ -1067,6 +1347,7 @@ function generateScript(apiBase: string): string {
     }
   }
 
+<<<<<<< HEAD
   var SPEC_STATUS_ORDER = ["building", "draft", "completed"];
 
   function renderSpecsList(specs) {
@@ -1107,6 +1388,42 @@ function generateScript(apiBase: string): string {
       });
       html += '</div>';
     });
+=======
+  function renderSpecsList(specs) {
+    var container = document.getElementById("specs-container");
+    if (!specs || specs.length === 0) {
+      container.innerHTML = '<div class="loading">No specs yet</div>';
+      return;
+    }
+
+    // Group by status: building, draft, completed
+    var groups = { building: [], draft: [], completed: [] };
+    specs.forEach(function(s) {
+      var key = s.status || "draft";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(s);
+    });
+
+    var html = "";
+    var groupOrder = ["building", "draft", "completed"];
+    groupOrder.forEach(function(groupKey) {
+      var groupSpecs = groups[groupKey];
+      if (groupSpecs && groupSpecs.length > 0) {
+        html += '<div class="spec-group-title">' + esc(groupKey) + '</div>';
+        groupSpecs.forEach(function(s) {
+          var isActive = s.id === selectedSpecId ? " active" : "";
+          html += '<div class="spec-card' + isActive + '" data-spec-id="' + esc(s.id) + '">'
+            + '<div class="spec-card-title">' + esc(s.title) + '</div>'
+            + '<div class="spec-card-meta">'
+            + statusBadge(s.status)
+            + '<span>' + esc(s.lastModified || "") + '</span>'
+            + '</div>'
+            + '</div>';
+        });
+      }
+    });
+
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
     container.innerHTML = html;
 
     // Bind click events
@@ -1117,6 +1434,7 @@ function generateScript(apiBase: string): string {
     });
   }
 
+<<<<<<< HEAD
   // --- Select spec and load detail ---
 
   async function selectSpec(specId) {
@@ -1190,6 +1508,183 @@ function generateScript(apiBase: string): string {
   }
 
   // --- Fetch and render runs list (kept for run detail navigation) ---
+=======
+  async function selectSpec(specId) {
+    selectedSpecId = specId;
+    selectedRunId = null;
+
+    // Show editor, hide run detail
+    document.getElementById("empty-state").style.display = "none";
+    document.getElementById("detail-panels").style.display = "none";
+    document.getElementById("spec-editor-panel").style.display = "flex";
+
+    // Highlight active spec card
+    document.querySelectorAll(".spec-card").forEach(function(c) {
+      c.classList.toggle("active", c.dataset.specId === specId);
+    });
+    document.querySelectorAll(".run-card").forEach(function(c) {
+      c.classList.remove("active");
+    });
+
+    try {
+      var specData = await fetchJson("/api/specs/" + specId);
+      renderSpecEditor(specData);
+    } catch (err) {
+      document.getElementById("spec-editor-raw").value = "Error loading spec: " + err.message;
+    }
+  }
+
+  function renderSpecEditor(specData) {
+    var titleEl = document.getElementById("spec-editor-title");
+    var rawEl = document.getElementById("spec-editor-raw");
+    var previewEl = document.getElementById("spec-editor-preview");
+    var saveBtn = document.getElementById("spec-save-btn");
+    var buildBtn = document.getElementById("spec-build-btn");
+    var lockedBadge = document.getElementById("locked-badge");
+    var lockedExplanation = document.getElementById("locked-explanation");
+
+    titleEl.textContent = specData.title || specData.id;
+    rawEl.value = specData.content || "";
+    previewEl.innerHTML = renderMarkdownPreview(specData.content || "");
+
+    var isCompleted = specData.status === "completed";
+    var isBuilding = specData.status === "building";
+
+    // Immutability guard
+    rawEl.disabled = isCompleted;
+    lockedBadge.style.display = isCompleted ? "inline-block" : "none";
+    lockedExplanation.style.display = isCompleted ? "block" : "none";
+    saveBtn.style.display = isCompleted ? "none" : "inline-block";
+    buildBtn.disabled = isCompleted || isBuilding;
+  }
+
+  function renderMarkdownPreview(markdown) {
+    // Simple markdown rendering (headers, bullets, paragraphs)
+    return markdown.split("\\n").map(function(line) {
+      if (line.match(/^### /)) return '<h3>' + esc(line.replace(/^### /, '')) + '</h3>';
+      if (line.match(/^## /)) return '<h2>' + esc(line.replace(/^## /, '')) + '</h2>';
+      if (line.match(/^# /)) return '<h1>' + esc(line.replace(/^# /, '')) + '</h1>';
+      if (line.match(/^- /)) return '<li>' + esc(line.replace(/^- /, '')) + '</li>';
+      if (line.trim() === '') return '<br>';
+      return '<p>' + esc(line) + '</p>';
+    }).join("");
+  }
+
+  // Auto-save debounce
+  function debounce(fn, delay) {
+    return function() {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(fn, delay);
+    };
+  }
+
+  async function saveSpec() {
+    if (!selectedSpecId) return;
+    var rawEl = document.getElementById("spec-editor-raw");
+    var content = rawEl.value;
+    try {
+      await fetch(apiBase + "/api/specs/" + selectedSpecId, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: content })
+      });
+      var indicator = document.getElementById("spec-saved-indicator");
+      indicator.style.display = "inline";
+      setTimeout(function() { indicator.style.display = "none"; }, 2000);
+      // Update preview
+      document.getElementById("spec-editor-preview").innerHTML = renderMarkdownPreview(content);
+    } catch (err) {
+      console.error("Save failed:", err);
+    }
+  }
+
+  async function createSpec() {
+    var input = document.getElementById("spec-description-input");
+    var description = input.value.trim();
+    if (!description) return;
+
+    try {
+      var resp = await fetch(apiBase + "/api/specs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: description })
+      });
+      var data = await resp.json();
+      if (resp.ok) {
+        document.getElementById("create-spec-modal").style.display = "none";
+        input.value = "";
+        await loadSpecs();
+        selectSpec(data.id);
+      } else {
+        alert("Error: " + (data.error || "Failed to create spec"));
+      }
+    } catch (err) {
+      alert("Error creating spec: " + err.message);
+    }
+  }
+
+  async function startBuild() {
+    if (!selectedSpecId) return;
+    var buildBtn = document.getElementById("spec-build-btn");
+    buildBtn.disabled = true;
+    buildBtn.textContent = "Building...";
+
+    try {
+      var resp = await fetch(apiBase + "/api/builds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ specId: selectedSpecId })
+      });
+      var data = await resp.json();
+      if (resp.ok) {
+        await loadSpecs();
+        await loadRuns();
+        // Transition to run view
+        if (data.runId) {
+          selectRun(data.runId);
+        }
+      } else {
+        alert("Build error: " + (data.error || "Failed to start build"));
+        buildBtn.disabled = false;
+        buildBtn.textContent = "Build";
+      }
+    } catch (err) {
+      alert("Build error: " + err.message);
+      buildBtn.disabled = false;
+      buildBtn.textContent = "Build";
+    }
+  }
+
+  // --- Wire up spec editor events ---
+
+  document.getElementById("new-spec-btn").addEventListener("click", function() {
+    document.getElementById("create-spec-modal").style.display = "flex";
+    document.getElementById("spec-description-input").focus();
+  });
+
+  document.getElementById("create-spec-cancel").addEventListener("click", function() {
+    document.getElementById("create-spec-modal").style.display = "none";
+  });
+
+  document.getElementById("create-spec-submit").addEventListener("click", function() {
+    createSpec();
+  });
+
+  document.getElementById("spec-save-btn").addEventListener("click", function() {
+    saveSpec();
+  });
+
+  document.getElementById("spec-build-btn").addEventListener("click", function() {
+    startBuild();
+  });
+
+  // Auto-save on editor change with debounce
+  document.getElementById("spec-editor-raw").addEventListener("input", debounce(function() {
+    saveSpec();
+  }, AUTO_SAVE_DEBOUNCE));
+
+  // --- Fetch and render runs list ---
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
 
   async function loadRuns() {
     try {
@@ -1251,7 +1746,9 @@ function generateScript(apiBase: string): string {
 
   async function selectRun(runId) {
     selectedRunId = runId;
+    selectedSpecId = null;
     document.getElementById("empty-state").style.display = "none";
+    document.getElementById("spec-editor-panel").style.display = "none";
     document.getElementById("detail-panels").style.display = "block";
     var specPanel = document.getElementById("spec-detail-panel");
     if (specPanel) specPanel.style.display = "none";
@@ -1584,6 +2081,10 @@ function generateScript(apiBase: string): string {
 
   async function refresh() {
     await loadSpecs();
+<<<<<<< HEAD
+=======
+    await loadRuns();
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
     if (selectedRunId) {
       await Promise.all([
         loadRunDetail(selectedRunId, false),
@@ -1598,6 +2099,12 @@ function generateScript(apiBase: string): string {
 
   // Initial load
   loadSpecs().catch(function(err) {
+<<<<<<< HEAD
+=======
+    console.error("Initial specs load failed:", err);
+  });
+  loadRuns().catch(function(err) {
+>>>>>>> df-build/run_01KK/editor-and-build-mmhl1ta5
     console.error("Initial load failed:", err);
   });
 

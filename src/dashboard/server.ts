@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, dirname } from "node:path";
 import { SCHEMA_SQL } from "../db/schema.js";
 import { findDfDir } from "../utils/config.js";
 import { generateDashboardHtml } from "./index.js";
@@ -17,6 +17,8 @@ export interface ServerConfig {
   dbPath?: string;
   /** Allow injecting a DB instance directly (used in tests) */
   db?: InstanceType<typeof Database>;
+  /** Directory where spec files are stored (used for creating new specs via API) */
+  specsDir?: string;
 }
 
 export interface ServerHandle {
@@ -696,7 +698,6 @@ function handleListSpecs(db: InstanceType<typeof Database>): Response {
   const rows = db
     .prepare("SELECT * FROM specs ORDER BY created_at DESC")
     .all() as Record<string, unknown>[];
-
   const specs = rows.map((s) => ({
     id: s.id as string,
     title: s.title as string,
@@ -741,7 +742,7 @@ function handleGetSpecDetail(db: InstanceType<typeof Database>, specId: string):
 
 // --- Contract: SpecCreateAPI ---
 
-async function handleCreateSpec(db: InstanceType<typeof Database>, req: Request): Promise<Response> {
+async function handleCreateSpec(db: InstanceType<typeof Database>, req: Request, specsDirOverride?: string | null): Promise<Response> {
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -770,11 +771,15 @@ async function handleCreateSpec(db: InstanceType<typeof Database>, req: Request)
 
   // Resolve specs directory
   let specsDir: string;
-  const dfDir = findDfDir();
-  if (dfDir) {
-    specsDir = join(dfDir, "specs");
+  if (specsDirOverride) {
+    specsDir = specsDirOverride;
   } else {
-    specsDir = join(process.cwd(), ".df", "specs");
+    const dfDir = findDfDir();
+    if (dfDir) {
+      specsDir = join(dfDir, "specs");
+    } else {
+      specsDir = join(process.cwd(), ".df", "specs");
+    }
   }
 
   if (!existsSync(specsDir)) {
@@ -920,6 +925,7 @@ async function route(
   db: InstanceType<typeof Database>,
   req: Request,
   getDashboardHtml: () => string,
+  specsDir?: string | null,
 ): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
@@ -949,7 +955,7 @@ async function route(
   // --- Spec API routes ---
 
   if (path === "/api/specs" && req.method === "POST") {
-    return handleCreateSpec(db, req);
+    return handleCreateSpec(db, req, specsDir);
   }
 
   if (path === "/api/specs" && req.method === "GET") {
@@ -1048,12 +1054,13 @@ export async function startServer(config: ServerConfig): Promise<ServerHandle> {
   }
 
   const getDashboardHtml = () => generateDashboardHtml({ projectName: "Dark Factory" });
+  const specsDir = config.specsDir ?? null;
 
   const server = Bun.serve({
     port,
     async fetch(req: Request): Promise<Response> {
       try {
-        return await route(db, req, getDashboardHtml);
+        return await route(db, req, getDashboardHtml, specsDir);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Internal server error";
         return errorResponse(message, 500);
