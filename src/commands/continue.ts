@@ -4,6 +4,7 @@ import { getDb } from "../db/index.js";
 import type { SqliteDb } from "../db/index.js";
 import { listAgents } from "../db/queries/agents.js";
 import { getRun } from "../db/queries/runs.js";
+import type { RunRecord } from "../types/run.js";
 import { PipelineEngine } from "../pipeline/engine.js";
 import { getResumableRuns } from "../pipeline/resume.js";
 import { ClaudeCodeRuntime } from "../runtime/claude-code.js";
@@ -52,6 +53,25 @@ export function validateBudgetForPausedRun(
     };
   }
   return { valid: true };
+}
+
+/**
+ * Format a user-friendly resume message based on run status.
+ * Shows budget context for paused runs.
+ * Contract: PauseSequenceContract
+ */
+export function formatPauseResumeMessage(
+  run: RunRecord,
+  newBudgetUsd?: number,
+): string {
+  if (run.status === "paused") {
+    const spentStr = `$${run.cost_usd.toFixed(2)} spent`;
+    const budgetStr = newBudgetUsd !== undefined
+      ? `, new budget: $${newBudgetUsd}`
+      : "";
+    return `[dark] Resuming paused run ${run.id} (${spentStr}${budgetStr})`;
+  }
+  return `[dark] Resuming run ${run.id}...`;
 }
 
 export const continueCommand = new Command("continue")
@@ -125,7 +145,13 @@ export const continueCommand = new Command("continue")
       const runtime = new ClaudeCodeRuntime(config.runtime.agent_binary);
       const engine = new PipelineEngine(db, runtime, config);
 
-      console.log(`[dark] Resuming pipeline run ${runId}...`);
+      // Display context-aware resume message
+      const currentRun = getRun(db, runId!);
+      if (currentRun) {
+        console.log(formatPauseResumeMessage(currentRun, newBudget));
+      } else {
+        console.log(`[dark] Resuming pipeline run ${runId}...`);
+      }
 
       const resultRunId = await engine.resume({
         runId: runId!,
