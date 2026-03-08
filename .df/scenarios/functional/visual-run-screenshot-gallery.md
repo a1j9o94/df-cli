@@ -1,33 +1,31 @@
 ---
 name: visual-run-screenshot-gallery
 type: functional
-spec_id: run_01KK7R4Y1NWJRH426C68FK58CZ
-created_by: agt_01KK7R4Y1TEX0SQCM76106T1F2
+spec_id: run_01KK7SEJD8Z1CHN7Z2B1ZDT9P9
+created_by: agt_01KK7SEJD9V7MRX6KC86N28S5K
 ---
 
-Preconditions: A completed run exists for a spec whose title contains 'dashboard UI'. The run has screenshots stored in .df/runs/<run-id>/screenshots/ with a valid manifest.json containing at least 2 build-phase and 1 eval-phase screenshot entries.
+PRECONDITIONS: A completed run exists whose spec title contains the word 'dashboard' (a visual keyword). The builder captured at least 2 screenshots during TDD cycles. The evaluator captured at least 1 screenshot during validation.
 
-Steps:
-1. GET /api/runs/<run-id>/screenshots — expect 200 with JSON array of manifest entries
-2. Verify each entry has: filename, phase ('build' or 'eval'), module, step, caption, timestamp
-3. Load dashboard at / and navigate to the run detail view
-4. Click the 'Output' tab (should be 4th tab after Overview, Modules, Validation)
-5. Verify a screenshot gallery grid is rendered
-6. Verify each thumbnail shows: image, caption, phase badge, module name, timestamp
-7. Verify build screenshots appear before eval screenshots (chronological order)
-8. Click a thumbnail — verify it expands to full-width view
-9. In expanded view, verify prev/next navigation buttons exist and work
+STEPS:
+1. Open the dashboard and navigate to the completed run's detail view.
+2. Verify a tab labeled 'Output' exists alongside Overview, Modules, and Validation.
+3. Click the Output tab.
+4. Verify a screenshot gallery is displayed with thumbnail images.
+5. Verify each thumbnail shows: caption text, a phase badge ('Build' or 'Eval'), module name, and timestamp.
+6. Verify build screenshots appear before evaluator screenshots (chronological ordering).
+7. Click a thumbnail to expand it full-size.
+8. Verify the expanded view shows the full-width image with prev/next navigation controls.
+9. Navigate using prev/next and verify correct image transitions.
 
-Pass criteria:
-- API returns valid manifest JSON
-- Output tab renders with gallery grid
-- Screenshots ordered chronologically (build first, eval last)
-- Click-to-expand works
-- Prev/next navigation cycles through images
-- Phase badges show 'Build' or 'Eval' text
+EXPECTED:
+- Output tab is visible and clickable.
+- Gallery renders with all screenshots from manifest.json.
+- Phase badges correctly distinguish Build vs Eval screenshots.
+- Expanded view with navigation works.
 
-Fail criteria:
-- Output tab missing or empty when screenshots exist
-- Screenshots not ordered correctly
-- Expanded view doesn't show or navigation broken
-- API returns 404 or malformed JSON
+PASS CRITERIA:
+- GET /api/runs/:id/screenshots returns manifest JSON array.
+- GET /api/runs/:id/screenshots/:filename returns image binary with correct content-type.
+- Dashboard Output tab renders gallery grid with thumbnails.
+- Click-to-expand and prev/next navigation functional.
