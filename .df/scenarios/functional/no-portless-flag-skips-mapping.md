@@ -1,26 +1,8 @@
 ---
 name: no-portless-flag-skips-mapping
 type: functional
-spec_id: run_01KK7R4Y3B77CAE5MQ8GM7S7SW
-created_by: agt_01KK7R4Y3C4YG0KKRD2WMYE2DX
+spec_id: run_01KK7SEJH6D58E9S9R87F3FWM1
+created_by: agt_01KK7SEJH73MEGYRXSXR203WXG
 ---
 
-Test: --no-portless flag skips domain mapping entirely.
-
-Setup:
-1. Portless IS installed and available
-2. Pass --no-portless flag
-
-Steps:
-1. Run dark dash --no-portless (or invoke with portless:false option)
-2. Observe the returned ServerHandle
-
-Expected:
-- ServerHandle.url should be 'http://localhost:3141' (NOT dark.localhost)
-- No portless registration should be attempted
-- Browser opens http://localhost:3141
-- No portless-related log messages
-
-Pass criteria:
-- URL is http://localhost:3141 despite portless being available
-- Portless setup function is never called when flag is set
+Preconditions: portless is installed and available. Steps: 1. Run 'dark dash --no-portless'. 2. Verify server starts on port 3141. 3. Verify portless registration is NOT called (domain mapping skipped). 4. Verify browser opens http://localhost:3141 (not dark.localhost). 5. Verify dashboard loads normally. Pass criteria: --no-portless flag prevents domain mapping, falls back to localhost:port behavior, no portless-related code executes.
