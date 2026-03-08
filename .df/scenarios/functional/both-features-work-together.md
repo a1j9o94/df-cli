@@ -1,22 +1,15 @@
 ---
 name: both-features-work-together
 type: functional
-spec_id: run_01KK7HZXYXADSN1VSEK10QZFDK
-created_by: agt_01KK7HZXYZF7Z4QR9MJPS63D15
+spec_id: run_01KK7JWKXV8FN2F84CRGJN4J7N
+created_by: agt_01KK7JWKXWEBD89Q6JAY8NZM04
 ---
 
 Test: Both features work together - rate-limited requests are also logged.
-
-Setup:
-1. Start server with in-memory SQLite DB
-2. Send 101 requests from same IP to GET /api/runs
-
-Verification:
-1. Request #101 should return 429 (rate limited)
-2. Call GET /api/logs from a different IP (to avoid rate limiting the log check)
-3. Parse the JSON array response
-4. Find the log entry for the 429 response
-5. Assert there is a log entry with: method='GET', path='/api/runs', status=429
-6. Assert that both successful (200) and rate-limited (429) requests appear in logs
-
-Pass criteria: Rate-limited requests (429 responses) are logged just like normal requests, with correct status code recorded.
+Setup: Start dashboard server with test database.
+Steps:
+1. Send 101 requests from the same IP to /api/runs
+2. Verify the 101st request returns 429
+3. Send GET /api/logs from a different IP (to avoid rate limiting on the logs request)
+Expected Output: The /api/logs response contains entries for all requests including the rate-limited ones. There should be at least one log entry with status 429. The rate-limited request at path /api/runs should appear in the logs with status 429.
+Pass Criteria: Log entries exist for both successful (200) and rate-limited (429) requests. The 429 response is logged with correct method, path, status=429, and a valid duration.
