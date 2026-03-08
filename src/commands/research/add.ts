@@ -3,6 +3,7 @@ import { existsSync, copyFileSync, mkdirSync } from "node:fs";
 import { join, basename } from "node:path";
 import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
+import { formatJson } from "../../utils/format.js";
 import { getAgent } from "../../db/queries/agents.js";
 import { createResearchArtifact } from "../../db/queries/research.js";
 import { log } from "../../utils/logger.js";
@@ -83,7 +84,7 @@ export const researchAddCommand = new Command("add")
       });
 
       if (options.json) {
-        console.log(JSON.stringify(artifact, null, 2));
+        console.log(formatJson(artifact));
       } else {
         log.success(`Research saved: ${artifact.id}`);
         log.info(`  Label: ${artifact.label}`);

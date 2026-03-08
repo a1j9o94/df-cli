@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { writeFileSync, readdirSync, statSync, readFileSync } from "node:fs";
 import { join, relative, extname } from "node:path";
 import { findDfDir } from "../../utils/config.js";
+import { formatJson } from "../../utils/format.js";
 import { log } from "../../utils/logger.js";
 
 const CODE_EXTENSIONS = new Set([
@@ -55,7 +56,7 @@ export const expertisePrimeCommand = new Command("prime")
 
     writeFileSync(
       join(expertiseDir, "summary.json"),
-      JSON.stringify(summary, null, 2),
+      formatJson(summary),
     );
 
     log.success(`Expertise primed: ${fileTree.length} files indexed`);

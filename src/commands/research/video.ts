@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getAgent } from "../../db/queries/agents.js";
+import { formatJson } from "../../utils/format.js";
 import { log } from "../../utils/logger.js";
 import { executeVideoResearch } from "./video-action.js";
 
@@ -77,7 +78,7 @@ Examples:
         });
 
         if (options.json) {
-          console.log(JSON.stringify(artifact, null, 2));
+          console.log(formatJson(artifact));
         } else {
           log.success(`Video research saved: ${artifact.id}`);
           log.info(`  Label: ${artifact.label}`);
