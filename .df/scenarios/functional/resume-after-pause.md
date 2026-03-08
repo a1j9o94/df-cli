@@ -1,34 +1,8 @@
 ---
 name: resume-after-pause
 type: functional
-spec_id: run_01KJSXZQ59YSWAH7RS1JQ7KVV4
-created_by: agt_01KJSXZQ5ACJCQDQWNCZXC07WN
+spec_id: run_01KK6J195CBPQR35EVQ13YJ2J1
+created_by: agt_01KK6J195DC0DXB8P1GAVSK9J8
 ---
 
-## Resume after budget pause
-
-### Preconditions
-- A run exists in 'paused' state with cost_usd ~$2.00 and budget_usd = 2.00
-- Some modules were completed before the pause
-- Agent worktrees and state are preserved
-
-### Steps
-1. Run: dark continue <run-id> --budget-usd 10
-2. Wait for the pipeline to resume
-
-### Expected Results
-- Run status transitions from 'paused' to 'running'
-- runs.paused_at is cleared (set to null)
-- runs.budget_usd is updated to 10.00 (new total, not increment)
-- A 'run-resumed' event is created
-- Previously completed modules are NOT re-executed
-- The pipeline resumes from where it left off (same phase, same progress)
-- Suspended agent processes receive SIGCONT if still alive
-- If agent processes are dead, they are restarted using stored pause state (same module, same phase, same worktree)
-
-### Pass Criteria
-- After resume: SELECT status FROM runs WHERE id = <run-id> returns 'running'
-- After resume: SELECT budget_usd FROM runs WHERE id = <run-id> returns 10.00
-- Completed modules from before pause are still completed, not re-run
-- The resume does not restart from scratch — it continues from pause point
-- Event query: SELECT type FROM events WHERE run_id = <run-id> ORDER BY created_at shows 'run-paused' followed by 'run-resumed'
+SETUP: A run that has been paused via budget (status='paused', cost_usd=~$1.87, budget_usd=$2). Agents were suspended. STEPS: 1. Run 'dark continue <run-id> --budget-usd 10'. EXPECTED: (a) Run status transitions from 'paused' to 'running'. (b) paused_at is cleared. (c) budget_usd is updated to 10 (replaces, not increments). (d) SIGCONT is sent to suspended agent processes. (e) If agent processes are still alive, they resume from where they were (same worktree, same module). (f) Previously completed modules are NOT re-executed — the run picks up from the pause point. (g) Pipeline continues through remaining phases. PASS CRITERIA: Run resumes successfully, completed modules skipped, no duplicate work.
