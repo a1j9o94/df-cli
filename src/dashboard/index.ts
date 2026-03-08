@@ -476,6 +476,56 @@ function generateStyles(): string {
     font-family: var(--font-mono);
   }
 
+  .pause-info {
+    margin-top: 8px;
+    padding: 10px 12px;
+    background: rgba(210, 153, 34, 0.1);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+    border-radius: 6px;
+  }
+
+  .pause-reason {
+    color: var(--accent-yellow);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .pause-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .resume-command {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    padding: 4px 8px;
+    border-radius: 4px;
+    flex: 1;
+  }
+
+  .add-budget-btn {
+    background: rgba(210, 153, 34, 0.2);
+    color: var(--accent-yellow);
+    border: 1px solid rgba(210, 153, 34, 0.4);
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .add-budget-btn:hover {
+    background: rgba(210, 153, 34, 0.3);
+  }
+
+  .progress-fill.paused {
+    background: var(--accent-yellow);
+  }
+
   .dep-bar {
     display: flex;
     align-items: center;
@@ -724,6 +774,15 @@ function generateStyles(): string {
     opacity: 0.5;
   }
 
+  .phase-paused {
+    color: var(--accent-yellow);
+  }
+
+  .phase-paused .phase-step-dot {
+    background: var(--accent-yellow);
+    box-shadow: 0 0 6px rgba(210, 153, 34, 0.4);
+  }
+
   /* --- Estimated Cost --- */
 
   .cost-estimated {
@@ -754,6 +813,12 @@ function generateStyles(): string {
     font-size: 11px;
     color: var(--text-secondary);
     font-family: var(--font-mono);
+  }
+
+  .run-card-pause {
+    font-size: 11px;
+    color: var(--accent-yellow);
+    margin-top: 2px;
   }
 
   /* --- Collapsible Agents Section --- */
@@ -1613,6 +1678,12 @@ function generateScript(apiBase: string): string {
       const isAlive = run.status === "running" ? " alive" : "";
       const progress = run.moduleCount > 0
         ? Math.round((run.completedCount / run.moduleCount) * 100) : 0;
+      var pauseLabel = '';
+      if (run.status === 'paused' && run.pauseReason === 'budget_exceeded') {
+        pauseLabel = '<div class="run-card-pause">Budget limit reached</div>';
+      } else if (run.status === 'paused') {
+        pauseLabel = '<div class="run-card-pause">Paused</div>';
+      }
       return '<div class="run-card' + isActive + isAlive + '" data-run-id="' + esc(run.id) + '">'
         + '<div class="run-card-header">'
         + statusBadge(run.status)
@@ -1620,8 +1691,9 @@ function generateScript(apiBase: string): string {
         + '</div>'
         + '<div class="run-card-title" title="' + esc(run.specId) + '">' + esc(run.specTitle || run.specId) + '</div>'
         + '<div class="run-card-phase">' + friendlyPhase(run.phase) + '</div>'
+        + pauseLabel
         + '<div class="run-card-progress">' + esc(run.completedCount) + '/' + esc(run.moduleCount) + ' modules</div>'
-        + '<div class="progress-bar"><div class="progress-fill" style="width:' + progress + '%"></div></div>'
+        + '<div class="progress-bar"><div class="progress-fill' + (run.status === 'paused' ? ' paused' : '') + '" style="width:' + progress + '%"></div></div>'
         + '</div>';
     }).join("");
 
@@ -1695,8 +1767,33 @@ function generateScript(apiBase: string): string {
       + '<div class="stat"><span class="stat-label">Tokens</span><span class="stat-value">' + formatTokens(run.tokensUsed) + '</span></div>'
       + '<div class="stat"><span class="stat-label">Modules</span><span class="stat-value">' + esc(run.completedCount) + ' / ' + esc(run.moduleCount) + '</span></div>'
       + '</div>'
-      + '<div class="progress-bar"><div class="progress-fill" style="width:' + progress + '%"></div></div>'
-      + (run.error ? '<div class="error-text">' + esc(run.error) + '</div>' : '');
+      + '<div class="progress-bar"><div class="progress-fill' + (run.status === 'paused' ? ' paused' : '') + '" style="width:' + progress + '%"></div></div>'
+      + (run.error ? '<div class="error-text">' + esc(run.error) + '</div>' : '')
+      + renderPauseInfo(run);
+  }
+
+  function renderPauseInfo(run) {
+    if (run.status !== 'paused') return '';
+    var reasonText = '';
+    if (run.pauseReason === 'budget_exceeded') {
+      reasonText = 'Budget limit reached (' + formatCost(run.cost) + ' / ' + formatCost(run.budget) + ')';
+    } else if (run.pauseReason === 'manual') {
+      reasonText = 'Manually paused';
+    } else if (run.pauseReason) {
+      reasonText = 'Paused: ' + esc(run.pauseReason);
+    } else {
+      reasonText = 'Run paused';
+    }
+    var html = '<div class="pause-info">'
+      + '<span class="pause-reason">' + reasonText + '</span>';
+    if (run.resumeCommand) {
+      html += '<div class="pause-actions">'
+        + '<code class="resume-command">' + esc(run.resumeCommand) + '</code>'
+        + '<button class="add-budget-btn" onclick="navigator.clipboard.writeText(\'' + esc(run.resumeCommand) + '\')">Add Budget</button>'
+        + '</div>';
+    }
+    html += '</div>';
+    return html;
   }
 
   // --- Agents ---
@@ -1841,12 +1938,13 @@ function generateScript(apiBase: string): string {
       container.innerHTML = "";
       return;
     }
-    // Map status to CSS class: phase-completed, phase-active, phase-pending, phase-skipped
+    // Map status to CSS class: phase-completed, phase-active, phase-pending, phase-skipped, phase-paused
     var STATUS_CLASSES = {
       "completed": "phase-completed",
       "active": "phase-active",
       "pending": "phase-pending",
-      "skipped": "phase-skipped"
+      "skipped": "phase-skipped",
+      "paused": "phase-paused"
     };
     container.innerHTML = phases.map(function(p, i) {
       var statusClass = STATUS_CLASSES[p.status] || "phase-pending";

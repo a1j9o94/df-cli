@@ -20,6 +20,8 @@ export interface RunRecord {
   max_iterations: number;
   config: string;
   error: string | null;
+  paused_at: string | null;
+  pause_reason: string | null;
   created_at: string;
   updated_at: string;
 }
