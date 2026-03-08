@@ -67,3 +67,17 @@ export function listResearchArtifacts(
 
   return db.prepare(sql).all(...params) as ResearchArtifactRecord[];
 }
+
+/**
+ * Delete a research artifact by ID.
+ * Returns true if an artifact was deleted, false if not found.
+ */
+export function deleteResearchArtifact(
+  db: SqliteDb,
+  id: string
+): boolean {
+  const result = db
+    .prepare("DELETE FROM research_artifacts WHERE id = ?")
+    .run(id);
+  return result.changes > 0;
+}
