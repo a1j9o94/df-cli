@@ -18,7 +18,6 @@ import { expertiseCommand } from "./commands/expertise/index.js";
 import { scenarioCommand } from "./commands/scenario/index.js";
 import { researchCommand } from "./commands/research/index.js";
 import { dashCommand } from "./commands/dash.js";
-import { pauseCommand } from "./commands/pause.js";
 
 program
   .name("dark")
@@ -95,6 +94,5 @@ program.addCommand(expertiseCommand);
 program.addCommand(scenarioCommand);
 program.addCommand(researchCommand);
 program.addCommand(dashCommand);
-program.addCommand(pauseCommand);
 
 program.parse();
