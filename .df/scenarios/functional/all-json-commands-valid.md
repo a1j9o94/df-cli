@@ -1,39 +1,34 @@
 ---
 name: all-json-commands-valid
 type: functional
-spec_id: run_01KJQEP7BHVFD7GS7YYJDWFWJH
-created_by: agt_01KJQEP7BJ05Z2KCGS05N3R3ZW
+spec_id: run_01KK6XEX73VFTR66TYX35KP469
+created_by: agt_01KK6XEX74FRYJEDHG0GSWNB2C
 ---
 
-## Test: All --json commands produce valid JSON
+SCENARIO: Every --json command in the CLI produces valid, parseable JSON
 
-### Preconditions
-- Dark Factory project initialized with state.db
-- At least 1 run, 1 spec, 1 agent, and 1 scenario exist in the project
+SETUP:
+1. Initialize a project with at least one run, agents, specs, and scenarios
 
-### Steps
-Run each command and validate JSON output:
+STEPS:
+1. Run each of the following commands and pipe output to a JSON validator:
+   a. dark agent list --json
+   b. dark agent show <id> --json
+   c. dark status --json
+   d. dark spec list --json
+   e. dark scenario list --json
+   f. dark run list --json (if implemented)
+   g. dark research list --json (if implemented)
+   h. dark contract list --json (if implemented)
+2. For each command: echo output | python3 -c 'import sys,json; json.load(sys.stdin)'
+3. For each command: echo output | jq .
 
-1. dark agent list --json | python3 -c 'import sys,json; json.load(sys.stdin); print("OK: agent list")'
-2. dark status --json | python3 -c 'import sys,json; json.load(sys.stdin); print("OK: status")'
-3. dark spec list --json | python3 -c 'import sys,json; json.load(sys.stdin); print("OK: spec list")'
-4. dark scenario list --json | python3 -c 'import sys,json; json.load(sys.stdin); print("OK: scenario list")'
-5. dark status --run-id <run-id> --json | python3 -c 'import sys,json; json.load(sys.stdin); print("OK: status run")'
+EXPECTED:
+- Every single --json command produces output that passes both JSON.parse() and python json.loads()
+- No command produces output with unescaped control characters
+- Empty results should produce valid JSON (empty array [] or object with empty array)
 
-Additional commands if data exists:
-6. dark contract list --json | python3 -c 'import sys,json; json.load(sys.stdin); print("OK: contract list")'
-7. dark mail check --agent <agent-id> --json | python3 -c 'import sys,json; json.load(sys.stdin); print("OK: mail check")'
-8. dark resource status --json | python3 -c 'import sys,json; json.load(sys.stdin); print("OK: resource status")'
-9. dark integrate status --json | python3 -c 'import sys,json; json.load(sys.stdin); print("OK: integrate status")'
-
-### Expected Output
-- Every command exits 0
-- Every output is valid JSON (no parse errors)
-
-### Pass/Fail Criteria
-- PASS: ALL commands produce valid JSON
-- FAIL: ANY command produces output that fails JSON parsing
-
-### Notes
-- scenario/list.ts currently uses raw JSON.stringify instead of formatJson — this should be fixed
-- status command includes agents which contain system_prompt — verify exclusion works here too
+PASS CRITERIA:
+- 0 failures across all --json commands
+- python3 json.loads exits 0 for each
+- jq exits 0 for each
