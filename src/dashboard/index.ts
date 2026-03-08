@@ -83,6 +83,7 @@ export function generateDashboardHtml(config?: DashboardConfig): string {
         <!-- Run Detail Panel (existing) -->
         <div class="detail-panels" id="detail-panels" style="display:none">
           <div class="run-header" id="run-header"></div>
+          <div id="blocker-banner"></div>
           <div class="phase-timeline" id="phases-container"></div>
           <div class="tab-bar" id="tab-bar">
             <button class="tab active" data-tab="overview">Overview</button>
@@ -1280,6 +1281,119 @@ function generateStyles(): string {
       border-bottom: 1px solid var(--border);
     }
   }
+
+  /* --- Blocker Banner & Cards --- */
+
+  .blocker-banner {
+    margin-bottom: 12px;
+    padding: 12px 16px;
+    background: rgba(210, 153, 34, 0.12);
+    border: 1px solid var(--accent-yellow);
+    border-radius: 8px;
+  }
+
+  .blocker-banner-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-yellow);
+  }
+
+  .blocker-banner-icon {
+    font-size: 16px;
+  }
+
+  .blocker-card {
+    padding: 12px;
+    margin-bottom: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  .blocker-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .blocker-type {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: capitalize;
+  }
+
+  .blocker-type.secret { background: rgba(248, 81, 73, 0.15); color: var(--accent-red); }
+  .blocker-type.decision { background: rgba(88, 166, 255, 0.15); color: var(--accent-blue); }
+  .blocker-type.access { background: rgba(188, 140, 255, 0.15); color: var(--accent-purple); }
+  .blocker-type.resource { background: rgba(219, 109, 40, 0.15); color: var(--accent-orange); }
+
+  .blocker-description {
+    font-size: 13px;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .blocker-meta {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+
+  .blocker-resolve-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .blocker-resolve-input {
+    flex: 1;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font-mono);
+  }
+
+  .blocker-resolve-input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+  }
+
+  .blocker-resolve-btn {
+    padding: 6px 12px;
+    background: var(--accent-green);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .blocker-resolve-btn:hover {
+    opacity: 0.9;
+  }
+
+  .blocker-resolve-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .blocker-resolved {
+    font-size: 12px;
+    color: var(--accent-green);
+    font-weight: 500;
+  }
 </style>`;
 }
 
@@ -1723,6 +1837,7 @@ function generateScript(apiBase: string): string {
 
     await Promise.all([
       loadRunDetail(runId, true),
+      loadBlockers(runId),
       loadAgents(runId, true),
       loadModules(runId, true),
       loadPhases(runId, true),
@@ -2066,6 +2181,82 @@ function generateScript(apiBase: string): string {
     document.getElementById(e.target.dataset.tab + "-panel").classList.add("active");
   });
 
+  // --- Blockers ---
+
+  async function loadBlockers(runId) {
+    try {
+      const blockers = await fetchJson("/api/runs/" + runId + "/blockers");
+      renderBlockers(blockers);
+    } catch (err) {
+      console.error("Failed to load blockers:", err);
+    }
+  }
+
+  function renderBlockers(blockers) {
+    var banner = document.getElementById("blocker-banner");
+    var pending = blockers.filter(function(b) { return b.status === "pending"; });
+    if (pending.length === 0) {
+      banner.innerHTML = "";
+      return;
+    }
+    var html = '<div class="blocker-banner">'
+      + '<div class="blocker-banner-header">'
+      + '<span class="blocker-banner-icon">\u26A0</span>'
+      + pending.length + ' pending blocker' + (pending.length > 1 ? 's' : '') + ' \u2014 action required'
+      + '</div>';
+    pending.forEach(function(b) {
+      var inputType = b.type === "secret" ? "password" : "text";
+      var placeholder = b.type === "secret" ? "Enter secret value\u2026" : "Enter value\u2026";
+      html += '<div class="blocker-card" data-blocker-id="' + esc(b.id) + '">'
+        + '<div class="blocker-card-header">'
+        + '<span class="blocker-type ' + esc(b.type) + '">' + esc(b.type) + '</span>'
+        + '<span class="blocker-meta">Agent: ' + esc(b.agent_id) + '</span>'
+        + '</div>'
+        + '<div class="blocker-description">' + esc(b.description) + '</div>'
+        + '<div class="blocker-meta">Created: ' + esc(b.created_at) + (b.module_id ? ' \u2022 Module: ' + esc(b.module_id) : '') + '</div>'
+        + '<div class="blocker-resolve-form">'
+        + (b.type === "secret"
+          ? '<input class="blocker-resolve-input" type="' + inputType + '" placeholder="env key" data-field="env_key" style="max-width:120px" />'
+            + '<input class="blocker-resolve-input" type="password" placeholder="' + placeholder + '" data-field="env_value" />'
+          : '<input class="blocker-resolve-input" type="' + inputType + '" placeholder="' + placeholder + '" data-field="value" />')
+        + '<button class="blocker-resolve-btn" onclick="resolveBlocker(\'' + esc(b.id) + '\', \'' + esc(b.type) + '\', this)">Resolve</button>'
+        + '</div>'
+        + '</div>';
+    });
+    html += '</div>';
+    banner.innerHTML = html;
+  }
+
+  window.resolveBlocker = async function resolveBlocker(blockerId, blockerType, btn) {
+    var card = btn.closest(".blocker-card");
+    var body = {};
+    if (blockerType === "secret") {
+      var envKeyInput = card.querySelector('[data-field="env_key"]');
+      var envValueInput = card.querySelector('[data-field="env_value"]');
+      body.env_key = envKeyInput.value;
+      body.env_value = envValueInput.value;
+    } else {
+      var valueInput = card.querySelector('[data-field="value"]');
+      body.value = valueInput.value;
+    }
+    btn.disabled = true;
+    btn.textContent = "Resolving\u2026";
+    try {
+      var resp = await fetch(apiBase + "/api/runs/" + selectedRunId + "/blockers/" + blockerId + "/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!resp.ok) throw new Error("Failed to resolve");
+      // Reload blockers to reflect the change
+      await loadBlockers(selectedRunId);
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = "Resolve";
+      console.error("Failed to resolve blocker:", err);
+    }
+  };
+
   // --- Auto-refresh ---
 
   async function refresh() {
@@ -2074,6 +2265,7 @@ function generateScript(apiBase: string): string {
     if (selectedRunId) {
       await Promise.all([
         loadRunDetail(selectedRunId, false),
+        loadBlockers(selectedRunId),
         loadAgents(selectedRunId, false),
         loadModules(selectedRunId, false),
         loadPhases(selectedRunId, false),
