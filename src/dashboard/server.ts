@@ -13,6 +13,8 @@ import { newSpecId, newRunId } from "../utils/id.js";
 import { listBlockersByRun, getBlocker, resolveBlocker } from "../db/queries/blockers.js";
 import { encryptSecret } from "../utils/secrets.js";
 import type { BlockerStatus } from "../types/blocker.js";
+import { RateLimiter } from "./rate-limiter.js";
+import { RequestLogger } from "./request-logger.js";
 
 // --- Contract: ServerExport ---
 
@@ -107,49 +109,6 @@ interface ModuleStatus {
     creates: string[];
     modifies: string[];
   };
-}
-
-// --- Contract: LogEntry ---
-
-interface LogEntry {
-  timestamp: string;
-  method: string;
-  path: string;
-  status: number;
-  duration: number;
-}
-
-// --- Request Logging ---
-
-const MAX_LOG_ENTRIES = 100;
-const requestLog: LogEntry[] = [];
-
-/**
- * Records a request into the in-memory log buffer (circular buffer, max 100 entries).
- * Also calls console.log with JSON.stringify of the full entry.
- */
-function logRequest(entry: { method: string; path: string; status: number; duration: number }): void {
-  const logEntry: LogEntry = {
-    timestamp: new Date().toISOString(),
-    method: entry.method,
-    path: entry.path,
-    status: entry.status,
-    duration: entry.duration,
-  };
-
-  requestLog.push(logEntry);
-
-  // Circular buffer: keep only the last MAX_LOG_ENTRIES
-  if (requestLog.length > MAX_LOG_ENTRIES) {
-    requestLog.splice(0, requestLog.length - MAX_LOG_ENTRIES);
-  }
-
-  console.log(JSON.stringify(logEntry));
-}
-
-/** Exported for testing: clear the request log */
-export function _clearRequestLog(): void {
-  requestLog.length = 0;
 }
 
 // --- Helpers ---
@@ -1039,6 +998,7 @@ async function route(
   req: Request,
   getDashboardHtml: () => string,
   specsDir?: string | null,
+  requestLogger?: RequestLogger | null,
 ): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
@@ -1057,33 +1017,13 @@ async function route(
     });
   }
 
-  // /api/logs endpoint - returns logged requests
-  if (path === "/api/logs" && method === "GET") {
-    const response = jsonResponse([...requestLog]);
-    const duration = Math.round((performance.now() - startTime) * 100) / 100;
-    logRequest({ method, path, status: response.status, duration });
-    return response;
+  // --- GET /api/logs ---
+  if (path === "/api/logs" && req.method === "GET") {
+    const logs = requestLogger?.getRecent(100) ?? [];
+    return jsonResponse(logs);
   }
 
-  // Route to handler
-  const response = await routeInner(db, req, path, method, getDashboardHtml, specsDir);
 
-  // Log the request
-  const duration = Math.round((performance.now() - startTime) * 100) / 100;
-  logRequest({ method, path, status: response.status, duration });
-
-  return response;
-}
-
-/** Inner routing logic (without logging wrapper) */
-async function routeInner(
-  db: InstanceType<typeof Database>,
-  req: Request,
-  path: string,
-  method: string,
-  getDashboardHtml: () => string,
-  specsDir?: string | null,
-): Promise<Response> {
   // Hello endpoint
   if (path === "/hello") {
     return jsonResponse({ message: "Hello, world!" });
@@ -1214,14 +1154,61 @@ export async function startServer(config: ServerConfig): Promise<ServerHandle> {
   const getDashboardHtml = () => generateDashboardHtml({ projectName: "Dark Factory" });
   const specsDir = config.specsDir ?? null;
 
+  // Rate limiter: 100 requests per 60 seconds per IP
+  const rateLimiter = new RateLimiter({ maxRequests: 100, windowMs: 60_000 });
+
+  // Request logger for GET /api/logs
+  const requestLogger = new RequestLogger();
+
   const server = Bun.serve({
     port,
     async fetch(req: Request): Promise<Response> {
+      const startTime = performance.now();
+      const url = new URL(req.url);
+      const path = url.pathname;
+      const method = req.method;
+
       try {
-        return await route(db, req, getDashboardHtml, specsDir);
+        // Rate limiting runs BEFORE route handling
+        const ip = RateLimiter.extractIp(req, this as unknown as { requestIP?: (req: Request) => { address: string } | null });
+        if (!rateLimiter.isAllowed(ip)) {
+          const response = jsonResponse({ error: "Too many requests" }, 429);
+          const duration = Math.round(performance.now() - startTime);
+          requestLogger.log({
+            method,
+            path,
+            status: 429,
+            duration,
+            timestamp: new Date().toISOString(),
+          });
+          return response;
+        }
+
+        const response = await route(db, req, getDashboardHtml, specsDir, requestLogger);
+
+        // Log the request after routing
+        const duration = Math.round(performance.now() - startTime);
+        requestLogger.log({
+          method,
+          path,
+          status: response.status,
+          duration,
+          timestamp: new Date().toISOString(),
+        });
+
+        return response;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Internal server error";
-        return errorResponse(message, 500);
+        const response = errorResponse(message, 500);
+        const duration = Math.round(performance.now() - startTime);
+        requestLogger.log({
+          method,
+          path,
+          status: 500,
+          duration,
+          timestamp: new Date().toISOString(),
+        });
+        return response;
       }
     },
   });
