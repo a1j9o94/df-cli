@@ -1,35 +1,24 @@
 ---
 name: add-video-capture
 type: change
-spec_id: run_01KJSYMVTRZA22SC742GEMEWDJ
-created_by: agt_01KJSYMVTT7H090YHJERTJN6FG
+spec_id: run_01KK7R4Y1NWJRH426C68FK58CZ
+created_by: agt_01KK7R4Y1TEX0SQCM76106T1F2
 ---
 
-## Add Video Capture
+Modification: Add screen recording (video capture) support for visual runs alongside existing screenshot capture.
 
-### Modification Description
-Add screen recording capability (video) for visual runs, in addition to screenshots. Videos would be captured during TDD cycles and evaluation.
+Expected changes:
+1. Add a 'type' field to manifest.json entries (values: 'screenshot' | 'video') — backward compatible since existing entries are implicitly screenshots
+2. Add video capture step in builder/evaluator agent prompts (parallel to screenshot instructions)
+3. Add a video player component in the dashboard Output tab gallery (detect type field, render <video> for videos, <img> for screenshots)
+4. Add video file serving in API endpoint (extend GET /api/runs/:id/screenshots/:filename to serve video MIME types)
 
-### Expected Changes
-1. Add a video capture step in builder/evaluator agents (new capture function alongside screenshot capture)
-2. Add a video player component in the gallery UI (in addition to image lightbox)
-3. Add a 'type' field to manifest entries to distinguish images from videos
+Areas that should NOT need changes:
+- Manifest JSON structure (just adding optional 'type' field)
+- API contract (same endpoint, different content-type)
+- Highlights extraction or module summary logic
+- CLI export format (videos referenced but not embedded in markdown; HTML export could embed as base64 video)
 
-### Areas That Should NOT Change
-- manifest.json format should remain backward-compatible (type field is additive)
-- API contract for GET /api/runs/:id/screenshots should still work (videos are additional entries)
-- CLI export format should not break (videos appear as links in markdown, embedded in HTML)
-- Highlight extraction is completely unaffected
-- Module summary cards are completely unaffected
+Expected effort: Small-medium. 3-4 files modified, no architectural changes. The manifest format and API are designed to be extensible.
 
-### Expected Effort
-- New video capture utility: ~50 lines (parallel to screenshot capture)
-- Manifest type field addition: ~5 lines (additive, not breaking)
-- Gallery video player component: ~40 lines (new component alongside image viewer)
-- API route for video serving: ~10 lines (same pattern as image serving, different content-type)
-- Total: ~100 lines across 4 files
-
-### Pass Criteria
-- Adding video support requires NO changes to highlights, module summaries, or CLI export core logic
-- manifest.json schema is extended (not replaced) — old entries without type default to image
-- The screenshot API endpoint path can serve both images and videos
+Pass criteria: Video capture can be added by modifying agent prompts + adding gallery rendering for videos, without changing storage paths, manifest schema (beyond adding type field), or API route structure.
