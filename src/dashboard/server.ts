@@ -1,13 +1,14 @@
 import { Database } from "bun:sqlite";
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join, resolve, dirname } from "node:path";
 import { SCHEMA_SQL } from "../db/schema.js";
 import { findDfDir } from "../utils/config.js";
 import { generateDashboardHtml } from "./index.js";
 import { getRunQueueInfo, type RunQueueInfo } from "../pipeline/queue-visibility.js";
 import { computeElapsedMs, estimateCost } from "../utils/agent-enrichment.js";
 import { PHASE_ORDER, shouldSkipPhase, type PhaseName } from "../pipeline/phases.js";
-import { parseFrontmatter } from "../utils/frontmatter.js";
+import { parseFrontmatter, serializeFrontmatter } from "../utils/frontmatter.js";
+import { newSpecId, newRunId } from "../utils/id.js";
 
 // --- Contract: ServerExport ---
 
@@ -16,6 +17,8 @@ export interface ServerConfig {
   dbPath?: string;
   /** Allow injecting a DB instance directly (used in tests) */
   db?: InstanceType<typeof Database>;
+  /** Directory where spec files are stored (used for creating new specs via API) */
+  specsDir?: string;
 }
 
 export interface ServerHandle {
@@ -646,13 +649,220 @@ function handleGetPhases(db: InstanceType<typeof Database>, runId: string): Resp
   return jsonResponse(phases);
 }
 
+// --- Spec API handlers ---
+
+function handleListSpecs(db: InstanceType<typeof Database>): Response {
+  const rows = db.prepare("SELECT * FROM specs ORDER BY created_at DESC").all() as Record<string, unknown>[];
+  const specs = rows.map((s) => ({
+    id: s.id as string,
+    title: s.title as string,
+    status: s.status as string,
+    lastModified: s.updated_at as string,
+  }));
+  return jsonResponse(specs);
+}
+
+function handleGetSpecById(db: InstanceType<typeof Database>, specId: string): Response {
+  const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as Record<string, unknown> | null;
+  if (!spec) {
+    return errorResponse(`Spec not found: ${specId}`, 404);
+  }
+
+  const filePath = spec.file_path as string;
+  const resolvedPath = resolve(filePath);
+  if (!existsSync(resolvedPath)) {
+    return errorResponse(`Spec file not found: ${filePath}`, 404);
+  }
+
+  const raw = readFileSync(resolvedPath, "utf-8");
+  const { data: frontmatter, body } = parseFrontmatter<Record<string, unknown>>(raw);
+
+  return jsonResponse({
+    id: specId,
+    title: (frontmatter.title as string) ?? (spec.title as string),
+    type: (frontmatter.type as string) ?? null,
+    status: (frontmatter.status as string) ?? (spec.status as string),
+    version: (frontmatter.version as string) ?? null,
+    priority: (frontmatter.priority as string) ?? null,
+    content: body.trim(),
+  });
+}
+
+function handleCreateSpec(db: InstanceType<typeof Database>, body: Record<string, unknown>, specsDir: string | null): Response {
+  const description = body.description as string | undefined;
+  if (!description || typeof description !== "string" || description.trim().length === 0) {
+    return errorResponse("Missing required field: description", 400);
+  }
+
+  // Generate spec
+  const id = newSpecId();
+  const title = extractTitle(description);
+  const specContent = generateSpecFromDescription(id, title, description);
+
+  // Determine file path
+  const dir = specsDir ?? join(".df", "specs");
+  mkdirSync(dir, { recursive: true });
+  const filePath = join(dir, `${id}.md`);
+
+  writeFileSync(filePath, specContent);
+
+  // Register in DB
+  const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  db.prepare(
+    `INSERT INTO specs (id, title, status, file_path, content_hash, created_at, updated_at)
+     VALUES (?, ?, 'draft', ?, '', ?, ?)`
+  ).run(id, title, filePath, ts, ts);
+
+  return new Response(JSON.stringify({ id, title, status: "draft" }), {
+    status: 201,
+    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+  });
+}
+
+function extractTitle(description: string): string {
+  // Use first sentence or first 80 chars as title
+  const firstLine = description.split(/[.\n]/)[0].trim();
+  if (firstLine.length <= 80) return firstLine;
+  return firstLine.substring(0, 77) + "...";
+}
+
+function generateSpecFromDescription(id: string, title: string, description: string): string {
+  const frontmatter = {
+    id,
+    title,
+    type: "feature",
+    status: "draft",
+    version: "0.1.0",
+    priority: "medium",
+  };
+
+  const body = `# ${title}
+
+## Goal
+
+${description}
+
+## Requirements
+
+- ${description.split(/[.,;]/).filter(s => s.trim()).map(s => s.trim()).join("\n- ")}
+
+## Scenarios
+
+### Functional
+
+1. **Scenario**: Describe the test scenario.
+
+### Changeability
+
+1. **Modification scenario**: Describe a change that should be easy to make.
+`;
+
+  return serializeFrontmatter(frontmatter, body);
+}
+
+function handleUpdateSpec(db: InstanceType<typeof Database>, specId: string, body: Record<string, unknown>): Response {
+  const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as Record<string, unknown> | null;
+  if (!spec) {
+    return errorResponse(`Spec not found: ${specId}`, 404);
+  }
+
+  // Immutability guard: completed specs are read-only
+  if (spec.status === "completed") {
+    return errorResponse("Cannot edit a completed spec. Create a new spec to make changes.", 403);
+  }
+
+  const content = body.content as string | undefined;
+  if (!content || typeof content !== "string") {
+    return errorResponse("Missing required field: content", 400);
+  }
+
+  const filePath = spec.file_path as string;
+  const resolvedPath = resolve(filePath);
+
+  // Read existing frontmatter to preserve it
+  let existingFrontmatter: Record<string, unknown> = {};
+  if (existsSync(resolvedPath)) {
+    const raw = readFileSync(resolvedPath, "utf-8");
+    const { data } = parseFrontmatter<Record<string, unknown>>(raw);
+    existingFrontmatter = data;
+  }
+
+  // Write updated content with preserved frontmatter
+  const newFileContent = serializeFrontmatter(existingFrontmatter, content);
+  writeFileSync(resolvedPath, newFileContent);
+
+  // Update timestamp in DB
+  const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  db.prepare("UPDATE specs SET updated_at = ? WHERE id = ?").run(ts, specId);
+
+  return jsonResponse({ id: specId, status: "updated" });
+}
+
+function handleCreateBuild(db: InstanceType<typeof Database>, body: Record<string, unknown>): Response {
+  const specId = body.specId as string | undefined;
+  if (!specId || typeof specId !== "string") {
+    return errorResponse("Missing required field: specId", 400);
+  }
+
+  const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as Record<string, unknown> | null;
+  if (!spec) {
+    return errorResponse(`Spec not found: ${specId}`, 404);
+  }
+
+  // Check if already building
+  if (spec.status === "building") {
+    return errorResponse("Spec is already building", 409);
+  }
+
+  // Check if completed
+  if (spec.status === "completed") {
+    return errorResponse("Cannot build a completed spec", 409);
+  }
+
+  // Create a new run
+  const runId = newRunId();
+  const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  db.prepare(
+    `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, iteration, max_iterations, config, created_at, updated_at)
+     VALUES (?, ?, 'pending', 0, 4, 50.0, 0.0, 0, 0, 3, '{}', ?, ?)`
+  ).run(runId, specId, ts, ts);
+
+  // Update spec status to building
+  db.prepare("UPDATE specs SET status = 'building', updated_at = ? WHERE id = ?").run(ts, specId);
+
+  return new Response(JSON.stringify({ runId, specId }), {
+    status: 201,
+    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+  });
+}
+
+function handleGetSpecRuns(db: InstanceType<typeof Database>, specId: string): Response {
+  const spec = db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as Record<string, unknown> | null;
+  if (!spec) {
+    return errorResponse(`Spec not found: ${specId}`, 404);
+  }
+
+  const rows = db.prepare("SELECT * FROM runs WHERE spec_id = ? ORDER BY created_at DESC").all(specId) as Record<string, unknown>[];
+  const runs = rows.map((r) => ({
+    id: r.id as string,
+    specId: r.spec_id as string,
+    status: r.status as string,
+    phase: (r.current_phase as string) ?? null,
+    cost: r.cost_usd as number,
+    createdAt: r.created_at as string,
+  }));
+
+  return jsonResponse(runs);
+}
+
 // --- URL Router ---
 
-function route(
+async function route(
   db: InstanceType<typeof Database>,
   req: Request,
   getDashboardHtml: () => string,
-): Response {
+  specsDir: string | null,
+): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
 
@@ -662,7 +872,7 @@ function route(
       status: 204,
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
       },
     });
@@ -678,7 +888,49 @@ function route(
     return htmlResponse(getDashboardHtml());
   }
 
-  // API routes
+  // --- Spec API routes ---
+
+  if (path === "/api/specs" && req.method === "GET") {
+    return handleListSpecs(db);
+  }
+
+  if (path === "/api/specs" && req.method === "POST") {
+    const body = await req.json().catch(() => ({}));
+    return handleCreateSpec(db, body as Record<string, unknown>, specsDir);
+  }
+
+  // Match /api/specs/:id and /api/specs/:id/runs
+  const specSubMatch = path.match(/^\/api\/specs\/([^/]+)\/([^/]+)$/);
+  if (specSubMatch) {
+    const [, sId, sub] = specSubMatch;
+    if (sub === "runs" && req.method === "GET") {
+      return handleGetSpecRuns(db, sId);
+    }
+    return errorResponse(`Unknown spec sub-resource: ${sub}`, 404);
+  }
+
+  const specMatch = path.match(/^\/api\/specs\/([^/]+)$/);
+  if (specMatch) {
+    const sId = specMatch[1];
+    if (req.method === "GET") {
+      return handleGetSpecById(db, sId);
+    }
+    if (req.method === "PUT") {
+      const body = await req.json().catch(() => ({}));
+      return handleUpdateSpec(db, sId, body as Record<string, unknown>);
+    }
+    return errorResponse("Method not allowed", 405);
+  }
+
+  // --- Build API route ---
+
+  if (path === "/api/builds" && req.method === "POST") {
+    const body = await req.json().catch(() => ({}));
+    return handleCreateBuild(db, body as Record<string, unknown>);
+  }
+
+  // --- Run API routes ---
+
   if (path === "/api/runs") {
     return handleListRuns(db);
   }
@@ -746,12 +998,13 @@ export async function startServer(config: ServerConfig): Promise<ServerHandle> {
   }
 
   const getDashboardHtml = () => generateDashboardHtml({ projectName: "Dark Factory" });
+  const specsDir = config.specsDir ?? null;
 
   const server = Bun.serve({
     port,
-    fetch(req: Request): Response {
+    async fetch(req: Request): Promise<Response> {
       try {
-        return route(db, req, getDashboardHtml);
+        return await route(db, req, getDashboardHtml, specsDir);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Internal server error";
         return errorResponse(message, 500);
