@@ -1,41 +1,28 @@
 ---
 name: no-sqlite-needed-lifecycle
 type: functional
-spec_id: run_01KJSXZQ1WDY0A0JVRTZPNB3AW
-created_by: agt_01KJSXZQ1X0E7M9WZA7R77WKY6
+spec_id: run_01KK6QXFCV1988195YMPGM2QCS
+created_by: agt_01KK6QXFCW27WCTXH47YAQPC0D
 ---
 
-SCENARIO: Complete build lifecycle can be monitored without ever opening sqlite.
+PRECONDITION: None (clean state or existing project).
 
-PRECONDITIONS:
-- A fresh run that will go through: build phase -> at least one builder fails -> resume -> complete.
-
-STEPS (monitoring sequence, all using CLI commands only):
-1. Start monitoring: dark status
-   VERIFY: Shows run ID, spec title, phase, cost.
-2. During build phase: dark agent list
-   VERIFY: Shows all active builders with elapsed time, cost, worktree path, heartbeat.
-3. Check specific builder: dark agent show <builder-id>
-   VERIFY: Shows full detail including events (spawned, heartbeat) and any messages received.
-4. After a builder fails: dark agent list --active
-   VERIFY: Failed builder is excluded. Only active builders remain.
-5. After resume with new builder: dark agent list
-   VERIFY: Shows latest agent per module (new retry, not old failed one).
-6. During build: dark status --run-id <run-id>
-   VERIFY: Shows per-module progress (some done, some building, some pending).
-7. After all builders complete: dark status
-   VERIFY: All modules show done status. Agent breakdown shows X completed, 0 active.
-
-KEY INFORMATION THAT MUST BE AVAILABLE VIA CLI:
-- Worktree path for any builder (dark agent list or dark agent show)
-- Files changed by a builder (dark agent list shows file count)
-- Why an agent failed (dark agent show shows error field)
-- Which module each builder is working on (dark agent list shows module=X)
-- How much each agent has cost (dark agent list or dark agent show shows cost)
-- Overall run cost and budget remaining (dark status shows cost/budget)
-- Mail received by an agent (dark agent show shows messages section)
+STEPS:
+1. Start a build: dark build <spec-id>
+2. While building, monitor using ONLY CLI commands:
+   a. dark status — see spec title, module progress, agent breakdown
+   b. dark agent list — see elapsed, cost, files, worktree, heartbeat for each agent
+   c. dark agent list --active — see only live agents
+   d. dark agent show <id> — inspect a specific agent in detail
+3. If a builder fails, resume with: dark continue <run-id>
+4. After resume, verify:
+   a. dark agent list --active shows only new/restarted agents
+   b. dark status shows module progress (previously completed modules still 'done')
+5. After completion:
+   a. dark status --detail <run-id> shows full cost breakdown
+   b. dark agent show <any-agent-id> shows historical data
 
 PASS CRITERIA:
-- ALL information listed above is accessible through dark status, dark agent list, or dark agent show.
-- No step requires running sqlite3 .df/state.db to get needed information.
-- Each command produces non-empty, formatted output with the relevant data fields.
+- At NO point during steps 1-5 is 'sqlite3 .df/state.db' needed to understand pipeline state
+- All information previously only available via raw sqlite queries is now available via CLI
+- Specifically: worktree paths, elapsed times, estimated costs, file change counts, heartbeat status, per-module progress, spec titles, agent detail views are ALL accessible via CLI commands
