@@ -7,6 +7,7 @@ import { formatJson } from "../utils/format.js";
 import { generateDashboardHtml } from "./index.js";
 import { getRunQueueInfo, type RunQueueInfo } from "../pipeline/queue-visibility.js";
 import { computeElapsedMs, estimateCost } from "../utils/agent-enrichment.js";
+import { ErrorTracker } from "./error-tracker.js";
 import { PHASE_ORDER, shouldSkipPhase, type PhaseName } from "../pipeline/phases.js";
 import { parseFrontmatter, serializeFrontmatter } from "../utils/frontmatter.js";
 import { newSpecId, newRunId } from "../utils/id.js";
@@ -997,21 +998,31 @@ async function handleResolveBlocker(
   return jsonResponse({ success: true, blocker: updated });
 }
 
+// --- Contract: HealthEndpointResponse ---
+
+interface HealthEndpointResponse {
+  uptime: number;
+  memoryUsage: number;
+  status: "healthy" | "degraded";
+  dbConnected: boolean;
+  version: string;
+  errorCount: number;
+}
+
 // --- URL Router ---
 
 async function route(
   db: InstanceType<typeof Database>,
   req: Request,
   getDashboardHtml: () => string,
-  specsDir?: string | null,
-  requestLogger?: RequestLogger | null,
-  startedAt?: number,
-  errorTracker?: ErrorTracker | null,
+  specsDir: string | null,
+  requestLogger: RequestLogger | null,
+  startedAt: number,
+  errorTracker: ErrorTracker,
 ): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
   const method = req.method;
-  const startTime = performance.now();
 
   // CORS preflight (not logged)
   if (method === "OPTIONS") {
@@ -1174,39 +1185,6 @@ export interface HealthEndpointResponse {
   errorCount: number;
 }
 
-// --- Contract: ErrorTrackerShape ---
-
-export interface ErrorEntry {
-  timestamp: string;
-  path: string;
-  method: string;
-  error: string;
-  stack: string;
-}
-
-export interface ErrorTracker {
-  errors: ErrorEntry[];
-  trackError(entry: ErrorEntry): void;
-  getErrors(): ErrorEntry[];
-  getErrorCount(): number;
-}
-
-function createErrorTracker(): ErrorTracker {
-  const errors: ErrorEntry[] = [];
-  return {
-    errors,
-    trackError(entry: ErrorEntry) {
-      errors.push(entry);
-    },
-    getErrors() {
-      return errors;
-    },
-    getErrorCount() {
-      return errors.length;
-    },
-  };
-}
-
 // --- Contract: ServerStartedAt ---
 
 // The server records its start time to compute uptime
@@ -1216,7 +1194,6 @@ function createErrorTracker(): ErrorTracker {
 export async function startServer(config: ServerConfig): Promise<ServerHandle> {
   const port = config.port;
   const startedAt = Date.now();
-  const errorTracker = createErrorTracker();
 
   // Get or create DB
   let db: InstanceType<typeof Database>;
@@ -1243,6 +1220,7 @@ export async function startServer(config: ServerConfig): Promise<ServerHandle> {
 
   const getDashboardHtml = () => generateDashboardHtml({ projectName: "Dark Factory" });
   const specsDir = config.specsDir ?? null;
+  const errorTracker = new ErrorTracker();
 
   // Rate limiter: 100 requests per 60 seconds per IP
   const rateLimiter = new RateLimiter({ maxRequests: 100, windowMs: 60_000 });
