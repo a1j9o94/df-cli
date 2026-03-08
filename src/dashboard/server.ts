@@ -55,6 +55,12 @@ interface RunSummary {
     ahead: number;
     total: number;
   };
+  /** Present only when the run is paused */
+  pauseReason?: string;
+  /** ISO timestamp of when the run was paused */
+  pausedAt?: string;
+  /** Pre-filled CLI command to resume this run (present only when paused) */
+  resumeCommand?: string;
 }
 
 // --- Contract: AgentSummary ---
@@ -237,6 +243,7 @@ function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unkno
     runEstimatedCost += computeAgentEstimatedCost(agent.cost_usd, agent.created_at, agent.status);
   }
 
+  // For running/pending runs, elapsed ticks from now. For paused/completed/failed, freeze at updated_at.
   const updatedAt =
     r.status === "running" || r.status === "pending" ? undefined : (r.updated_at as string);
 
@@ -260,6 +267,17 @@ function toRunSummary(db: InstanceType<typeof Database>, r: Record<string, unkno
 
   if (r.error) {
     summary.error = r.error as string;
+  }
+
+  // Add pause info if the run is paused
+  if (r.status === "paused") {
+    if (r.pause_reason) {
+      summary.pauseReason = r.pause_reason as string;
+    }
+    if (r.paused_at) {
+      summary.pausedAt = r.paused_at as string;
+    }
+    summary.resumeCommand = `dark continue ${runId} --budget-usd <amount>`;
   }
 
   // Add merge queue info if the run is in the queue
@@ -630,17 +648,19 @@ function handleGetPhases(db: InstanceType<typeof Database>, runId: string): Resp
   };
 
   const currentIdx = currentPhase ? PHASE_ORDER.indexOf(currentPhase as PhaseName) : -1;
+  const runStatus = run.status as string;
 
   const phases = PHASE_ORDER.map((phaseId, idx) => {
     const isSkipped = shouldSkipPhase(phaseId, skipContext);
 
-    let status: "completed" | "active" | "pending" | "skipped";
+    let status: "completed" | "active" | "pending" | "skipped" | "paused";
     if (isSkipped) {
       status = "skipped";
     } else if (currentIdx >= 0 && idx < currentIdx) {
       status = "completed";
     } else if (currentIdx >= 0 && idx === currentIdx) {
-      status = "active";
+      // If run is paused, show the current phase as paused instead of active
+      status = runStatus === "paused" ? "paused" : "active";
     } else {
       status = "pending";
     }
