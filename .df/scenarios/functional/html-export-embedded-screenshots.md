@@ -1,31 +1,35 @@
 ---
 name: html-export-embedded-screenshots
 type: functional
-spec_id: run_01KJSYMVTRZA22SC742GEMEWDJ
-created_by: agt_01KJSYMVTT7H090YHJERTJN6FG
+spec_id: run_01KK7R4Y1NWJRH426C68FK58CZ
+created_by: agt_01KK7R4Y1TEX0SQCM76106T1F2
 ---
 
-## HTML Export with Embedded Screenshots
+Preconditions: A completed visual run with 3+ screenshots in .df/runs/<run-id>/screenshots/ and a valid manifest.json.
 
-### Preconditions
-- A completed visual run with at least 2 screenshots
-- Screenshots exist as PNG files on disk
-- highlights.json and manifest.json both exist
-
-### Test Steps
+Steps:
 1. Run: dark run output <run-id> --export --format html
-2. Verify a file is created at .df/runs/<run-id>/output.html
-3. Verify the file path is printed to stdout
-4. Read the HTML file
-5. Verify it starts with DOCTYPE html and is valid HTML
-6. Verify screenshots are embedded as base64 data URIs (img src data:image/png;base64)
-7. Verify the HTML includes module summaries with file lists and test counts
-8. Verify the HTML includes curated highlights
-9. Verify it renders without external dependencies (fully self-contained)
+2. Verify output says HTML file was written and prints path
+3. Verify .df/runs/<run-id>/output.html exists
+4. Read the HTML file and verify:
+   - It is a standalone HTML document (has <html>, <head>, <body> tags)
+   - Screenshots are embedded as base64 data URIs (src='data:image/png;base64,...')
+   - No external file references for images
+   - Module summaries are present
+   - Scenario results are present
+   - CSS is inline (no external stylesheet references)
+5. Open the HTML file in a browser (or verify HTML is syntactically valid)
 
-### Pass Criteria
-- HTML file created at correct path
-- All img tags use data: URIs (no external src)
-- File size > 0 and contains expected sections
-- No external CSS/JS references (fully inline)
-- HTML has html, head, body tags
+Pass criteria:
+- HTML file is self-contained (no external dependencies)
+- Screenshots are base64-encoded inline
+- File renders in a browser without broken images
+- Contains module summaries and scenario results
+- Valid HTML structure
+
+Fail criteria:
+- HTML file references external screenshot files
+- Base64 encoding is broken or missing
+- HTML is malformed or doesn't render
+- File missing module summaries or scenarios
+- External CSS/JS dependencies required
