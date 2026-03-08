@@ -1,8 +1,30 @@
 ---
 name: import-public-issue
 type: functional
-spec_id: run_01KJSS4TD4WH5VKGWK6YWSWJZQ
-created_by: agt_01KJSS4TD5H3A6M3NHC0H95JFZ
+spec_id: run_01KK713FAZE5AV73F5HB66BPVF
+created_by: agt_01KK713FB00321PM7C8TQ1YDQZ
 ---
 
-Setup: A public GitHub repo with issue #123 that has title 'Fix authentication redirect loop', body with first paragraph 'Users are stuck in a redirect loop when logging in via SSO.' followed by a checkbox list: '- [ ] Detect redirect loops after 3 attempts\n- [ ] Show error page with retry button\n- [ ] Log redirect chain for debugging'. No labels, no acceptance criteria section, 0 comments.\n\nSteps:\n1. Run: dark spec create --from-github https://github.com/org/repo/issues/123\n2. Verify exit code is 0\n3. Verify a new spec file exists at .df/specs/spec_*.md\n4. Read the spec file and verify:\n   a. Frontmatter has title: 'Fix authentication redirect loop'\n   b. Frontmatter has status: draft\n   c. Frontmatter has type: feature (default when no label mapping)\n   d. Frontmatter has source_url: https://github.com/org/repo/issues/123\n   e. ## Goal section contains 'Users are stuck in a redirect loop when logging in via SSO.'\n   f. ## Requirements section contains 3 bullet items: 'Detect redirect loops after 3 attempts', 'Show error page with retry button', 'Log redirect chain for debugging'\n5. Verify stdout includes the spec file path, title, and 'Requirements: 3 extracted'\n\nPass criteria: Spec file created with correct frontmatter, goal extracted from first paragraph, 3 requirements extracted from checkboxes, summary printed to stdout.
+Test: Import a public GitHub issue with title, description, and 3 checkbox requirements.
+
+Setup:
+- Create a mock exec function that returns a GitHub issue JSON with:
+  - title: 'Add user profile page'
+  - body: '## Description\n\nUsers need a profile page.\n\n- [ ] Display username\n- [ ] Display email\n- [ ] Display avatar\n\n## Acceptance Criteria\n\n- [ ] Profile page loads in under 2s\n- [ ] Shows all user fields'
+  - labels: [{ name: 'enhancement' }]
+  - user: { login: 'author1' }
+- Comments endpoint returns empty array
+
+Steps:
+1. Call importAndCreateSpec with url='https://github.com/org/repo/issues/123', dryRun=false
+2. Verify result.title === 'Add user profile page'
+3. Verify result.requirementsCount === 3 (the 3 checkboxes before AC section)
+4. Verify result.scenariosCount === 2 (the 2 items in Acceptance Criteria)
+5. Read the created spec file from disk
+6. Verify file contains '# Add user profile page' heading
+7. Verify file contains '## Goal' with 'Users need a profile page'
+8. Verify file contains '## Requirements' with 'Display username', 'Display email', 'Display avatar'
+9. Verify file contains '## Scenarios' > '### Functional' with the 2 acceptance criteria items
+10. Verify frontmatter has source_url matching the input URL
+
+Pass criteria: All verifications pass. Spec file exists on disk with correct content.
