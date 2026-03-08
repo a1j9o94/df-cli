@@ -1,35 +1,34 @@
 ---
 name: highlights-filter-noise
 type: functional
-spec_id: run_01KK7R4Y1NWJRH426C68FK58CZ
-created_by: agt_01KK7R4Y1TEX0SQCM76106T1F2
+spec_id: run_01KK7SEJD8Z1CHN7Z2B1ZDT9P9
+created_by: agt_01KK7SEJD9V7MRX6KC86N28S5K
 ---
 
-Preconditions: A completed run with agent logs in .df/logs/<agent-id>.jsonl containing a mix of: (a) highlight-worthy events (module creation, test results, decisions), and (b) noise (raw Claude reasoning, token counts, internal agent coordination messages, tool call details).
+PRECONDITIONS: A completed run has raw agent log files in .df/agents/<run-id>/ containing mixed content: Claude reasoning, token usage stats, internal coordination messages, AND legitimate highlight events.
 
-Steps:
-1. Read raw agent log JSONL and confirm it contains both signal and noise
-2. Read .df/runs/<run-id>/highlights.json
-3. Verify highlights ONLY contain these event types: module_created, scenario_passed, scenario_failed, key_decision, error_recovery, integration
-4. Verify highlights do NOT contain:
-   - Raw Claude reasoning or thinking text
-   - Token count summaries
-   - Internal agent coordination (mail send/check commands)
-   - Tool call input/output details
-   - Cost calculations
-   - Heartbeat messages
-5. Verify each highlight entry has: type, timestamp, and relevant metadata (module, description, scenario name as applicable)
-6. Load dashboard Output tab and verify displayed highlights match the filtered set
+SAMPLE RAW LOG LINES (should be EXCLUDED from highlights):
+- 'Thinking about how to structure the authentication flow...'
+- 'Token usage: input=45000, output=12000, total=57000'
+- 'Sending mail to orchestrator: module complete'
+- 'Reading file src/auth/middleware.ts...'
+- 'Using tool: Edit file src/auth/middleware.ts'
 
-Pass criteria:
-- Highlights contain only the 6 specified event types
-- No raw Claude output leaked into highlights
-- No token/cost/coordination noise in highlights
-- Each entry is well-structured with required fields
-- Dashboard renders only curated highlights
+SAMPLE RAW LOG LINES (should be INCLUDED as highlights):
+- 'Created module: auth-middleware — JWT validation middleware for Express routes'
+- 'Scenario passed: Login redirects to dashboard'
+- 'Scenario failed: Session timeout — Expected 401, got 200'
+- 'Decision: Used JWT with refresh tokens instead of sessions for stateless auth'
+- 'Architecture: Middleware chain pattern for auth + rate limiting'
+- 'Module auth-middleware integrated with route-handler'
 
-Fail criteria:
-- Raw agent reasoning appears in highlights
-- Token counts or cost data in highlights
-- Internal mail/coordination messages in highlights
-- Highlight entries missing type or timestamp fields
+STEPS:
+1. Generate highlights from the raw logs above.
+2. Verify highlights.json contains exactly the 6 INCLUDED lines mapped to proper types.
+3. Verify highlights.json contains NONE of the 5 EXCLUDED lines.
+4. Verify each highlight entry has: type, timestamp, and relevant metadata fields.
+
+PASS CRITERIA:
+- Exactly 6 highlight entries in output.
+- Types correctly mapped: module_created, scenario_passed, scenario_failed, key_decision, key_decision, integration.
+- Zero noise entries (no Claude reasoning, token counts, tool usage, mail messages).
