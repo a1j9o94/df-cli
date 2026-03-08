@@ -1,34 +1,30 @@
 ---
 name: attach-mockup-to-spec
 type: functional
-spec_id: run_01KJT1F6EV2A1H0TKH6N55D515
-created_by: agt_01KJT1F6EWZQATERS37B1QJ6TS
+spec_id: run_01KK7SEAJYN7NS72QQARJ3QEKA
+created_by: agt_01KK7SEAJZB0HYJMAJBXMD3R8E
 ---
 
-## Scenario: Attach mockup to spec
+## Test: Attach mockup to spec
 
-### Preconditions
-- A Dark Factory project is initialized (dark init)
-- A spec exists (created via dark spec create)
-- A PNG file exists on disk (e.g., test-mockup.png)
+### Setup
+1. Initialize a Dark Factory project: dark init
+2. Create a spec: dark spec create 'Test visual spec'
+3. Create a test PNG file: dd if=/dev/urandom bs=1024 count=5 | base64 > /tmp/test-mockup.png (or use a real small PNG)
 
 ### Steps
-1. Create a spec: dark spec create 'Test visual feature'
-2. Note the spec ID (e.g., spec_01ABC123)
-3. Create a test PNG file (any valid PNG, e.g., a 1x1 pixel PNG)
-4. Run: dark spec attach <spec-id> test-mockup.png
-5. Verify the file was copied to .df/specs/attachments/<spec-id>/test-mockup.png
-6. Read the spec markdown file and verify frontmatter now contains: attachments: ['test-mockup.png']
-7. Run: dark spec attachments <spec-id>
-8. Verify output shows the filename and file size
+1. Run: dark spec attach <spec-id> /tmp/test-mockup.png
+2. Verify file exists at .df/specs/attachments/<spec-id>/test-mockup.png
+3. Read the spec markdown file and verify frontmatter now contains: attachments: ['test-mockup.png']
+4. Run: dark spec attachments <spec-id>
+5. Verify output lists test-mockup.png with its file size
 
 ### Expected Output
-- Exit code 0 for the attach command
-- File exists at .df/specs/attachments/<spec-id>/test-mockup.png
-- File contents match the original test-mockup.png
-- Spec frontmatter has attachments array with 'test-mockup.png'
-- dark spec attachments lists the file with its size in bytes
+- File copied to .df/specs/attachments/<spec-id>/test-mockup.png
+- Spec frontmatter updated with attachments array
+- dark spec attachments <spec-id> shows the file with size info
+- Exit code 0 for all commands
 
 ### Pass/Fail Criteria
-- PASS: All verifications succeed
-- FAIL: Any verification fails (file not copied, frontmatter not updated, list command broken)
+- PASS: File exists in attachments dir, frontmatter updated, list command works
+- FAIL: File not copied, frontmatter not updated, or command errors
