@@ -85,3 +85,4 @@ export function getProjectDb(projectRef: ProjectRef): Database {
 
   return new Database(dbPath);
 }
+
