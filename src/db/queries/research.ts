@@ -67,3 +67,13 @@ export function listResearchArtifacts(
 
   return db.prepare(sql).all(...params) as ResearchArtifactRecord[];
 }
+
+export function deleteResearchArtifact(
+  db: SqliteDb,
+  id: string
+): boolean {
+  const result = db
+    .prepare("DELETE FROM research_artifacts WHERE id = ?")
+    .run(id);
+  return result.changes > 0;
+}
