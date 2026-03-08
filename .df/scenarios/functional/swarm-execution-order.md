@@ -1,31 +1,32 @@
 ---
 name: swarm-execution-order
 type: functional
-spec_id: run_01KJT1DSC7RYMZBNXACN9871DA
-created_by: agt_01KJT1DSC9A3PD8YJAG21ECY1N
+spec_id: run_01KK7R4Y6S9X8AQA0BPDTRZ039
+created_by: agt_01KK7R4Y6VS8TXZ8FQ3TWGRQTG
 ---
 
-SCENARIO: Swarm builds specs in correct dependency order with parallelism
-PRECONDITIONS:
-- Dark Factory project initialized
-- 4 specs created:
-  - spec_A: no dependencies (draft)
-  - spec_B: depends_on=[spec_A] (draft)
-  - spec_C: depends_on=[spec_A] (draft)
-  - spec_D: depends_on=[spec_B, spec_C] (draft)
+PRECONDITION: Four specs exist:
+- A: no dependencies (draft)
+- B: depends_on [A] (draft)
+- C: depends_on [A] (draft)
+- D: depends_on [B, C] (draft)
+
 STEPS:
 1. Run: dark swarm --dry-run
-2. Verify the execution plan
+2. Verify the execution plan shows:
+   - Layer 0: A (builds first)
+   - Layer 1: B, C (can build in parallel after A)
+   - Layer 2: D (builds after both B and C)
+3. Run: dark swarm (actual execution, may need --budget-usd to limit)
+4. Monitor build order via events table or run logs
+
 EXPECTED:
-- Layer 0: [spec_A] — built first (no deps)
-- Layer 1: [spec_B, spec_C] — built in parallel after spec_A completes
-- Layer 2: [spec_D] — built after both spec_B and spec_C complete
-- Dry run output shows this 3-layer plan with correct groupings
-- No actual builds are started (dry-run mode)
-VALIDATION:
-- getSpecLayers(db) returns 3 layers with correct spec assignments
-- Layer 0 contains only spec_A
-- Layer 1 contains spec_B and spec_C (order within layer does not matter)
-- Layer 2 contains only spec_D
-- No runs are created in the runs table
-PASS CRITERIA: Dry run output matches the expected 3-layer DAG. No builds executed.
+- A starts building first
+- B and C do NOT start until A reaches completed status
+- D does NOT start until both B and C reach completed status
+- If --parallel 2, B and C may run simultaneously
+- Final state: all four specs have status=completed (or building if budget runs out)
+
+PASS/FAIL:
+- PASS if dependency order is respected: A before {B,C}, {B,C} before D
+- FAIL if any spec starts before its dependencies are completed
