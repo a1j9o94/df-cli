@@ -1,20 +1,14 @@
 ---
 name: rate-limiter-returns-429
 type: functional
-spec_id: run_01KK7HZXYXADSN1VSEK10QZFDK
-created_by: agt_01KK7HZXYZF7Z4QR9MJPS63D15
+spec_id: run_01KK7JWKXV8FN2F84CRGJN4J7N
+created_by: agt_01KK7JWKXWEBD89Q6JAY8NZM04
 ---
 
 Test: Rate limiter returns 429 after 100 requests from same IP within 60 seconds.
-
-Setup:
-1. Start server with in-memory SQLite DB
-2. Send 100 GET requests to /api/runs from the same IP (localhost/127.0.0.1)
-
-Verification:
-1. All 100 requests should return status 200 (or appropriate non-429 status)
-2. Send request #101 from the same IP
-3. Assert response status is 429
-4. Assert response body contains JSON with error field: { error: 'Too many requests' }
-
-Pass criteria: First 100 requests succeed, request 101 returns 429 with correct error message.
+Setup: Start dashboard server with test database.
+Steps:
+1. Send 100 GET requests to /api/runs from the same IP address (e.g., 127.0.0.1) in rapid succession (all within 60 seconds)
+2. Send the 101st GET request from the same IP
+Expected Output: First 100 requests return normal responses (200 OK). The 101st request returns 429 status with body { error: 'Too many requests' }.
+Pass Criteria: Status code is exactly 429. Response body is JSON with error field equal to 'Too many requests'.
