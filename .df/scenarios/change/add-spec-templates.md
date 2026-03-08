@@ -1,25 +1,15 @@
 ---
 name: add-spec-templates
 type: change
-spec_id: run_01KK6BYC9GJ9F5XNE49PW7SN3S
-created_by: agt_01KK6BYC9JZPT9DBGBS867HCTJ
+spec_id: run_01KK6D0A338WWPKA9YNGG3S1WB
+created_by: agt_01KK6D0A34XA7984X9D1YCNN6W
 ---
 
-Modification: Add a 'template' dropdown to the spec creation flow with options like 'API endpoint', 'UI component', 'CLI command'. Each template pre-fills the spec structure differently.
-
-Expected changes:
-1. Add a template map data structure (e.g., SPEC_TEMPLATES object with name -> markdown template pairs)
-2. Add a select/dropdown element to the creation modal/panel in the UI
-3. When a template is selected, pass template name to POST /api/specs along with description
-4. Server-side: use template to structure the generated spec differently
-
-Areas that should NOT change:
-- The inline markdown editor component
-- The save/load API contract (PUT /api/specs/:id still accepts markdown body)
-- The spec file format (still YAML frontmatter + markdown)
-- The sidebar listing logic
-- The build flow
-
-Expected effort: Small — adding a data structure + one UI element + one optional API parameter. No structural changes to existing code.
-
-Pass criteria: Template feature can be added by modifying only the creation flow (modal/panel + POST handler). Editor and save/load remain untouched.
+CHANGEABILITY SCENARIO: Add spec templates to creation flow
+MODIFICATION: Add a 'template' dropdown to the spec creation flow with options like 'API endpoint', 'UI component', 'CLI command'. Each template pre-fills the spec with section-specific guidance.
+AFFECTED AREAS:
+- The creation modal/panel in index.ts: Add a <select> element with template options
+- A template map (object/array) mapping template names to pre-fill content
+- No changes needed to: spec generation logic (still takes description text), editor component, save/load API, PUT/GET /api/specs endpoints
+EXPECTED EFFORT: Small — add a template map constant, add a select element to the creation form, merge template content with user description before generating spec
+PASS CRITERIA: Template dropdown can be added by: (1) defining a TEMPLATE_MAP object, (2) adding a <select> to the creation form HTML, (3) passing selected template to the generation function. No changes to editor, API contract, or spec storage.
