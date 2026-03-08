@@ -43,6 +43,7 @@ export type {
   ResearchArtifactType,
   ResearchArtifactRecord,
   ResearchArtifactCreateInput,
+  VideoResearchOptions,
 } from "./research.js";
 
 export type {
