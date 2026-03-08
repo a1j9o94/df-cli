@@ -1,32 +1,30 @@
 ---
 name: evaluator-screenshots-captured
 type: functional
-spec_id: run_01KJSYMVTRZA22SC742GEMEWDJ
-created_by: agt_01KJSYMVTT7H090YHJERTJN6FG
+spec_id: run_01KK7R4Y1NWJRH426C68FK58CZ
+created_by: agt_01KK7R4Y1TEX0SQCM76106T1F2
 ---
 
-## Evaluator Screenshots Captured
+Preconditions: A visual spec (title contains 'login page component') has been built and evaluation phase is complete. Playwright is available in the project.
 
-### Preconditions
-- A spec exists with goal mentioning 'frontend component' (visual keyword detected)
-- Playwright is available in the project
-- The pipeline has completed through the evaluate-functional phase
+Steps:
+1. Check .df/runs/<run-id>/screenshots/ directory exists
+2. Verify at least one file matching pattern eval-*.png exists
+3. Read .df/runs/<run-id>/screenshots/manifest.json
+4. Verify manifest contains entries where phase equals 'eval'
+5. Verify eval entries have filename starting with 'eval-', a scenario name, and timestamp
+6. Verify screenshot files referenced in manifest actually exist on disk
+7. GET /api/runs/<run-id>/screenshots/<eval-filename> — expect 200 with image/png content-type
 
-### Test Steps
-1. After evaluation completes, check the directory .df/runs/<run-id>/screenshots/
-2. List all files matching pattern eval-*.png
-3. Verify at least one screenshot exists with filename starting with 'eval-'
-4. Read .df/runs/<run-id>/screenshots/manifest.json
-5. Verify manifest contains entries with phase='eval'
-6. Verify each eval entry has: filename matching /^eval-/, phase='eval', scenario field set, caption, timestamp
+Pass criteria:
+- eval-*.png files exist in screenshots directory
+- manifest.json contains eval-phase entries
+- Each eval manifest entry has valid filename, phase='eval', scenario name, timestamp
+- Screenshot files are readable via API endpoint
+- Image files are valid PNG format
 
-### Expected Output
-- At least one eval-*.png file exists in screenshots directory
-- manifest.json includes eval-phase entries with scenario names
-- Eval screenshots have ISO 8601 timestamps
-
-### Pass Criteria
-- Files named eval-<scenario>.png exist on disk
-- manifest.json is valid JSON array
-- All eval entries have phase='eval' and non-empty scenario field
-- Timestamps are valid ISO 8601 strings
+Fail criteria:
+- No eval screenshots captured after evaluation completes
+- Manifest missing eval entries
+- Files referenced in manifest don't exist on disk
+- API returns 404 for existing screenshot files
