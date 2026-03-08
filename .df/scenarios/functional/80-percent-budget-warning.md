@@ -1,31 +1,8 @@
 ---
 name: 80-percent-budget-warning
 type: functional
-spec_id: run_01KJSXZQ59YSWAH7RS1JQ7KVV4
-created_by: agt_01KJSXZQ5ACJCQDQWNCZXC07WN
+spec_id: run_01KK6J195CBPQR35EVQ13YJ2J1
+created_by: agt_01KK6J195DC0DXB8P1GAVSK9J8
 ---
 
-## 80% budget warning
-
-### Preconditions
-- Dark Factory project with a build in progress
-- Budget set to $10.00
-
-### Steps
-1. Start build: dark build <spec-id> --budget-usd 10
-2. Monitor console output as cost increases past ~$8.00
-
-### Expected Results
-- When cost crosses 80% ($8.00 of $10.00), a visible warning is logged
-- Warning message format: '[dark] Budget warning: $X.XX of $10.00 spent (80%). Build will pause at $10.00.'
-- The warning is logged ONCE per threshold crossing, not on every heartbeat
-- A 'budget-warning' event is created in the events table
-- If notifications are configured, a budget-warning notification is sent
-- The build CONTINUES past the 80% mark — warning is informational only
-- The build does NOT pause at 80%
-
-### Pass Criteria
-- Console output contains exactly ONE budget warning message (not repeated)
-- Event query: SELECT COUNT(*) FROM events WHERE run_id = <run-id> AND type = 'budget-warning' returns 1
-- After warning, build continues to run (status remains 'running')
-- Build only pauses when cost reaches 100% of budget
+SETUP: Start a build with --budget-usd 10 that will cost more than $8 but the full build should exceed $10. STEPS: 1. Run 'dark build <spec-id> --budget-usd 10'. 2. Monitor console output as cost increases. EXPECTED: (a) When cost crosses ~$8 (80% of $10), a warning is logged: 'Budget warning: $X.XX of $10.00 spent (80%). Build will pause at $10.00.' (b) The warning appears exactly ONCE (not repeated on subsequent heartbeats). (c) A 'budget-warning' event is created in the events table. (d) The build CONTINUES past the warning — it does NOT pause at 80%. (e) Build only pauses when cost reaches ~$10 (100%). PASS CRITERIA: Warning logged once at 80%, build continues, pauses at 100%.
