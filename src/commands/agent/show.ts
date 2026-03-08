@@ -4,11 +4,8 @@ import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
 import { getAgentDetail } from "../../db/queries/agent-queries.js";
 import { formatAgentDetail } from "../../utils/format-agent-detail.js";
-import { formatJson } from "../../utils/format.js";
+import { formatJson, AGENT_DEFAULT_EXCLUDED_FIELDS } from "../../utils/format.js";
 import { log } from "../../utils/logger.js";
-
-/** Fields excluded from --json output by default */
-const AGENT_DETAIL_EXCLUDED_FIELDS = ["system_prompt"];
 
 export const agentShowCommand = new Command("show")
   .description("Show full detail for a single agent")
@@ -31,7 +28,7 @@ export const agentShowCommand = new Command("show")
     }
 
     if (options.json) {
-      const excludeFields = options.verbose ? [] : AGENT_DETAIL_EXCLUDED_FIELDS;
+      const excludeFields = options.verbose ? [] : [...AGENT_DEFAULT_EXCLUDED_FIELDS];
       console.log(formatJson(detail, { excludeFields }));
       return;
     }

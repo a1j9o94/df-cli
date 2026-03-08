@@ -5,6 +5,14 @@ export interface FormatJsonOptions {
   excludeFields?: string[];
 }
 
+/**
+ * Centralized list of fields excluded from agent-related --json output by default.
+ * These are large fields rarely useful in list/status views.
+ * Use with formatJson({ excludeFields: AGENT_DEFAULT_EXCLUDED_FIELDS }).
+ * Pass an empty array with --verbose to include all fields.
+ */
+export const AGENT_DEFAULT_EXCLUDED_FIELDS: readonly string[] = ["system_prompt"];
+
 export function formatJson(data: unknown, options?: FormatJsonOptions): string {
   const excludeFields = options?.excludeFields;
   if (excludeFields && excludeFields.length > 0) {
