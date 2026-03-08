@@ -1029,7 +1029,6 @@ async function route(
     return jsonResponse(logs);
   }
 
-
   // Hello endpoint
   if (path === "/hello") {
     return jsonResponse({ message: "Hello, world!" });
