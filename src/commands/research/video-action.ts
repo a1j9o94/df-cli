@@ -6,7 +6,10 @@
  */
 
 import type { SqliteDb } from "../../db/index.js";
-import type { ResearchArtifactRecord } from "../../types/index.js";
+import type {
+  ResearchArtifactRecord,
+  VideoResearchOptions,
+} from "../../types/index.js";
 import { getAgent } from "../../db/queries/agents.js";
 import { createResearchArtifact } from "../../db/queries/research.js";
 import {
@@ -18,23 +21,8 @@ import {
   buildQAContent,
 } from "./video-utils.js";
 
-/**
- * Options for executing video research.
- *
- * The _transcriptFn, _askFn, and _infoFn parameters are test hooks
- * that allow mocking the llm-youtube subprocess calls.
- */
-export interface VideoResearchOptions {
-  url: string;
-  question?: string;
-  module?: string;
-  /** @internal Test hook: override transcript fetching */
-  _transcriptFn?: (url: string) => string;
-  /** @internal Test hook: override Q&A */
-  _askFn?: (url: string, question: string) => string;
-  /** @internal Test hook: override info fetching */
-  _infoFn?: (url: string) => { title?: string; duration?: string } | null;
-}
+// Re-export for backward compatibility
+export type { VideoResearchOptions } from "../../types/index.js";
 
 /**
  * Execute the video research pipeline:
@@ -64,7 +52,12 @@ export function executeVideoResearch(
   }
 
   // Step 1: Try to get video info for a better label (optional, non-fatal)
-  const info = getInfo(url);
+  let info: { title?: string; duration?: string } | null = null;
+  try {
+    info = getInfo(url);
+  } catch {
+    // Info is optional — if it fails, we just won't have a title
+  }
   const title = info?.title;
 
   // Step 2: Get content based on mode
