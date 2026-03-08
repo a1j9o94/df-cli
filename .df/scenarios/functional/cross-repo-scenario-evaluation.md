@@ -1,37 +1,29 @@
 ---
 name: cross-repo-scenario-evaluation
 type: functional
-spec_id: run_01KJT1F6D5K21YTBJJ2QG4QY7E
-created_by: agt_01KJT1F6D7F50TK3PWRMAKQHN9
+spec_id: run_01KK7SEAH0J838RH3SWCBR48SQ
+created_by: agt_01KK7SEAH1RRSGYDNFYKMRG751
 ---
 
-# Cross-repo Scenario Evaluation
+## Test: Cross-repo Scenario Evaluation
 
-## Preconditions
-- Workspace with frontend/ and backend/ projects
-- A workspace-level scenario file with frontmatter: projects: [backend, frontend]
-- Build phase has completed (modules merged into their respective project branches)
+### Preconditions
+- Workspace with backend/ and frontend/ projects, both initialized
+- A workspace spec has been built successfully (backend API + frontend component)
+- A holdout scenario exists declaring projects: [backend, frontend]
+- The scenario describes: start backend server, verify frontend can call it
 
-## Steps
-1. Create a scenario in .df-workspace/scenarios/functional/ with:
-   ---
-   name: api-integration
-   type: functional
-   projects: [backend, frontend]
-   ---
-   Content: Start backend server, verify frontend can call GET /api/users endpoint
-2. Run the evaluator phase
+### Steps
+1. Run the evaluator phase on the workspace spec
+2. The evaluator reads the scenario with projects: [backend, frontend]
+3. Verify the evaluator agent receives access to both project directories
+4. Verify the evaluator can read files from both backend/ and frontend/
 
-## Expected Output
-1. Evaluator agent is spawned with access to BOTH project directories
-2. The evaluator's working directory or context includes paths to both:
-   - The backend project's codebase
-   - The frontend project's codebase
-3. The evaluator can run commands in both project directories
-4. Scenario results include pass/fail for cross-project integration
+### Expected Output
+- Evaluator agent's working context includes paths to both projects
+- Evaluator can execute tests that reference files in both repos
+- Scenario results are stored in .df-workspace/state.db (not individual project DBs)
 
-## Pass Criteria
-- Evaluator receives scenario with projects: [backend, frontend] in its instructions
-- Evaluator has filesystem access to both project directories
-- Evaluation events in state.db reference the cross-repo scenario
-- No errors about missing project directories or invalid project references
+### Pass/Fail
+- PASS: Evaluator accesses both project directories and can execute cross-project validation
+- FAIL: Evaluator only sees one project, or scenario results stored in wrong DB
