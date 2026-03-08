@@ -1,8 +1,21 @@
 ---
 name: source-url-preserved
 type: functional
-spec_id: run_01KJSS4TD4WH5VKGWK6YWSWJZQ
-created_by: agt_01KJSS4TD5H3A6M3NHC0H95JFZ
+spec_id: run_01KK713FAZE5AV73F5HB66BPVF
+created_by: agt_01KK713FB00321PM7C8TQ1YDQZ
 ---
 
-Setup: Any valid GitHub issue.\n\nSteps:\n1. Run: dark spec create --from-github https://github.com/myorg/myrepo/issues/42\n2. Read the generated spec file\n3. Verify the YAML frontmatter contains: source_url: https://github.com/myorg/myrepo/issues/42\n4. Verify the SpecFrontmatter type now includes the source_url field\n5. Verify the source URL is also printed in the stdout summary\n\nPass criteria: source_url field is present in frontmatter and matches the original GitHub issue URL exactly.
+Test: Verify source_url appears in generated spec frontmatter.
+
+Setup:
+- Mock issue with any valid content
+- URL: 'https://github.com/my-org/my-repo/issues/456'
+
+Steps:
+1. Call importAndCreateSpec with url='https://github.com/my-org/my-repo/issues/456'
+2. Verify result.sourceUrl === 'https://github.com/my-org/my-repo/issues/456'
+3. Read generated spec file
+4. Parse YAML frontmatter
+5. Verify frontmatter.source_url === 'https://github.com/my-org/my-repo/issues/456'
+
+Pass criteria: source_url in frontmatter exactly matches the input GitHub issue URL.
