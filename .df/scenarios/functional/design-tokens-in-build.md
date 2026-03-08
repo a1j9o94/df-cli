@@ -1,32 +1,30 @@
 ---
 name: design-tokens-in-build
 type: functional
-spec_id: run_01KJT1F6EV2A1H0TKH6N55D515
-created_by: agt_01KJT1F6EWZQATERS37B1QJ6TS
+spec_id: run_01KK7SEAJYN7NS72QQARJ3QEKA
+created_by: agt_01KK7SEAJZB0HYJMAJBXMD3R8E
 ---
 
-## Scenario: Design tokens file included in builder context
+## Test: Design tokens JSON accessible to builder
 
-### Preconditions
-- A Dark Factory project is initialized
-- A spec exists
-- A design tokens JSON file exists (e.g., tokens.json with content like: { "color": { "primary": "#3B82F6" }, "spacing": { "sm": "0.5rem" }, "font": { "base": "16px" } })
+### Setup
+1. Initialize Dark Factory project
+2. Create spec: dark spec create 'Styled component'
+3. Create a design tokens JSON file with content: {"colors": {"primary": "#3B82F6", "secondary": "#10B981"}, "spacing": {"sm": "8px", "md": "16px"}, "fonts": {"heading": "Inter", "body": "system-ui"}}
+4. Attach tokens file: dark spec attach <spec-id> design-tokens.json
 
 ### Steps
-1. Create a spec
-2. Attach a design tokens JSON file: dark spec attach <spec-id> tokens.json
-3. Verify the file is stored in .df/specs/attachments/<spec-id>/tokens.json
-4. Verify the spec frontmatter includes tokens.json in the attachments array
-5. Simulate or trigger a builder for this spec
-6. Verify the builder instructions mail includes the design token content or a reference to the token file
-7. Verify the evaluator context includes the design tokens file path for validation
+1. Run build for the spec
+2. Check builder instructions mail body
+3. Verify design tokens file path is included in builder instructions
+4. Verify builder prompt includes guidance to use design token values
+5. For worktree builders: verify tokens.json is copied to .df-attachments/
 
 ### Expected Output
-- tokens.json is stored alongside other attachments
-- Builder mail includes design token values or path to the file
-- JSON files with .json extension are treated as design tokens (identified by extension or content)
-- Evaluator can reference the tokens to validate built CSS uses correct values
+- Builder instructions reference the design tokens file
+- Builder prompt mentions using token values for colors, spacing, fonts
+- Token file is readable by the builder in its worktree
 
 ### Pass/Fail Criteria
-- PASS: Design token file is attached, builder receives token context, evaluator has token reference
-- FAIL: JSON file rejected, tokens not in builder mail, or evaluator unaware of tokens
+- PASS: Tokens referenced in builder mail, file accessible, prompt guidance present
+- FAIL: Tokens not referenced, file not accessible, or no prompt guidance for tokens
