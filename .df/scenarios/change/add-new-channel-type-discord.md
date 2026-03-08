@@ -1,38 +1,8 @@
 ---
 name: add-new-channel-type-discord
 type: change
-spec_id: run_01KJSS4TBB5ETC6ZA8FN3184DH
-created_by: agt_01KJSS4TBDCV42SMK3D52DBTPF
+spec_id: run_01KK7SEADG3VVG04QBWK3E2MTP
+created_by: agt_01KK7SEADH9C0FDQK9V2HRH78R
 ---
 
-## Add a New Channel Type: Discord
-
-### Modification Description
-Add a Discord notification channel that sends messages via Discord webhooks. This tests the extensibility of the channel architecture.
-
-### Required Changes
-1. Create a new `DiscordChannel` class implementing `NotificationChannel` interface with a `send(event: NotificationEvent): Promise<void>` method
-2. Register the Discord channel in the channel registry/factory
-3. Add `discord` to the `ChannelType` union type
-4. Add Discord config type (`DiscordChannelConfig` with `type: 'discord'` and `webhook_url: string`)
-
-### Affected Areas
-- New file: `src/notifications/channels/discord.ts` (channel implementation)
-- Modified: `src/notifications/types.ts` (add DiscordChannelConfig to union, add 'discord' to ChannelType)
-- Modified: `src/notifications/registry.ts` (register Discord factory)
-
-### Areas That MUST NOT Change
-- `src/pipeline/engine.ts` — pipeline integration must not need changes
-- `src/notifications/dispatcher.ts` — dispatch logic must not need changes
-- `src/notifications/channels/slack.ts` — existing channels unaffected
-- `src/notifications/channels/email.ts` — existing channels unaffected
-- `src/notifications/channels/sms.ts` — existing channels unaffected
-
-### Expected Effort
-- Small: 1 new file (~50-80 lines), 2-3 lines modified in types, 1-2 lines in registry
-- No changes to core dispatch logic, pipeline, or event system
-- Should take <30 minutes for a developer familiar with the codebase
-
-### Pass/Fail Criteria
-- PASS: Discord channel can be added by implementing interface + registering, no changes to pipeline or dispatcher
-- FAIL: Adding Discord requires modifying dispatcher, pipeline engine, or other channel implementations
+Modification: Add a Discord notification channel. Expected effort: Implement a DiscordChannel class with a send(message) method in src/notifications/channels/discord.ts. Register it in the channel registry. Add 'dark notify setup --discord <webhook-url>' CLI option. Affected areas: (1) New file: src/notifications/channels/discord.ts, (2) Channel registry: add Discord to known types, (3) CLI: add --discord flag to setup command. NOT affected: Pipeline integration, event system, dispatcher, other channel implementations, config schema structure (just a new channel entry). Expected effort: ~30 minutes, 2-3 files changed. Pass criteria: Adding Discord requires zero changes to pipeline engine, event types, or dispatcher logic.
