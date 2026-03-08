@@ -52,3 +52,12 @@ export type {
   BlockerCreateInput,
   BlockerResolution,
 } from "./blocker.js";
+
+export type {
+  WorkspaceConfig,
+  ProjectRef,
+  ContractRef,
+  CrossRepoModule,
+  CrossRepoScenario,
+  RegistryEntry,
+} from "./workspace.js";
