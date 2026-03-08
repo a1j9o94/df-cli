@@ -206,3 +206,60 @@ describe("Dashboard Pause - Events timeline", () => {
     expect(events[0].data.reason).toBe("budget_exceeded");
   });
 });
+
+describe("Dashboard Pause - Phases API", () => {
+  test("phases API shows paused phase for paused run", async () => {
+    seedPausedRun(db);
+
+    // Need a buildplan for phases to resolve properly
+    db.prepare(
+      `INSERT INTO agents (id, run_id, role, name, status, cost_usd, tokens_used, created_at, updated_at)
+       VALUES (?, ?, 'architect', 'arch-1', 'completed', 1.0, 10000, '2026-03-01T11:00:00Z', '2026-03-01T11:05:00Z')`,
+    ).run("agt_arch_p", "run_paused1");
+
+    db.prepare(
+      `INSERT INTO buildplans (id, run_id, spec_id, architect_agent_id, version, status, plan, module_count, contract_count, max_parallel, created_at, updated_at)
+       VALUES (?, ?, 'spec_test1', 'agt_arch_p', 1, 'active', ?, 2, 0, 2, '2026-03-01T11:05:00Z', '2026-03-01T11:05:00Z')`,
+    ).run("plan_p1", "run_paused1", JSON.stringify({
+      modules: [
+        { id: "mod-a", title: "Module A", description: "First module" },
+        { id: "mod-b", title: "Module B", description: "Second module" },
+      ],
+      contracts: [],
+      dependencies: [],
+    }));
+
+    server = await startServer({ port: 0, db });
+
+    const res = await fetch(`${server.url}/api/runs/run_paused1/phases`);
+    expect(res.status).toBe(200);
+    const phases = await res.json();
+
+    // The build phase (current_phase) should be "paused"
+    const buildPhase = phases.find((p: any) => p.id === "build");
+    expect(buildPhase).toBeDefined();
+    expect(buildPhase!.status).toBe("paused");
+
+    // Earlier phases should be completed
+    const scoutPhase = phases.find((p: any) => p.id === "scout");
+    expect(scoutPhase!.status).toBe("completed");
+  });
+});
+
+describe("Dashboard Pause - Run without pause columns", () => {
+  test("non-paused run has no pause fields in response", async () => {
+    db.prepare(
+      `INSERT INTO runs (id, spec_id, status, skip_change_eval, max_parallel, budget_usd, cost_usd, tokens_used, current_phase, iteration, max_iterations, config, created_at, updated_at)
+       VALUES (?, ?, 'completed', 0, 4, 50.0, 25.0, 200000, 'merge', 1, 3, '{}', '2026-03-01T11:00:00Z', '2026-03-01T12:00:00Z')`,
+    ).run("run_completed1", "spec_test1");
+
+    server = await startServer({ port: 0, db });
+
+    const res = await fetch(`${server.url}/api/runs/run_completed1`);
+    const run = await res.json();
+    expect(run.status).toBe("completed");
+    expect(run.pauseReason).toBeUndefined();
+    expect(run.pausedAt).toBeUndefined();
+    expect(run.resumeCommand).toBeUndefined();
+  });
+});
