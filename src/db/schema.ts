@@ -213,6 +213,39 @@ CREATE INDEX IF NOT EXISTS idx_research_run ON research_artifacts(run_id);
 CREATE INDEX IF NOT EXISTS idx_research_agent ON research_artifacts(agent_id);
 CREATE INDEX IF NOT EXISTS idx_research_module ON research_artifacts(module_id);
 
+-- Blocker Requests
+CREATE TABLE IF NOT EXISTS blocker_requests (
+  id              TEXT PRIMARY KEY,
+  run_id          TEXT NOT NULL REFERENCES runs(id),
+  agent_id        TEXT NOT NULL REFERENCES agents(id),
+  module_id       TEXT,
+  type            TEXT NOT NULL,
+  description     TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'pending',
+  resolved_value  TEXT,
+  resolved_by     TEXT,
+  resolved_at     TEXT,
+  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_blocker_requests_run ON blocker_requests(run_id);
+CREATE INDEX IF NOT EXISTS idx_blocker_requests_agent ON blocker_requests(agent_id);
+CREATE INDEX IF NOT EXISTS idx_blocker_requests_status ON blocker_requests(status);
+
+-- Blocker Secrets
+CREATE TABLE IF NOT EXISTS blocker_secrets (
+  id              TEXT PRIMARY KEY,
+  blocker_id      TEXT NOT NULL REFERENCES blocker_requests(id),
+  run_id          TEXT NOT NULL REFERENCES runs(id),
+  name            TEXT NOT NULL,
+  encrypted_value TEXT NOT NULL,
+  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_blocker_secrets_run ON blocker_secrets(run_id);
+CREATE INDEX IF NOT EXISTS idx_blocker_secrets_blocker ON blocker_secrets(blocker_id);
+
 -- Parallel Build Progress View
 CREATE VIEW IF NOT EXISTS parallel_build_progress AS
 SELECT
