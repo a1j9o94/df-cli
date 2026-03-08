@@ -40,15 +40,22 @@ export function generateDashboardHtml(config?: DashboardConfig): string {
       </div>
     </header>
     <main class="main">
-      <section class="sidebar" id="runs-list">
-        <h2 class="section-title">Runs</h2>
-        <div class="runs-container" id="runs-container">
-          <div class="loading">Loading runs...</div>
+      <section class="sidebar" id="specs-list">
+        <div class="sidebar-header">
+          <h2 class="section-title">Specs</h2>
+          <button class="new-spec-btn" id="new-spec-btn">+ New Spec</button>
+        </div>
+        <div class="specs-container" id="specs-container">
+          <div class="loading">Loading specs...</div>
         </div>
       </section>
       <section class="content" id="run-detail">
         <div class="empty-state" id="empty-state">
-          <p>Select a run to view details</p>
+          <p>Select a spec to view details</p>
+        </div>
+        <div class="spec-detail-panel" id="spec-detail-panel" style="display:none">
+          <div id="spec-detail-header"></div>
+          <div class="spec-runs" id="spec-runs"></div>
         </div>
         <div class="detail-panels" id="detail-panels" style="display:none">
           <div class="run-header" id="run-header"></div>
@@ -860,6 +867,115 @@ function generateStyles(): string {
     color: var(--text-muted);
   }
 
+  /* --- Spec Sidebar --- */
+
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding: 0 4px;
+  }
+
+  .sidebar-header .section-title {
+    margin-bottom: 0;
+  }
+
+  .new-spec-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: var(--accent-blue);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  .new-spec-btn:hover {
+    opacity: 0.85;
+  }
+
+  .spec-group {
+    margin-bottom: 12px;
+  }
+
+  .spec-group-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-muted);
+    padding: 4px 4px;
+    margin-bottom: 4px;
+  }
+
+  .spec-card {
+    padding: 10px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 4px;
+    border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .spec-card:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .spec-card.active {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-blue);
+  }
+
+  .spec-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+
+  .spec-card-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .spec-card-meta {
+    display: flex;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .spec-pass-rate {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--accent-green);
+  }
+
+  .spec-detail-panel {
+    padding: 0;
+  }
+
+  .spec-runs {
+    margin-top: 12px;
+  }
+
+  .spec-runs h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
   @media (max-width: 768px) {
     .main {
       flex-direction: column;
@@ -883,6 +999,7 @@ function generateScript(apiBase: string): string {
 
   const apiBase = "${escapedApiBase}";
   let selectedRunId = null;
+  let selectedSpecId = null;
   let refreshTimer = null;
   const REFRESH_INTERVAL = 5000;
 
@@ -937,15 +1054,149 @@ function generateScript(apiBase: string): string {
     return String(num);
   }
 
-  // --- Fetch and render runs list ---
+  // --- Fetch and render specs list (sidebar) ---
+
+  async function loadSpecs() {
+    try {
+      var data = await fetchJson("/api/specs");
+      var specs = data.specs || data;
+      renderSpecsList(specs);
+    } catch (err) {
+      document.getElementById("specs-container").innerHTML =
+        '<div class="loading">Error loading specs: ' + esc(err.message) + '</div>';
+    }
+  }
+
+  var SPEC_STATUS_ORDER = ["building", "draft", "completed"];
+
+  function renderSpecsList(specs) {
+    var container = document.getElementById("specs-container");
+    if (!specs || specs.length === 0) {
+      container.innerHTML = '<div class="loading">No specs found</div>';
+      return;
+    }
+    // Group by status
+    var groups = {};
+    SPEC_STATUS_ORDER.forEach(function(s) { groups[s] = []; });
+    specs.forEach(function(spec) {
+      var status = spec.status || "draft";
+      if (!groups[status]) groups[status] = [];
+      groups[status].push(spec);
+    });
+    var html = "";
+    SPEC_STATUS_ORDER.forEach(function(status) {
+      var list = groups[status];
+      if (!list || list.length === 0) return;
+      html += '<div class="spec-group">';
+      html += '<div class="spec-group-title">' + esc(status) + ' (' + list.length + ')</div>';
+      list.forEach(function(spec) {
+        var isActive = spec.id === selectedSpecId ? " active" : "";
+        var passRateHtml = spec.passRate
+          ? '<span class="spec-pass-rate">' + esc(spec.passRate) + '</span>'
+          : '';
+        html += '<div class="spec-card' + isActive + '" data-spec-id="' + esc(spec.id) + '">'
+          + '<div class="spec-card-header">'
+          + statusBadge(spec.status)
+          + passRateHtml
+          + '</div>'
+          + '<div class="spec-card-title" title="' + esc(spec.title) + '">' + esc(spec.title || spec.id) + '</div>'
+          + '<div class="spec-card-meta">'
+          + '<span>' + esc(spec.lastModified || "") + '</span>'
+          + '</div>'
+          + '</div>';
+      });
+      html += '</div>';
+    });
+    container.innerHTML = html;
+
+    // Bind click events
+    container.querySelectorAll(".spec-card").forEach(function(card) {
+      card.addEventListener("click", function() {
+        selectSpec(card.dataset.specId);
+      });
+    });
+  }
+
+  // --- Select spec and load detail ---
+
+  async function selectSpec(specId) {
+    selectedSpecId = specId;
+    selectedRunId = null;
+    document.getElementById("empty-state").style.display = "none";
+    document.getElementById("detail-panels").style.display = "none";
+    document.getElementById("spec-detail-panel").style.display = "block";
+
+    // Highlight active card
+    document.querySelectorAll(".spec-card").forEach(function(c) {
+      c.classList.toggle("active", c.dataset.specId === specId);
+    });
+
+    try {
+      var spec = await fetchJson("/api/specs/" + specId);
+      renderSpecDetail(spec);
+    } catch (err) {
+      document.getElementById("spec-detail-header").innerHTML =
+        '<div class="error-text">Error: ' + esc(err.message) + '</div>';
+    }
+
+    // Load runs for this spec
+    try {
+      var runsData = await fetchJson("/api/specs/" + specId + "/runs");
+      var runs = runsData.runs || runsData;
+      renderSpecRuns(runs);
+    } catch (err) {
+      document.getElementById("spec-runs").innerHTML = '';
+    }
+  }
+
+  function renderSpecDetail(spec) {
+    document.getElementById("spec-detail-header").innerHTML =
+      '<div class="run-header">'
+      + '<div class="run-header-title">'
+      + '<h2>' + esc(spec.title || spec.id) + '</h2>'
+      + statusBadge(spec.status)
+      + '</div>'
+      + '</div>';
+  }
+
+  function renderSpecRuns(runs) {
+    var container = document.getElementById("spec-runs");
+    if (!runs || runs.length === 0) {
+      container.innerHTML = '<h4>Runs</h4><div class="loading">No runs for this spec</div>';
+      return;
+    }
+    var html = '<h4>Runs</h4>';
+    runs.forEach(function(run) {
+      html += '<div class="run-card" data-run-id="' + esc(run.id) + '">'
+        + '<div class="run-card-header">'
+        + statusBadge(run.status)
+        + '<span class="run-card-id">' + esc(run.id) + '</span>'
+        + '</div>'
+        + '<div class="run-card-meta">'
+        + '<span>' + esc(run.phase || "") + '</span>'
+        + (run.passRate ? '<span>' + esc(run.passRate) + '</span>' : '')
+        + '<span>' + esc(run.createdAt || "") + '</span>'
+        + '</div>'
+        + '</div>';
+    });
+    container.innerHTML = html;
+
+    // Bind click to navigate to run detail
+    container.querySelectorAll(".run-card").forEach(function(card) {
+      card.addEventListener("click", function() {
+        selectRun(card.dataset.runId);
+      });
+    });
+  }
+
+  // --- Fetch and render runs list (kept for run detail navigation) ---
 
   async function loadRuns() {
     try {
       const runs = await fetchJson("/api/runs");
       renderRunsList(runs);
     } catch (err) {
-      document.getElementById("runs-container").innerHTML =
-        '<div class="loading">Error loading runs: ' + esc(err.message) + '</div>';
+      // Runs list is no longer primary sidebar, errors handled silently
     }
   }
 
@@ -1002,6 +1253,8 @@ function generateScript(apiBase: string): string {
     selectedRunId = runId;
     document.getElementById("empty-state").style.display = "none";
     document.getElementById("detail-panels").style.display = "block";
+    var specPanel = document.getElementById("spec-detail-panel");
+    if (specPanel) specPanel.style.display = "none";
 
     // Highlight active card
     document.querySelectorAll(".run-card").forEach(function(c) {
@@ -1330,7 +1583,7 @@ function generateScript(apiBase: string): string {
   // --- Auto-refresh ---
 
   async function refresh() {
-    await loadRuns();
+    await loadSpecs();
     if (selectedRunId) {
       await Promise.all([
         loadRunDetail(selectedRunId, false),
@@ -1344,7 +1597,7 @@ function generateScript(apiBase: string): string {
   }
 
   // Initial load
-  loadRuns().catch(function(err) {
+  loadSpecs().catch(function(err) {
     console.error("Initial load failed:", err);
   });
 
