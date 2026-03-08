@@ -10,7 +10,35 @@ export function formatJson(data: unknown, options?: FormatJsonOptions): string {
   if (excludeFields && excludeFields.length > 0) {
     data = stripFields(data, excludeFields);
   }
+  data = sanitizeControlChars(data);
   return JSON.stringify(data, null, 2);
+}
+
+/**
+ * Recursively sanitize control characters (0x00-0x1F except \n, \r, \t)
+ * from all string values in a data structure.
+ * JSON.stringify handles escaping for \n, \r, \t properly, but null bytes
+ * and other control characters from SQLite TEXT columns can produce
+ * problematic JSON that some parsers reject.
+ */
+function sanitizeControlChars(data: unknown): unknown {
+  if (typeof data === "string") {
+    // Remove null bytes and other non-printable control characters
+    // Keep \n (0x0A), \r (0x0D), \t (0x09) as JSON.stringify handles them
+    // eslint-disable-next-line no-control-regex
+    return data.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => sanitizeControlChars(item));
+  }
+  if (data !== null && typeof data === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+      result[key] = sanitizeControlChars(value);
+    }
+    return result;
+  }
+  return data;
 }
 
 function stripFields(data: unknown, fields: string[]): unknown {
