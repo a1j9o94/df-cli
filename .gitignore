@@ -16,5 +16,3 @@ dist/
 build/
 .env
 .env.local
-# Test temp directories
-__tmp_*__/
