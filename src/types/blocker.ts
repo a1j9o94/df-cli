@@ -9,11 +9,19 @@ export interface BlockerRecord {
   type: BlockerType;
   description: string;
   status: BlockerStatus;
-  resolved_value: string | null; // encrypted for secrets, plain for others
-  resolved_by: string | null; // "cli" or "dashboard"
+  resolved_value: string | null;
   resolved_at: string | null;
+  resolved_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface BlockerCreateInput {
+  run_id: string;
+  agent_id: string;
+  module_id?: string;
+  type: BlockerType;
+  description: string;
 }
 
 export interface BlockerResolution {

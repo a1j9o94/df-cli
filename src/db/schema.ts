@@ -223,15 +223,15 @@ CREATE TABLE IF NOT EXISTS blocker_requests (
   description     TEXT NOT NULL,
   status          TEXT NOT NULL DEFAULT 'pending',
   resolved_value  TEXT,
-  resolved_by     TEXT,
   resolved_at     TEXT,
+  resolved_by     TEXT,
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_blocker_requests_run ON blocker_requests(run_id);
-CREATE INDEX IF NOT EXISTS idx_blocker_requests_agent ON blocker_requests(agent_id);
-CREATE INDEX IF NOT EXISTS idx_blocker_requests_status ON blocker_requests(status);
+CREATE INDEX IF NOT EXISTS idx_blockers_run ON blocker_requests(run_id);
+CREATE INDEX IF NOT EXISTS idx_blockers_agent ON blocker_requests(agent_id);
+CREATE INDEX IF NOT EXISTS idx_blockers_status ON blocker_requests(status);
 
 -- Blocker Secrets
 CREATE TABLE IF NOT EXISTS blocker_secrets (

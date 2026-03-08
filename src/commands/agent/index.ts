@@ -5,6 +5,8 @@ import { agentHeartbeatCommand } from "./heartbeat.js";
 import { agentCompleteCommand } from "./complete.js";
 import { agentFailCommand } from "./fail.js";
 import { agentReportResultCommand } from "./report-result.js";
+import { agentRequestCommand } from "./request.js";
+import { agentResolveCommand } from "./resolve.js";
 
 export const agentCommand = new Command("agent")
   .description("Manage agent lifecycle — list, show, heartbeat, complete, or fail agents")
@@ -37,4 +39,6 @@ for longer than the configured timeout (default 90s), the pipeline kills it.
   .addCommand(agentHeartbeatCommand)
   .addCommand(agentCompleteCommand)
   .addCommand(agentFailCommand)
-  .addCommand(agentReportResultCommand);
+  .addCommand(agentReportResultCommand)
+  .addCommand(agentRequestCommand)
+  .addCommand(agentResolveCommand);

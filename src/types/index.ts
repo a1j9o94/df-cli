@@ -49,5 +49,6 @@ export type {
   BlockerType,
   BlockerStatus,
   BlockerRecord,
+  BlockerCreateInput,
   BlockerResolution,
 } from "./blocker.js";

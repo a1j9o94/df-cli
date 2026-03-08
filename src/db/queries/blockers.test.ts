@@ -78,18 +78,16 @@ test("resolveBlocker updates status and resolution fields", () => {
     description: "Need approval",
   });
 
-  const resolved = resolveBlocker(db, created.id, {
-    value: "approved",
-    resolved_by: "cli",
-  });
+  resolveBlocker(db, created.id, "approved", "cli");
 
+  const resolved = getBlocker(db, created.id)!;
   expect(resolved.status).toBe("resolved");
   expect(resolved.resolved_value).toBe("approved");
   expect(resolved.resolved_by).toBe("cli");
   expect(resolved.resolved_at).toBeDefined();
 });
 
-test("resolveBlocker works without value", () => {
+test("resolveBlocker works with empty value", () => {
   const created = createBlocker(db, {
     run_id: "run_1",
     agent_id: "agt_1",
@@ -97,12 +95,11 @@ test("resolveBlocker works without value", () => {
     description: "Need resource",
   });
 
-  const resolved = resolveBlocker(db, created.id, {
-    resolved_by: "dashboard",
-  });
+  resolveBlocker(db, created.id, "", "dashboard");
 
+  const resolved = getBlocker(db, created.id)!;
   expect(resolved.status).toBe("resolved");
-  expect(resolved.resolved_value).toBeNull();
+  expect(resolved.resolved_value).toBe("");
   expect(resolved.resolved_by).toBe("dashboard");
 });
 
@@ -118,7 +115,7 @@ test("listBlockersByRun returns all blockers for a run", () => {
 test("listBlockersByRun filters by status", () => {
   const b1 = createBlocker(db, { run_id: "run_1", agent_id: "agt_1", type: "secret", description: "key1" });
   createBlocker(db, { run_id: "run_1", agent_id: "agt_2", type: "decision", description: "approval1" });
-  resolveBlocker(db, b1.id, { value: "val", resolved_by: "cli" });
+  resolveBlocker(db, b1.id, "val", "cli");
 
   const pending = listBlockersByRun(db, "run_1", "pending");
   expect(pending).toHaveLength(1);

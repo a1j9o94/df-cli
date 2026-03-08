@@ -1,123 +1,86 @@
 import { test, expect, beforeEach, afterEach } from "bun:test";
-import { encryptSecret, decryptSecret, listSecretNames } from "./secrets.js";
-import { getDbForTest, type SqliteDb } from "../db/index.js";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { encryptSecret, decryptSecret, isEncrypted, maskSecret, getEncryptionKey } from "./secrets.js";
+import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-// Use a temp dir for the key file in tests
 let tmpDir: string;
-let originalCwd: string;
+let dfDir: string;
+let encKey: string;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "secrets-test-"));
-  originalCwd = process.cwd();
-  // Create .df directory
-  const dfDir = join(tmpDir, ".df");
-  require("node:fs").mkdirSync(dfDir, { recursive: true });
-  process.chdir(tmpDir);
+  dfDir = join(tmpDir, ".df");
+  mkdirSync(dfDir, { recursive: true });
+  encKey = getEncryptionKey(dfDir);
 });
 
 afterEach(() => {
-  process.chdir(originalCwd);
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-test("encryptSecret returns a base64 string different from input", () => {
+test("encryptSecret returns a prefixed string different from input", () => {
   const plaintext = "my-secret-api-key-12345";
-  const encrypted = encryptSecret(plaintext);
+  const encrypted = encryptSecret(plaintext, encKey);
   expect(typeof encrypted).toBe("string");
   expect(encrypted).not.toBe(plaintext);
-  // Should be base64 encoded
-  expect(encrypted.length).toBeGreaterThan(0);
+  expect(encrypted.startsWith("enc:")).toBe(true);
 });
 
 test("decryptSecret recovers original plaintext", () => {
   const plaintext = "super-secret-value-!@#$%";
-  const encrypted = encryptSecret(plaintext);
-  const decrypted = decryptSecret(encrypted);
+  const encrypted = encryptSecret(plaintext, encKey);
+  const decrypted = decryptSecret(encrypted, encKey);
   expect(decrypted).toBe(plaintext);
 });
 
 test("encrypt/decrypt handles empty string", () => {
-  const encrypted = encryptSecret("");
-  const decrypted = decryptSecret(encrypted);
+  const encrypted = encryptSecret("", encKey);
+  const decrypted = decryptSecret(encrypted, encKey);
   expect(decrypted).toBe("");
 });
 
 test("encrypt/decrypt handles unicode", () => {
   const plaintext = "日本語テスト 🔑";
-  const encrypted = encryptSecret(plaintext);
-  const decrypted = decryptSecret(encrypted);
+  const encrypted = encryptSecret(plaintext, encKey);
+  const decrypted = decryptSecret(encrypted, encKey);
   expect(decrypted).toBe(plaintext);
 });
 
 test("same plaintext produces different ciphertext (random IV)", () => {
   const plaintext = "same-value";
-  const e1 = encryptSecret(plaintext);
-  const e2 = encryptSecret(plaintext);
-  expect(e1).not.toBe(e2); // Different IVs should produce different output
-  expect(decryptSecret(e1)).toBe(plaintext);
-  expect(decryptSecret(e2)).toBe(plaintext);
+  const e1 = encryptSecret(plaintext, encKey);
+  const e2 = encryptSecret(plaintext, encKey);
+  expect(e1).not.toBe(e2);
+  expect(decryptSecret(e1, encKey)).toBe(plaintext);
+  expect(decryptSecret(e2, encKey)).toBe(plaintext);
 });
 
-test("key file is auto-created in .df/secrets.key", () => {
-  const keyPath = join(tmpDir, ".df", "secrets.key");
+test("isEncrypted detects encrypted values", () => {
+  const encrypted = encryptSecret("test", encKey);
+  expect(isEncrypted(encrypted)).toBe(true);
+  expect(isEncrypted("plain-text")).toBe(false);
+});
+
+test("maskSecret masks all but last 4 characters", () => {
+  expect(maskSecret("my-secret-key")).toBe("*********-key");
+  expect(maskSecret("abc")).toBe("***");
+  expect(maskSecret("")).toBe("");
+});
+
+test("getEncryptionKey creates key file on first call", () => {
+  const newTmpDir = mkdtempSync(join(tmpdir(), "secrets-key-test-"));
+  const newDfDir = join(newTmpDir, ".df");
+  mkdirSync(newDfDir, { recursive: true });
+  const keyPath = join(newDfDir, "secret.key");
   expect(existsSync(keyPath)).toBe(false);
-  encryptSecret("trigger-key-creation");
+  getEncryptionKey(newDfDir);
   expect(existsSync(keyPath)).toBe(true);
+  rmSync(newTmpDir, { recursive: true, force: true });
 });
 
-test("listSecretNames returns secret names without values", () => {
-  const db = getDbForTest();
-
-  // Seed data
-  db.prepare("INSERT INTO runs (id, spec_id, status) VALUES (?, ?, ?)").run("run_1", "spec_1", "running");
-  db.prepare("INSERT INTO agents (id, run_id, role, name, status, system_prompt) VALUES (?, ?, ?, ?, ?, ?)").run("agt_1", "run_1", "builder", "b1", "running", "p");
-
-  db.prepare(`INSERT INTO blocker_requests (id, run_id, agent_id, type, description, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run("blk_1", "run_1", "agt_1", "secret", "API key", "resolved", "2026-03-08T00:00:00Z", "2026-03-08T00:00:00Z");
-  db.prepare(`INSERT INTO blocker_requests (id, run_id, agent_id, type, description, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run("blk_2", "run_1", "agt_1", "secret", "DB pass", "resolved", "2026-03-08T01:00:00Z", "2026-03-08T01:00:00Z");
-
-  db.prepare(`INSERT INTO blocker_secrets (id, blocker_id, run_id, name, encrypted_value, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)`).run("sec_1", "blk_1", "run_1", "API_KEY", "enc1", "2026-03-08T00:00:00Z");
-  db.prepare(`INSERT INTO blocker_secrets (id, blocker_id, run_id, name, encrypted_value, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)`).run("sec_2", "blk_2", "run_1", "DB_PASSWORD", "enc2", "2026-03-08T01:00:00Z");
-
-  const secrets = listSecretNames(db);
-  expect(secrets).toHaveLength(2);
-  expect(secrets[0].name).toBe("API_KEY");
-  expect(secrets[0].blocker_id).toBe("blk_1");
-  expect(secrets[0]).not.toHaveProperty("encrypted_value");
-
-  db.close();
-});
-
-test("listSecretNames filters by run_id", () => {
-  const db = getDbForTest();
-
-  db.prepare("INSERT INTO runs (id, spec_id, status) VALUES (?, ?, ?)").run("run_1", "spec_1", "running");
-  db.prepare("INSERT INTO runs (id, spec_id, status) VALUES (?, ?, ?)").run("run_2", "spec_2", "running");
-  db.prepare("INSERT INTO agents (id, run_id, role, name, status, system_prompt) VALUES (?, ?, ?, ?, ?, ?)").run("agt_1", "run_1", "builder", "b1", "running", "p");
-  db.prepare("INSERT INTO agents (id, run_id, role, name, status, system_prompt) VALUES (?, ?, ?, ?, ?, ?)").run("agt_2", "run_2", "builder", "b2", "running", "p");
-
-  db.prepare(`INSERT INTO blocker_requests (id, run_id, agent_id, type, description, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run("blk_1", "run_1", "agt_1", "secret", "key1", "resolved", "2026-03-08T00:00:00Z", "2026-03-08T00:00:00Z");
-  db.prepare(`INSERT INTO blocker_requests (id, run_id, agent_id, type, description, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run("blk_2", "run_2", "agt_2", "secret", "key2", "resolved", "2026-03-08T00:00:00Z", "2026-03-08T00:00:00Z");
-
-  db.prepare(`INSERT INTO blocker_secrets (id, blocker_id, run_id, name, encrypted_value, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)`).run("sec_1", "blk_1", "run_1", "KEY1", "enc1", "2026-03-08T00:00:00Z");
-  db.prepare(`INSERT INTO blocker_secrets (id, blocker_id, run_id, name, encrypted_value, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)`).run("sec_2", "blk_2", "run_2", "KEY2", "enc2", "2026-03-08T00:00:00Z");
-
-  const run1Secrets = listSecretNames(db, "run_1");
-  expect(run1Secrets).toHaveLength(1);
-  expect(run1Secrets[0].name).toBe("KEY1");
-
-  const allSecrets = listSecretNames(db);
-  expect(allSecrets).toHaveLength(2);
-
-  db.close();
+test("getEncryptionKey returns same key on subsequent calls", () => {
+  const key1 = getEncryptionKey(dfDir);
+  const key2 = getEncryptionKey(dfDir);
+  expect(key1).toBe(key2);
 });
