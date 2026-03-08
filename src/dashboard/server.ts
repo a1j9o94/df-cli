@@ -16,6 +16,10 @@ import { encryptSecret, getEncryptionKey } from "../utils/secrets.js";
 import type { BlockerStatus } from "../types/blocker.js";
 import { RateLimiter } from "./rate-limiter.js";
 import { RequestLogger } from "./request-logger.js";
+import { validateConfig } from "../utils/config-validation.js";
+import { getConfig } from "../utils/config.js";
+import { DEFAULT_CONFIG } from "../types/config.js";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 // --- Contract: ServerExport ---
 
@@ -26,6 +30,8 @@ export interface ServerConfig {
   db?: InstanceType<typeof Database>;
   /** Directory where spec files are stored (used for creating new specs via API) */
   specsDir?: string;
+  /** Override the .df directory path (used for config API in tests) */
+  configDir?: string;
 }
 
 export interface ServerHandle {
@@ -1009,6 +1015,104 @@ interface HealthEndpointResponse {
   errorCount: number;
 }
 
+// --- Config API handlers ---
+
+/**
+ * Compute which config values match their defaults.
+ * Returns an object with the same shape, where true = value matches default.
+ */
+function computeDefaults(
+  config: Record<string, unknown>,
+  defaults: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(defaults)) {
+    const dv = defaults[key];
+    const cv = config[key];
+    if (dv && typeof dv === "object" && !Array.isArray(dv) && cv && typeof cv === "object" && !Array.isArray(cv)) {
+      result[key] = computeDefaults(cv as Record<string, unknown>, dv as Record<string, unknown>);
+    } else {
+      result[key] = cv === dv;
+    }
+  }
+  return result;
+}
+
+function handleGetConfig(configDir: string | null): Response {
+  const dfDir = configDir ?? findDfDir();
+  if (!dfDir) {
+    return errorResponse("Not in a Dark Factory project", 500);
+  }
+
+  const config = getConfig(dfDir);
+  const defaults = computeDefaults(
+    config as unknown as Record<string, unknown>,
+    DEFAULT_CONFIG as unknown as Record<string, unknown>,
+  );
+
+  return jsonResponse({ ...config, _defaults: defaults });
+}
+
+function deepMergeConfig(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    const sv = source[key];
+    const tv = target[key];
+    if (sv && typeof sv === "object" && !Array.isArray(sv) && tv && typeof tv === "object" && !Array.isArray(tv)) {
+      result[key] = deepMergeConfig(tv as Record<string, unknown>, sv as Record<string, unknown>);
+    } else if (sv !== undefined) {
+      result[key] = sv;
+    }
+  }
+  return result;
+}
+
+async function handlePutConfig(req: Request, configDir: string | null): Promise<Response> {
+  const dfDir = configDir ?? findDfDir();
+  if (!dfDir) {
+    return errorResponse("Not in a Dark Factory project", 500);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return errorResponse("Invalid JSON body", 400);
+  }
+
+  // Validate the incoming partial config
+  const errors = validateConfig(body);
+  if (errors.length > 0) {
+    return jsonResponse({ errors }, 400);
+  }
+
+  // Read existing config file
+  const configPath = join(dfDir, "config.yaml");
+  let existing: Record<string, unknown> = {};
+  if (existsSync(configPath)) {
+    const raw = readFileSync(configPath, "utf-8");
+    existing = (parseYaml(raw) as Record<string, unknown>) ?? {};
+  }
+
+  // Deep merge
+  const merged = deepMergeConfig(existing, body);
+
+  // Write back
+  writeFileSync(configPath, stringifyYaml(merged));
+
+  // Re-read through getConfig to get the full resolved config (with defaults applied)
+  const fullConfig = getConfig(dfDir);
+  const defaults = computeDefaults(
+    fullConfig as unknown as Record<string, unknown>,
+    DEFAULT_CONFIG as unknown as Record<string, unknown>,
+  );
+
+  return jsonResponse({ ...fullConfig, _defaults: defaults });
+}
+
 // --- URL Router ---
 
 async function route(
@@ -1019,6 +1123,7 @@ async function route(
   requestLogger: RequestLogger | null,
   startedAt: number,
   errorTracker: ErrorTracker,
+  configDir: string | null,
 ): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
@@ -1073,6 +1178,14 @@ async function route(
     const resp = jsonResponse(health);
     resp.headers.set("X-Error-Count", String(errorCount));
     return resp;
+  }
+
+  // Config API
+  if (path === "/api/config" && method === "GET") {
+    return handleGetConfig(configDir);
+  }
+  if (path === "/api/config" && method === "PUT") {
+    return handlePutConfig(req, configDir);
   }
 
   // Errors endpoint
@@ -1220,6 +1333,7 @@ export async function startServer(config: ServerConfig): Promise<ServerHandle> {
 
   const getDashboardHtml = () => generateDashboardHtml({ projectName: "Dark Factory" });
   const specsDir = config.specsDir ?? null;
+  const configDir = config.configDir ?? null;
   const errorTracker = new ErrorTracker();
 
   // Rate limiter: 100 requests per 60 seconds per IP
@@ -1252,7 +1366,7 @@ export async function startServer(config: ServerConfig): Promise<ServerHandle> {
           return response;
         }
 
-        const response = await route(db, req, getDashboardHtml, specsDir, requestLogger, startedAt, errorTracker);
+        const response = await route(db, req, getDashboardHtml, specsDir, requestLogger, startedAt, errorTracker, configDir);
 
         // Log the request after routing
         const duration = Math.round(performance.now() - startTime);
