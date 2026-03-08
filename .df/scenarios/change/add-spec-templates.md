@@ -1,37 +1,25 @@
 ---
 name: add-spec-templates
 type: change
-spec_id: run_01KJT1DSG8KTH91RNPN25VTA7Q
-created_by: agt_01KJT1DSG9535H9MNFRT5150J0
+spec_id: run_01KK6BYC9GJ9F5XNE49PW7SN3S
+created_by: agt_01KK6BYC9JZPT9DBGBS867HCTJ
 ---
 
-Changeability test: Adding a 'template' dropdown to the spec creation flow.
+Modification: Add a 'template' dropdown to the spec creation flow with options like 'API endpoint', 'UI component', 'CLI command'. Each template pre-fills the spec structure differently.
 
-MODIFICATION DESCRIPTION:
-Add a dropdown to the 'New Spec' creation modal that lets users pick a template (e.g., 'API endpoint', 'UI component', 'CLI command'). Each template pre-fills the spec with template-specific sections.
+Expected changes:
+1. Add a template map data structure (e.g., SPEC_TEMPLATES object with name -> markdown template pairs)
+2. Add a select/dropdown element to the creation modal/panel in the UI
+3. When a template is selected, pass template name to POST /api/specs along with description
+4. Server-side: use template to structure the generated spec differently
 
-EXPECTED CHANGE SCOPE:
-1. Add a template map (e.g., Record<string, string> mapping template names to markdown bodies)
-   - This should be a single new data structure, possibly in the description generator module
-2. Add a <select> element to the creation modal/panel UI
-   - This should be a small addition to the creation form HTML
-3. Pass the selected template to the spec generation function
-   - The generation function signature may need a new optional parameter
+Areas that should NOT change:
+- The inline markdown editor component
+- The save/load API contract (PUT /api/specs/:id still accepts markdown body)
+- The spec file format (still YAML frontmatter + markdown)
+- The sidebar listing logic
+- The build flow
 
-AREAS THAT SHOULD NOT CHANGE:
-- The inline markdown editor logic (save, auto-save, preview)
-- The spec list sidebar
-- The API endpoints (POST /api/specs can accept an optional template field, but the endpoint itself should not require restructuring)
-- The immutability guard logic
-- The build trigger mechanism
+Expected effort: Small — adding a data structure + one UI element + one optional API parameter. No structural changes to existing code.
 
-EXPECTED EFFORT:
-- Template map: ~20-30 lines of new code
-- UI dropdown: ~10-15 lines of HTML/JS
-- Generator modification: ~5-10 lines to handle template parameter
-- Total: <60 lines of changes across 2-3 files
-
-PASS CRITERIA:
-- Can be implemented by modifying at most 3 files
-- No changes required to editor, save/load, or build logic
-- Template map is a simple data structure (no complex inheritance or factory pattern needed)
+Pass criteria: Template feature can be added by modifying only the creation flow (modal/panel + POST handler). Editor and save/load remain untouched.
