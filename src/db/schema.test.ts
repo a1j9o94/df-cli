@@ -27,9 +27,9 @@ test("blocker_requests has proper indexes", () => {
   const db = getDbForTest();
   const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='blocker_requests'").all() as any[];
   const indexNames = indexes.map((i: any) => i.name);
-  expect(indexNames).toContain("idx_blocker_requests_run");
-  expect(indexNames).toContain("idx_blocker_requests_agent");
-  expect(indexNames).toContain("idx_blocker_requests_status");
+  expect(indexNames).toContain("idx_blockers_run");
+  expect(indexNames).toContain("idx_blockers_agent");
+  expect(indexNames).toContain("idx_blockers_status");
   db.close();
 });
 
