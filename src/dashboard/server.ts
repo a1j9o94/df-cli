@@ -11,7 +11,7 @@ import { PHASE_ORDER, shouldSkipPhase, type PhaseName } from "../pipeline/phases
 import { parseFrontmatter, serializeFrontmatter } from "../utils/frontmatter.js";
 import { newSpecId, newRunId } from "../utils/id.js";
 import { listBlockersByRun, getBlocker, resolveBlocker } from "../db/queries/blockers.js";
-import { encryptSecret } from "../utils/secrets.js";
+import { encryptSecret, getEncryptionKey } from "../utils/secrets.js";
 import type { BlockerStatus } from "../types/blocker.js";
 import { RateLimiter } from "./rate-limiter.js";
 import { RequestLogger } from "./request-logger.js";
@@ -978,17 +978,23 @@ async function handleResolveBlocker(
 
   if (existing.type === "secret" && body.env_key && body.env_value) {
     // Encrypt the secret value before storing
-    resolvedValue = encryptSecret(body.env_value);
+    const dfDir = findDfDir();
+    if (dfDir) {
+      const encKey = getEncryptionKey(dfDir);
+      resolvedValue = encryptSecret(body.env_value, encKey);
+    } else {
+      // Fallback: store value as-is when no .df dir (e.g. tests)
+      resolvedValue = body.env_value;
+    }
   } else if (body.value !== undefined) {
     resolvedValue = body.value;
   }
 
-  const blocker = resolveBlocker(db, blockerId, {
-    value: resolvedValue,
-    resolved_by: "dashboard",
-  });
+  resolveBlocker(db, blockerId, resolvedValue ?? "", "dashboard");
 
-  return jsonResponse({ success: true, blocker });
+  // Re-fetch the blocker to return the updated state
+  const updated = getBlocker(db, blockerId);
+  return jsonResponse({ success: true, blocker: updated });
 }
 
 // --- URL Router ---
