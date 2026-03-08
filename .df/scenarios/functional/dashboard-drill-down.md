@@ -1,35 +1,31 @@
 ---
 name: dashboard-drill-down
 type: functional
-spec_id: run_01KJT1F6D5K21YTBJJ2QG4QY7E
-created_by: agt_01KJT1F6D7F50TK3PWRMAKQHN9
+spec_id: run_01KK7SEAH0J838RH3SWCBR48SQ
+created_by: agt_01KK7SEAH1RRSGYDNFYKMRG751
 ---
 
-# Dashboard Drill-Down Navigation
+## Test: Dashboard Drill-down Navigation
 
-## Preconditions
-- Workspace at /tmp/test-ws/ with frontend/ and backend/
-- dark dash running from workspace root
-- At least one run exists in backend/.df/state.db
+### Preconditions
+- Workspace with frontend/ and backend/ member projects
+- At least one run exists at workspace level and at project level
 
-## Steps
-1. Open workspace dashboard at /
-2. Click on backend project in the member projects grid
-3. Observe navigation to /project/backend
-4. Select a run in the project-level view
-5. Click browser back or navigate to /
-6. Observe return to workspace level
+### Steps
+1. Start dark dash from workspace root
+2. Verify workspace-level dashboard renders at /
+3. Click into 'backend' member project
+4. Verify URL changes to /project/backend
+5. Verify project-level view shows: runs, agents, phases, buildplan, scenarios, cost
+6. Click back/navigate to workspace level
+7. Verify URL returns to / and workspace view renders
 
-## Expected Output
-1. URL changes to /project/backend on click
-2. Project-level dashboard renders showing backend's runs, agents, phases
-3. Run detail panel works: agents, modules, phases, buildplan, cost
-4. Navigation back to / returns to workspace-level view
-5. URL scheme: / = workspace, /project/<name> = project drill-down
+### Expected Output
+- Workspace view at / shows member project grid
+- /project/backend shows project-level detail view
+- Navigation between levels works without page reload issues
+- Each level shows appropriate data from correct DB (workspace vs project)
 
-## Pass Criteria
-- URL routing works: / (workspace), /project/backend (project), /project/frontend (project)
-- Project-level view reads from the correct state.db (backend/.df/state.db)
-- All existing project-level features work within the drill-down (tabs, auto-refresh, etc.)
-- No 404 errors on navigation
-- Back navigation preserves workspace-level state
+### Pass/Fail
+- PASS: Drill-down and back navigation work, correct data shown at each level
+- FAIL: Navigation broken, wrong data shown, or 404 errors on level change
