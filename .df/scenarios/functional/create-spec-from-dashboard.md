@@ -1,23 +1,24 @@
 ---
 name: create-spec-from-dashboard
 type: functional
-spec_id: run_01KK6BYC9GJ9F5XNE49PW7SN3S
-created_by: agt_01KK6BYC9JZPT9DBGBS867HCTJ
+spec_id: run_01KK6D0A338WWPKA9YNGG3S1WB
+created_by: agt_01KK6D0A34XA7984X9D1YCNN6W
 ---
 
-Precondition: Dashboard server running, .df/specs/ directory exists, state.db initialized.
-
-Steps:
-1. Send POST /api/specs with body: {"description": "Add a caching layer for the API responses"}
-2. Verify response has status 201 and JSON body with fields: id (string, starts with spec_), title (string, non-empty), file_path (string, matches specs/*.md), status ("draft")
-3. Verify a file exists at .df/<file_path> returned in step 2
-4. Read the file and verify:
-   a. YAML frontmatter contains: id matching returned id, status: draft, type: feature
-   b. Body contains a # Title heading (non-empty)
-   c. Body contains a ## Goal section with content derived from the description
-   d. Body contains a ## Requirements section with at least one bullet point
-   e. Body contains a ## Scenarios section (can be placeholder)
-5. Query GET /api/specs and verify the new spec appears in the list with status: draft
-6. Query GET /api/specs/:id and verify full content is returned (markdown body + parsed frontmatter)
-
-Pass criteria: All verifications pass. Spec file on disk matches database record. Title is inferred from description (not empty/generic).
+SCENARIO: Create spec from dashboard UI
+PRECONDITIONS: Dashboard is running, .df/specs/ directory exists, database has specs table
+STEPS:
+1. Open dashboard in browser
+2. Locate and click 'New Spec' button in the sidebar header
+3. In the creation modal/panel, type: 'Add a caching layer for the API responses'
+4. Click submit/create button
+5. Wait for spec generation to complete
+EXPECTED RESULTS:
+- A new .md file is created in .df/specs/ with filename pattern spec_<ULID>.md
+- The file contains YAML frontmatter with: id (ULID), title (inferred from description), type: feature, status: draft, version: 0.1.0
+- The file body contains: a Goal section populated from the description, a Requirements section with bullet list derived from the description, a Scenarios section with placeholders
+- The spec appears in the database specs table with status 'draft'
+- The spec appears in the sidebar spec list under the 'draft' group
+- After generation, the spec opens in the inline markdown editor for refinement
+PASS CRITERIA: File exists on disk with correct frontmatter and sections; spec visible in sidebar; editor opens automatically
+API VERIFICATION: GET /api/specs returns the new spec with status 'draft' and a title
