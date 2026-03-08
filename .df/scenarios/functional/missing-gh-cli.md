@@ -1,8 +1,21 @@
 ---
 name: missing-gh-cli
 type: functional
-spec_id: run_01KJSS4TD4WH5VKGWK6YWSWJZQ
-created_by: agt_01KJSS4TD5H3A6M3NHC0H95JFZ
+spec_id: run_01KK713FAZE5AV73F5HB66BPVF
+created_by: agt_01KK713FB00321PM7C8TQ1YDQZ
 ---
 
-Setup: The gh CLI is not installed or not on PATH.\n\nSteps:\n1. Ensure gh is not available (simulate by testing with a non-existent command or mocking)\n2. Run: dark spec create --from-github https://github.com/org/repo/issues/1\n3. Verify exit code is non-zero (1)\n4. Verify stderr/stdout contains the error message: 'GitHub CLI (gh) required. Install: https://cli.github.com and run `gh auth login`'\n5. Verify no spec file was created\n6. Verify no DB record was created\n\nPass criteria: Clear, actionable error message with installation URL. Non-zero exit code. No partial file creation.
+Test: When gh CLI is not installed, a clear error with installation instructions is shown.
+
+Setup:
+- Create a GitHubImporter with a mock exec that throws 'command not found: gh' when 'gh --version' is called
+
+Steps:
+1. Create GitHubImporter with failing exec function
+2. Call importer.fetch('https://github.com/org/repo/issues/1')
+3. Verify it throws an error
+4. Verify error message contains 'GitHub CLI (gh) required'
+5. Verify error message contains 'https://cli.github.com'
+6. Verify error message contains 'gh auth login'
+
+Pass criteria: Error is thrown with all three required elements: the requirement message, the install URL, and the auth command.
