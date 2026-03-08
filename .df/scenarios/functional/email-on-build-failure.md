@@ -1,38 +1,8 @@
 ---
 name: email-on-build-failure
 type: functional
-spec_id: run_01KJSS4TBB5ETC6ZA8FN3184DH
-created_by: agt_01KJSS4TBDCV42SMK3D52DBTPF
+spec_id: run_01KK7SEADG3VVG04QBWK3E2MTP
+created_by: agt_01KK7SEADH9C0FDQK9V2HRH78R
 ---
 
-## Email on Build Failure
-
-### Preconditions
-- Project initialized with `dark init`
-- Email configured via SMTP: `dark notify setup --email pm@company.com --smtp-host smtp.example.com --smtp-port 587 --smtp-user user --smtp-pass pass`
-- `dark notify status` shows email channel enabled
-
-### Steps
-1. Run a build that fails (agent crash, scenario failure, or pipeline error)
-2. Verify an email is sent to the configured address (pm@company.com)
-3. Verify email subject matches pattern: `[dark] Build failed: <spec-title>`
-4. Parse the HTML email body and verify it contains:
-   - Spec title (not spec ID)
-   - Run status: 'failed'
-   - Cost in dollar format
-   - Duration in human-readable format
-   - Module summary (e.g. '3/5 modules built, 2 failed')
-   - Scenario pass rate (e.g. '6/8 passed, 2 failed')
-   - Error summary: first 200 chars of the error message
-   - Action hint with 'dark dash' or dashboard URL
-5. Verify the email body is valid HTML (not plain text)
-
-### Expected Output
-- Email sent to pm@company.com
-- Subject contains 'failed' and spec title
-- HTML body contains all required notification fields
-- Error summary is present and truncated to 200 chars max
-
-### Pass/Fail Criteria
-- PASS: Email sent with correct subject pattern, HTML body with all fields, error summary present
-- FAIL: No email sent, missing fields, wrong subject format, or plain text instead of HTML
+Setup: 1. Configure email via SMTP: 'dark notify setup --email pm@company.com --smtp-host smtp.example.com --smtp-port 587 --smtp-user user --smtp-pass pass'. 2. Verify config in .df/config.yaml has notifications.channels entry with type:email, provider:smtp. 3. Run a build that fails. Expected: An email is sent with: (a) Subject line '[dark] Build failed: <spec-title>', (b) HTML body containing error summary (first 200 chars of error), (c) scenario results showing pass/fail counts, (d) cost and duration, (e) module summary showing which modules failed. Pass criteria: Email sent via SMTP with correct subject format and HTML body containing all required fields.
