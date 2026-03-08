@@ -1,37 +1,27 @@
 ---
 name: weekly-digest-cli
 type: functional
-spec_id: run_01KJSYMVS0W36Y61PR2WNYBM7W
-created_by: agt_01KJSYMVS1M06HAVTY6C5FAXR2
+spec_id: run_01KK7SEAF66NVEXSWY52CHEZ2Q
+created_by: agt_01KK7SEAF8R2TQCK3AC2E5ZV0E
 ---
 
-## Weekly digest CLI command
+Setup: Complete 2 specs this week (Spec A with cost $4.23 and 8/8 pass rate, Spec B with cost $1.10 and 5/5 pass rate). Have 1 spec in progress (Spec C, building module 2/4, $3.50 so far). Have 4 draft specs planned across 3 layers.
 
-### Preconditions
-- 2 specs completed with known costs and pass rates
-- 1 spec currently in progress (building)
-- 2 draft specs in the backlog
-
-### Setup Steps
-1. Complete spec A: cost=4.23, 8/8 scenarios passed, completed Monday of current week
-2. Complete spec B: cost=1.10, 5/5 scenarios passed, completed Tuesday of current week
-3. Start building spec C: currently in build phase, module 2/4, cost so far=3.50
-4. Draft specs D (layer 0) and E (layer 1, depends on D)
-
-### Test Steps
+Steps:
 1. Run: dark timeline digest --week
-2. Capture stdout output
-3. Verify markdown format
 
-### Expected Results
-- Output starts with '# Weekly Digest — <date>' where date is current week's Monday
-- Contains '## Completed (2)' section listing spec A and B with title, completion day, cost, scenario counts
-- Contains '## In Progress (1)' section listing spec C with module progress and cost
-- Contains '## Planned (2)' section with layer groupings
-- Ends with '**Total cost this week: $X.XX**' summing completed costs
-- Output is valid, clean markdown with no HTML tags or broken formatting
-- Each completed entry formatted like: '- **Spec Title** — completed Mon, $4.23, 8/8 scenarios'
+Expected stdout output (markdown format):
+- Header: '# Weekly Digest — <current date>'
+- '## Completed (2)' section listing both specs with title, completion day, cost, pass rate
+- '## In Progress (1)' section with Spec C showing module progress and cost
+- '## Planned (4)' section with specs grouped by layer
+- Footer: '**Total cost this week: $5.33**' (sum of completed specs only)
+- Output is valid markdown with no HTML artifacts
 
-### Pass/Fail Criteria
-- PASS: Output matches expected markdown structure, all sections present, costs correct
-- FAIL: Missing sections, wrong counts, malformed markdown, or incorrect cost totals
+2. Run: dark timeline digest --month
+
+Expected:
+- Same format but scoped to current calendar month
+- Includes all specs completed this month (may be more than this week)
+
+Pass criteria: CLI outputs clean markdown to stdout with accurate data in all sections.
