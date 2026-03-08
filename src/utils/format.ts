@@ -10,7 +10,38 @@ export function formatJson(data: unknown, options?: FormatJsonOptions): string {
   if (excludeFields && excludeFields.length > 0) {
     data = stripFields(data, excludeFields);
   }
+  data = sanitizeControlChars(data);
   return JSON.stringify(data, null, 2);
+}
+
+/**
+ * Regex matching control characters that should be stripped from JSON string values.
+ * Preserves \t (0x09), \n (0x0A), and \r (0x0D) which are common whitespace.
+ * Strips: 0x00-0x08, 0x0B, 0x0C, 0x0E-0x1F
+ */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHAR_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+
+/**
+ * Recursively sanitize string values in a data structure by removing
+ * problematic control characters (null bytes, etc.) that may cause
+ * issues with external JSON parsers (Python json.loads, jq).
+ */
+function sanitizeControlChars(data: unknown): unknown {
+  if (typeof data === "string") {
+    return data.replace(CONTROL_CHAR_RE, "");
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => sanitizeControlChars(item));
+  }
+  if (data !== null && typeof data === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+      result[key] = sanitizeControlChars(value);
+    }
+    return result;
+  }
+  return data;
 }
 
 function stripFields(data: unknown, fields: string[]): unknown {

@@ -95,4 +95,59 @@ Done.`,
     const result = formatJson(data);
     expect(() => JSON.parse(result)).not.toThrow();
   });
+
+  test("sanitizes null bytes from string values", () => {
+    const data = { name: "hello\x00world" };
+    const result = formatJson(data);
+    const parsed = JSON.parse(result);
+    // Null bytes should be removed from output
+    expect(parsed.name).not.toContain("\x00");
+  });
+
+  test("sanitizes all control characters (0x00-0x08, 0x0B, 0x0C, 0x0E-0x1F) from strings", () => {
+    // Build string with problematic control chars (not \t \n \r which are common whitespace)
+    let controlStr = "";
+    for (let i = 0; i < 32; i++) {
+      if (i === 9 || i === 10 || i === 13) continue; // skip \t \n \r
+      controlStr += String.fromCharCode(i);
+    }
+    const data = { value: `prefix${controlStr}suffix` };
+    const result = formatJson(data);
+    const parsed = JSON.parse(result);
+    // Should not contain any non-whitespace control characters
+    expect(parsed.value).toBe("prefixsuffix");
+  });
+
+  test("preserves tabs, newlines, and carriage returns in strings", () => {
+    const data = { value: "line1\nline2\ttab\rcarriage" };
+    const result = formatJson(data);
+    const parsed = JSON.parse(result);
+    expect(parsed.value).toBe("line1\nline2\ttab\rcarriage");
+  });
+
+  test("sanitizes control characters in deeply nested objects", () => {
+    const data = {
+      level1: {
+        level2: [
+          { text: "clean" },
+          { text: "has\x00null\x01bytes" },
+        ],
+      },
+    };
+    const result = formatJson(data);
+    const parsed = JSON.parse(result);
+    expect(parsed.level1.level2[1].text).toBe("hasnullbytes");
+  });
+
+  test("sanitizes control characters even when excludeFields is used", () => {
+    const data = {
+      id: "test\x00id",
+      name: "clean",
+      system_prompt: "should be removed",
+    };
+    const result = formatJson(data, { excludeFields: ["system_prompt"] });
+    const parsed = JSON.parse(result);
+    expect(parsed.id).toBe("testid");
+    expect(parsed).not.toHaveProperty("system_prompt");
+  });
 });
