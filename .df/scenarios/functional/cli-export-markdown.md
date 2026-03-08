@@ -1,37 +1,31 @@
 ---
 name: cli-export-markdown
 type: functional
-spec_id: run_01KK7R4Y1NWJRH426C68FK58CZ
-created_by: agt_01KK7R4Y1TEX0SQCM76106T1F2
+spec_id: run_01KK7SEJD8Z1CHN7Z2B1ZDT9P9
+created_by: agt_01KK7SEJD9V7MRX6KC86N28S5K
 ---
 
-Preconditions: A completed run exists with 3 modules, all scenarios passed, and highlights.json populated.
+PRECONDITIONS: A completed run exists with run-id 'test-run-123'. The run built 3 modules, has 8 passing scenarios, and captured 2 screenshots.
 
-Steps:
-1. Run: dark run output <run-id>
-2. Verify stdout contains formatted output with:
+STEPS:
+1. Run: dark run output test-run-123
+2. Verify stdout contains structured output including:
    - Run title header
    - 'Modules Built (3)' section
-   - Per-module: name, files created/modified, test count, decisions
-   - Scenarios summary line (e.g., '8/8 passed')
-3. Run: dark run output <run-id> --export
-4. Verify output says file was written and prints path
-5. Verify .df/runs/<run-id>/output.md exists
-6. Read the markdown file and verify:
-   - Contains module summaries with files and test counts
-   - Contains scenario results
-   - Is valid markdown (headers, lists, code blocks)
+   - Per-module entries with: Files list, Tests passing count, Decisions (if any), Screenshots count (if visual)
+   - 'Scenarios: 8/8 passed' summary
+3. Run: dark run output test-run-123 --export
+4. Verify a markdown file is written to .df/runs/test-run-123/output.md
+5. Verify the command prints the file path to stdout.
+6. Read output.md and verify it contains the same structured content as stdout.
 
-Pass criteria:
-- CLI prints readable formatted output to stdout
-- --export writes valid markdown file to correct path
-- File path is printed after export
-- Markdown contains all module summaries and scenario results
-- Markdown is well-structured with proper headers and formatting
+EXPECTED:
+- CLI prints readable summary to stdout.
+- --export flag writes markdown file and prints path.
+- Content matches spec format (module summaries, scenario results).
 
-Fail criteria:
-- CLI command not recognized or errors
-- stdout output missing module details
-- --export doesn't create file
-- Markdown file is empty or malformed
-- File written to wrong location
+PASS CRITERIA:
+- Exit code 0 for both commands.
+- stdout output matches format shown in spec.
+- output.md file exists and contains valid markdown.
+- Module names, file lists, test counts are accurate.
