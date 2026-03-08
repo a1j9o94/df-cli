@@ -1,25 +1,15 @@
 ---
 name: swap-editor-implementation
 type: change
-spec_id: run_01KK6BYC9GJ9F5XNE49PW7SN3S
-created_by: agt_01KK6BYC9JZPT9DBGBS867HCTJ
+spec_id: run_01KK6D0A338WWPKA9YNGG3S1WB
+created_by: agt_01KK6D0A34XA7984X9D1YCNN6W
 ---
 
-Modification: Replace the textarea-based markdown editor with a richer editor like CodeMirror or Monaco.
-
-Expected changes:
-1. Replace the editor component (textarea + preview) with a CodeMirror/Monaco instance
-2. Add necessary script/style includes for the editor library
-3. Wire up the new editor's change events to the existing auto-save debounce logic
-
-Areas that should NOT change:
-- PUT /api/specs/:id request/response format (still sends markdown string body)
-- GET /api/specs/:id response format (still returns markdown string)
-- Auto-save timing logic (3-second debounce)
-- Save indicator UI
-- Immutability guard logic (locked specs remain non-editable regardless of editor)
-- Sidebar, creation flow, build flow
-
-Expected effort: Small-medium — swap one UI component. The editor is a self-contained presentation layer; the data contract (markdown string in/out via API) is stable.
-
-Pass criteria: Editor replacement only touches the editor component code. All API contracts, auto-save behavior, and immutability logic remain unchanged.
+CHANGEABILITY SCENARIO: Swap editor implementation
+MODIFICATION: Replace the textarea-based markdown editor with a richer editor (e.g., CodeMirror or Monaco) without changing any other components.
+AFFECTED AREAS:
+- The editor component in index.ts: Replace the <textarea> and preview pane with a CodeMirror instance
+- CSS for the editor area may need updating
+- No changes needed to: save/load API contract (GET/PUT /api/specs/:id), sidebar component, build button logic, immutability guard logic (just wire disabled state to new editor API), auto-save debounce logic (wire to new editor's change event)
+EXPECTED EFFORT: Medium — swap the editor DOM element, update event listeners for content changes, update the getValue/setValue interface. The save mechanism remains the same (grab content string, PUT to API).
+PASS CRITERIA: Editor can be swapped by: (1) replacing the editor DOM creation code, (2) updating getContent/setContent calls, (3) updating the change event listener for auto-save. The API layer (PUT /api/specs/:id with markdown body) is completely untouched.
