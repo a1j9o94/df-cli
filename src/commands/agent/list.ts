@@ -56,7 +56,11 @@ export const agentListCommand = new Command("list")
     }
 
     if (agents.length === 0) {
-      console.log("No agents found.");
+      if (options.active) {
+        console.log("No active agents found.");
+      } else {
+        console.log("No agents found.");
+      }
       return;
     }
 

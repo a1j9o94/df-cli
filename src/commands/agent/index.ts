@@ -7,7 +7,7 @@ import { agentFailCommand } from "./fail.js";
 import { agentReportResultCommand } from "./report-result.js";
 
 export const agentCommand = new Command("agent")
-  .description("Manage agent lifecycle — list, heartbeat, complete, or fail agents")
+  .description("Manage agent lifecycle — list, show, heartbeat, complete, or fail agents")
   .addHelpText("after", `
 Agents are Claude Code CLI processes spawned by the pipeline. Each agent has a
 role (orchestrator, architect, builder, evaluator, merger, integration-tester),

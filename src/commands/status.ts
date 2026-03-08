@@ -2,12 +2,15 @@ import { Command } from "commander";
 import { findDfDir } from "../utils/config.js";
 import { getDb } from "../db/index.js";
 import { listRuns } from "../db/queries/runs.js";
-import { listAgents } from "../db/queries/agents.js";
-import { formatJson, formatStatus } from "../utils/format.js";
+import { getRunWithSpecTitle } from "../db/queries/status-queries.js";
+import { formatJson } from "../utils/format.js";
+import { formatStatusDetail, formatStatusSummaryLine } from "../utils/format-status-detail.js";
 import { log } from "../utils/logger.js";
 import { join } from "node:path";
-import { getRunQueueInfo, formatQueueStatus } from "../pipeline/queue-visibility.js";
+import { getRunQueueInfo } from "../pipeline/queue-visibility.js";
 import { checkDbHealth } from "../pipeline/db-health.js";
+import { getModuleProgress } from "../db/queries/status-queries.js";
+import { listAgents } from "../db/queries/agents.js";
 
 /** Fields excluded from --json output by default (large, rarely useful in status views) */
 const STATUS_EXCLUDED_FIELDS = ["system_prompt"];
@@ -15,10 +18,11 @@ const STATUS_EXCLUDED_FIELDS = ["system_prompt"];
 export const statusCommand = new Command("status")
   .description("Show current pipeline status")
   .option("--run-id <id>", "Show status for a specific run")
+  .option("--detail", "Show expanded detail view (phase timeline, cost breakdown by role)")
   .option("--json", "Output as JSON")
   .option("--verbose", "Include all fields in JSON output")
   .option("--restore", "Restore state DB from backup if corrupt")
-  .action(async (options: { runId?: string; json?: boolean; verbose?: boolean; restore?: boolean }) => {
+  .action(async (options: { runId?: string; detail?: boolean; json?: boolean; verbose?: boolean; restore?: boolean }) => {
     const dfDir = findDfDir();
     if (!dfDir) {
       log.error("Not in a Dark Factory project. Run 'df init' first.");
@@ -54,40 +58,28 @@ export const statusCommand = new Command("status")
     }
 
     // If a specific run is requested, show details
-    if (options.runId) {
-      const run = runs.find((r) => r.id === options.runId);
-      if (!run) {
-        log.error(`Run ${options.runId} not found`);
+    if (options.runId || options.detail) {
+      const targetRunId = options.runId ?? runs[0]?.id;
+      if (!targetRunId) {
+        log.error("No run found");
         process.exit(1);
       }
 
-      const agents = listAgents(db, run.id);
-      const queueInfo = getRunQueueInfo(db, run.id);
+      const run = getRunWithSpecTitle(db, targetRunId);
+      if (!run) {
+        log.error(`Run ${targetRunId} not found`);
+        process.exit(1);
+      }
 
       if (options.json) {
-        console.log(formatJson({ run, agents, mergeQueue: queueInfo }, { excludeFields }));
+        const agents = listAgents(db, run.id);
+        const queueInfo = getRunQueueInfo(db, run.id);
+        const moduleProgress = getModuleProgress(db, run.id);
+        console.log(formatJson({ run, agents, mergeQueue: queueInfo, moduleProgress }, { excludeFields }));
         return;
       }
 
-      console.log(`Run: ${run.id}`);
-      console.log(`  Spec:      ${run.spec_id}`);
-      console.log(`  Status:    ${formatStatus(run.status)}`);
-      const queueStr = formatQueueStatus(queueInfo);
-      const phaseDisplay = run.current_phase ?? "(none)";
-      console.log(`  Phase:     ${phaseDisplay}${queueStr ? ` ${queueStr}` : ""}`);
-      console.log(`  Skip change eval: ${run.skip_change_eval}`);
-      console.log(`  Iteration: ${run.iteration}/${run.max_iterations}`);
-      console.log(`  Cost:      $${run.cost_usd.toFixed(2)} / $${run.budget_usd.toFixed(2)}`);
-      console.log(`  Tokens:    ${run.tokens_used.toLocaleString()}`);
-      if (run.error) console.log(`  Error:     ${run.error}`);
-
-      if (agents.length > 0) {
-        console.log(`\n  Agents (${agents.length}):`);
-        for (const a of agents) {
-          const phase = a.tdd_phase ? ` [${a.tdd_phase}]` : "";
-          console.log(`    ${a.name} (${a.role}) — ${formatStatus(a.status)}${phase}`);
-        }
-      }
+      console.log(formatStatusDetail(db, run, { detail: options.detail }));
       return;
     }
 
@@ -99,11 +91,9 @@ export const statusCommand = new Command("status")
 
     console.log(`Runs (${runs.length}):\n`);
     for (const run of runs) {
-      const agents = listAgents(db, run.id);
-      const activeCount = agents.filter((a) => ["pending", "spawning", "running"].includes(a.status)).length;
-      const queueInfo = getRunQueueInfo(db, run.id);
-      const queueStr = formatQueueStatus(queueInfo);
-      const phaseDisplay = run.current_phase ?? "-";
-      console.log(`  ${run.id}  ${formatStatus(run.status)}  spec=${run.spec_id}  phase=${phaseDisplay}${queueStr ? ` ${queueStr}` : ""}  agents=${activeCount}/${agents.length}  $${run.cost_usd.toFixed(2)}/$${run.budget_usd.toFixed(2)}`);
+      const enrichedRun = getRunWithSpecTitle(db, run.id);
+      if (enrichedRun) {
+        console.log(formatStatusSummaryLine(db, enrichedRun));
+      }
     }
   });
