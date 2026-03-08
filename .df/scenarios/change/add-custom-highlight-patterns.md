@@ -1,34 +1,24 @@
 ---
 name: add-custom-highlight-patterns
 type: change
-spec_id: run_01KJSYMVTRZA22SC742GEMEWDJ
-created_by: agt_01KJSYMVTT7H090YHJERTJN6FG
+spec_id: run_01KK7R4Y1NWJRH426C68FK58CZ
+created_by: agt_01KK7R4Y1TEX0SQCM76106T1F2
 ---
 
-## Add Custom Highlight Patterns
+Modification: Allow users to define custom patterns for log extraction in .df/config.yaml, extending the default highlight patterns.
 
-### Modification Description
-Allow users to define custom patterns for log extraction in .df/config.yaml. For example, a user might want to extract lines matching 'Performance:' or 'Security:' in addition to the default patterns.
+Expected changes:
+1. Read custom patterns from .df/config.yaml (e.g., highlights.custom_patterns: [{pattern: 'Migration:', type: 'migration'}])
+2. Modify the highlights extraction function to accept additional patterns from config
+3. The extraction function merges default patterns with user-defined ones
 
-### Expected Changes
-1. Read custom patterns from .df/config.yaml under a new 'highlight_patterns' key
-2. Modify the highlight extractor to merge custom patterns with built-in patterns
-3. Custom patterns would follow the same format: { pattern: string, type: string, description_template: string }
+Areas that should NOT need changes:
+- Dashboard rendering of highlights (already renders by type with badges — new types get a default badge)
+- highlights.json storage format (same structure, just new type values)
+- API endpoints (same response format)
+- CLI export (reads highlights.json generically)
+- Screenshot capture or manifest logic
 
-### Areas That Should NOT Change
-- Dashboard rendering (it already renders based on highlight type — new types render the same way)
-- Storage format (highlights.json keeps the same schema, just more event types)
-- API endpoints (no changes needed — they serve whatever is in highlights.json)
-- CLI export (it reads highlights.json generically)
-- Screenshot capture (completely unrelated)
+Expected effort: Small. 1-2 files modified. The highlight extractor reads patterns, the config reader loads them. Dashboard already handles arbitrary types.
 
-### Expected Effort
-- Config reading: ~15 lines (add highlight_patterns to config parser)
-- Pattern merging in extractor: ~10 lines (concat custom patterns with defaults)
-- Type validation: ~5 lines (ensure custom types dont conflict with built-in types)
-- Total: ~30 lines in 2 files (config.ts and highlight-extraction.ts)
-
-### Pass Criteria
-- Adding custom patterns requires changes to ONLY the config parser and highlight extractor
-- Dashboard, API, CLI export, and screenshot modules are completely unaffected
-- The highlight-extraction module has a clear pattern list that is extensible
+Pass criteria: Custom highlight patterns can be added by modifying only the highlight extraction function and adding config file reading — no changes to dashboard rendering, storage format, or API contracts.
