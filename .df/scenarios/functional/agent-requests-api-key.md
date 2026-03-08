@@ -1,31 +1,8 @@
 ---
 name: agent-requests-api-key
 type: functional
-spec_id: run_01KJSYMVWPNRZ16G28KTV8R2VQ
-created_by: agt_01KJSYMVWQ923DD7ASGJ6GVV34
+spec_id: run_01KK74N40R4GGRR0DNE5AA8G2A
+created_by: agt_01KK74N40TBWEKCQG4G9ZT1SPW
 ---
 
-## Agent Requests API Key
-
-### Preconditions
-- A Dark Factory project is initialized (dark init)
-- A run is active with at least one agent in 'running' status
-- Agent ID is known (e.g., agt_01ABC)
-
-### Steps
-1. Run: dark agent request agt_01ABC --type secret --description 'Stripe test API key (sk_test_...) for payment integration tests'
-2. Query the blocker_requests table: SELECT * FROM blocker_requests WHERE agent_id = 'agt_01ABC'
-3. Query agent status: SELECT status FROM agents WHERE id = 'agt_01ABC'
-4. Query events: SELECT * FROM events WHERE agent_id = 'agt_01ABC' AND type = 'blocker-requested'
-5. Run: dark blockers (should list the pending blocker)
-
-### Expected Results
-- blocker_requests record exists with type='secret', status='pending', description matching input
-- Agent status is 'blocked'
-- An event of type 'blocker-requested' exists with the agent_id and blocker details
-- dark blockers output includes this blocker with agent ID, type, description, and timestamp
-- The request command does NOT return immediately — it enters a polling loop waiting for resolution
-
-### Pass/Fail Criteria
-- PASS: All expected results verified
-- FAIL: Any of: no blocker record created, agent not marked blocked, no event emitted, command returns immediately without polling
+SETUP: Create a run and spawn a builder agent (status=running). STEPS: 1. Run: dark agent request <agent-id> --type secret --description 'Stripe test API key (sk_test_...) for payment integration tests'. 2. Verify blocker_requests table has new row with type=secret, status=pending, description matching input. 3. Verify agent status changed to 'blocked'. 4. Verify an event was emitted (type=agent-blocked or blocker-created). 5. Verify notification was sent (check messages table or notification output). 6. If this is the only active agent in the run, verify run status changed to 'paused'. PASS CRITERIA: All 6 verifications pass. Agent cannot proceed until blocker is resolved.
