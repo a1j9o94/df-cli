@@ -1,27 +1,8 @@
 ---
 name: portless-cleanup-on-shutdown
 type: functional
-spec_id: run_01KK7R4Y3B77CAE5MQ8GM7S7SW
-created_by: agt_01KK7R4Y3C4YG0KKRD2WMYE2DX
+spec_id: run_01KK7SEJH6D58E9S9R87F3FWM1
+created_by: agt_01KK7SEJH73MEGYRXSXR203WXG
 ---
 
-Test: Portless domain mapping is cleaned up when dashboard shuts down.
-
-Setup:
-1. Portless is installed and active
-2. Dashboard is running with dark.localhost mapping
-
-Steps:
-1. Start dark dash with portless active
-2. Verify dark.localhost is mapped
-3. Send SIGINT (Ctrl+C) or call handle.stop()
-4. Check that portless mapping is removed
-
-Expected:
-- After shutdown, the portless mapping for dark.localhost should be deregistered/cleaned up
-- No orphaned mappings left behind
-- Graceful shutdown message appears in logs
-
-Pass criteria:
-- Portless cleanup function called during shutdown
-- No stale domain mappings persist after server stops
+Preconditions: portless is installed, dark dash is running with dark.localhost mapped. Steps: 1. Run 'dark dash' and verify dark.localhost is mapped. 2. Send SIGINT (Ctrl+C) to the process. 3. Verify portless mapping is cleaned up / deregistered on shutdown. 4. Verify dark.localhost no longer resolves after shutdown. 5. Verify server stop is called cleanly. Pass criteria: Graceful shutdown includes portless cleanup, no orphaned domain mappings remain.
