@@ -1,21 +1,25 @@
 ---
 name: cannot-edit-completed-spec
 type: functional
-spec_id: run_01KK6BYC9GJ9F5XNE49PW7SN3S
-created_by: agt_01KK6BYC9JZPT9DBGBS867HCTJ
+spec_id: run_01KK6D0A338WWPKA9YNGG3S1WB
+created_by: agt_01KK6D0A34XA7984X9D1YCNN6W
 ---
 
-Precondition: A spec exists with status 'completed' (has at least one run where all scenarios passed). Its id is known.
-
-Steps:
-1. GET /api/specs/:id — verify status is completed
-2. Send PUT /api/specs/:id with body: {"content": "<any modified content>"}
-3. Verify response status is 403 or 409 (not 200)
-4. Verify response body contains an error message indicating the spec is locked/immutable
-5. Read the file on disk and verify it has NOT been modified (content unchanged)
-6. In the dashboard HTML (GET /), verify the UI includes:
-   a. A 'Locked' badge or indicator on completed specs
-   b. Editor fields are non-editable (readonly/disabled attributes)
-   c. Explanation text about creating a new spec to make changes
-
-Pass criteria: PUT rejected with appropriate error. File unchanged. UI shows locked state.
+SCENARIO: Completed specs are read-only in the editor
+PRECONDITIONS: A spec exists that has at least one completed run (all scenarios passed). The spec status is 'completed' in the database.
+STEPS:
+1. Open dashboard
+2. Locate the completed spec in the sidebar (should be in 'completed' group)
+3. Click on the completed spec to open it in the main panel
+4. Verify a 'Locked' badge is visible on the spec
+5. Attempt to edit the markdown content in the editor
+6. Look for explanation text: 'This spec has a completed build. Create a new spec to make changes.'
+EXPECTED RESULTS:
+- The editor fields are non-editable (textarea disabled or contenteditable=false)
+- A 'Locked' badge is displayed prominently
+- Explanation text is visible explaining why the spec is locked
+- No Save button is active/visible for locked specs
+- The Build button is also disabled/hidden for completed specs
+- PUT /api/specs/:id returns an error (e.g., 403 or 409) if called for a completed spec
+PASS CRITERIA: Editor is visually and functionally read-only; Locked badge visible; explanation text present; API rejects updates
+EDGE CASE: A spec with only failed runs should remain editable (not locked)
