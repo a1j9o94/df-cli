@@ -2,7 +2,7 @@
 id: spec_01KJRK8CRMSZ8P2HPES7QSSJFJ
 title: "Merger agent resolves conflicts: sequential merge with agent-driven conflict resolution"
 type: bug
-status: draft
+status: completed
 version: 0.1.0
 priority: critical
 ---

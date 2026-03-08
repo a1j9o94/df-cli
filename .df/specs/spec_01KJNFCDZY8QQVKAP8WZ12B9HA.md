@@ -2,7 +2,7 @@
 id: spec_01KJNFCDZY8QQVKAP8WZ12B9HA
 title: Dashboard polls trigger cost estimation for running agents
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: medium
 ---

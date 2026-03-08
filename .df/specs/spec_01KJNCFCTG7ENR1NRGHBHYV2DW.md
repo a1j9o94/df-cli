@@ -2,7 +2,7 @@
 id: spec_01KJNCFCTG7ENR1NRGHBHYV2DW
 title: Configurable cost estimation defaults in config.yaml
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: medium
 ---

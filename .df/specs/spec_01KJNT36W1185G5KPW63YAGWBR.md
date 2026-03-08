@@ -2,7 +2,7 @@
 id: spec_01KJNT36W1185G5KPW63YAGWBR
 title: "Spec immutability: enforce new-spec-per-change workflow"
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: high
 ---

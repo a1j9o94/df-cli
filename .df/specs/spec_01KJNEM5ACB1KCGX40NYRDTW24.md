@@ -2,7 +2,7 @@
 id: spec_01KJNEM5ACB1KCGX40NYRDTW24
 title: Enforce cost tracking on every agent-to-system call
 type: bug
-status: draft
+status: completed
 version: 0.1.0
 priority: high
 ---

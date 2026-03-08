@@ -2,7 +2,7 @@
 id: spec_01KJNFCE66DE8MM1SH5NQF0GG8
 title: Redesign dashboard around the workplan — not agent details
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: high
 ---

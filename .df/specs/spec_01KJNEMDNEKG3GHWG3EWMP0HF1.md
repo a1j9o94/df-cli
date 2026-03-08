@@ -2,7 +2,7 @@
 id: spec_01KJNEMDNEKG3GHWG3EWMP0HF1
 title: Require holdout scenarios before build phase starts — even with skip-architect
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: high
 ---

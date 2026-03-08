@@ -2,7 +2,7 @@
 id: spec_01KJNFCE34GE17823DW184KR2A
 title: Add loading indicators to dashboard for active agents and phases
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: medium
 ---

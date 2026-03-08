@@ -2,7 +2,7 @@
 id: spec_01KJNGY44Y3T80K3TDXH1BVVDZ
 title: Fix modules API to show latest agent status, not first (stale) agent on continued runs
 type: bug
-status: draft
+status: completed
 version: 0.1.0
 priority: high
 ---

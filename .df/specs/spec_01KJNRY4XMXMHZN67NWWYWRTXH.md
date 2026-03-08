@@ -2,7 +2,7 @@
 id: spec_01KJNRY4XMXMHZN67NWWYWRTXH
 title: "Architect research: save and share references across agents"
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: high
 ---

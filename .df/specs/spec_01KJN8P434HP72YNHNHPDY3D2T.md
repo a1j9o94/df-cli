@@ -2,7 +2,7 @@
 id: spec_01KJN8P434HP72YNHNHPDY3D2T
 title: Implement dark continue command to resume failed or interrupted pipeline runs
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: medium
 ---
