@@ -1,37 +1,32 @@
 ---
 name: cross-repo-spec-build
 type: functional
-spec_id: run_01KJT1F6D5K21YTBJJ2QG4QY7E
-created_by: agt_01KJT1F6D7F50TK3PWRMAKQHN9
+spec_id: run_01KK7SEAH0J838RH3SWCBR48SQ
+created_by: agt_01KK7SEAH1RRSGYDNFYKMRG751
 ---
 
-# Cross-repo Spec Build
+## Test: Cross-repo Spec Build
 
-## Preconditions
-- Workspace initialized at /tmp/test-ws/ with frontend/ and backend/ as member projects
-- Both frontend/ and backend/ have dark init run (each has .df/)
+### Preconditions
+- Workspace initialized with frontend/ and backend/ projects
+- Each project has .df/ initialized independently
 - A workspace-level spec exists at .df-workspace/specs/ that describes:
-  - Adding a GET /api/users endpoint in backend
-  - Adding a UsersPage component in frontend that calls /api/users
+  - Backend: Add GET /api/items endpoint
+  - Frontend: Add ItemList component that calls GET /api/items
 
-## Steps
-1. Create a workspace spec referencing both projects
-2. Run: dark build <spec-id> from workspace root
-3. Observe the architect decomposition
-4. Observe builder worktree creation
+### Steps
+1. Run dark build <workspace-spec-id> from workspace root
+2. Wait for architect phase to complete
+3. Inspect the generated buildplan JSON
 
-## Expected Output
-1. Architect agent receives context from BOTH frontend/ and backend/ codebases
-2. Architect produces a buildplan where modules have targetProject field:
-   - At least one module has targetProject: 'backend'
-   - At least one module has targetProject: 'frontend'
-3. Builder for backend module gets a worktree created from backend/.git (not frontend/.git)
-4. Builder for frontend module gets a worktree created from frontend/.git (not backend/.git)
-5. Contracts can span projects (e.g., an API contract bound to both backend and frontend modules)
-6. The buildplan JSON stored in state.db contains modules with targetProject fields
+### Expected Output
+- Buildplan contains modules with targetProject field
+- At least one module has targetProject: 'backend'
+- At least one module has targetProject: 'frontend'
+- Backend builders get worktrees created inside backend/ repo (not frontend/)
+- Frontend builders get worktrees created inside frontend/ repo (not backend/)
+- Contracts between modules can span projects (e.g., API contract binding backend implementer and frontend consumer)
 
-## Pass Criteria
-- Buildplan modules have valid targetProject values matching config.yaml project names
-- Worktree paths are within the correct project directory
-- No worktree is created from the wrong project's repo
-- Build phase completes without errors related to project resolution
+### Pass/Fail
+- PASS: Buildplan has correct targetProject tags, worktrees are in correct repos, cross-project contracts exist
+- FAIL: Any module lacks targetProject, worktrees created in wrong repo, or contracts dont span projects
