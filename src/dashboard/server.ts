@@ -109,6 +109,49 @@ interface ModuleStatus {
   };
 }
 
+// --- Contract: LogEntry ---
+
+interface LogEntry {
+  timestamp: string;
+  method: string;
+  path: string;
+  status: number;
+  duration: number;
+}
+
+// --- Request Logging ---
+
+const MAX_LOG_ENTRIES = 100;
+const requestLog: LogEntry[] = [];
+
+/**
+ * Records a request into the in-memory log buffer (circular buffer, max 100 entries).
+ * Also calls console.log with JSON.stringify of the full entry.
+ */
+function logRequest(entry: { method: string; path: string; status: number; duration: number }): void {
+  const logEntry: LogEntry = {
+    timestamp: new Date().toISOString(),
+    method: entry.method,
+    path: entry.path,
+    status: entry.status,
+    duration: entry.duration,
+  };
+
+  requestLog.push(logEntry);
+
+  // Circular buffer: keep only the last MAX_LOG_ENTRIES
+  if (requestLog.length > MAX_LOG_ENTRIES) {
+    requestLog.splice(0, requestLog.length - MAX_LOG_ENTRIES);
+  }
+
+  console.log(JSON.stringify(logEntry));
+}
+
+/** Exported for testing: clear the request log */
+export function _clearRequestLog(): void {
+  requestLog.length = 0;
+}
+
 // --- Helpers ---
 
 function computeElapsed(createdAt: string, updatedAt?: string): string {
@@ -999,9 +1042,11 @@ async function route(
 ): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
+  const method = req.method;
+  const startTime = performance.now();
 
-  // CORS preflight
-  if (req.method === "OPTIONS") {
+  // CORS preflight (not logged)
+  if (method === "OPTIONS") {
     return new Response(null, {
       status: 204,
       headers: {
@@ -1012,6 +1057,33 @@ async function route(
     });
   }
 
+  // /api/logs endpoint - returns logged requests
+  if (path === "/api/logs" && method === "GET") {
+    const response = jsonResponse([...requestLog]);
+    const duration = Math.round((performance.now() - startTime) * 100) / 100;
+    logRequest({ method, path, status: response.status, duration });
+    return response;
+  }
+
+  // Route to handler
+  const response = await routeInner(db, req, path, method, getDashboardHtml, specsDir);
+
+  // Log the request
+  const duration = Math.round((performance.now() - startTime) * 100) / 100;
+  logRequest({ method, path, status: response.status, duration });
+
+  return response;
+}
+
+/** Inner routing logic (without logging wrapper) */
+async function routeInner(
+  db: InstanceType<typeof Database>,
+  req: Request,
+  path: string,
+  method: string,
+  getDashboardHtml: () => string,
+  specsDir?: string | null,
+): Promise<Response> {
   // Hello endpoint
   if (path === "/hello") {
     return jsonResponse({ message: "Hello, world!" });
@@ -1024,22 +1096,22 @@ async function route(
 
   // --- Spec API routes ---
 
-  if (path === "/api/specs" && req.method === "POST") {
+  if (path === "/api/specs" && method === "POST") {
     return handleCreateSpec(db, req, specsDir);
   }
 
-  if (path === "/api/specs" && req.method === "GET") {
+  if (path === "/api/specs" && method === "GET") {
     return handleListSpecs(db);
   }
 
-  if (path === "/api/builds" && req.method === "POST") {
+  if (path === "/api/builds" && method === "POST") {
     return handleCreateBuild(db, req);
   }
 
   const specMatch = path.match(/^\/api\/specs\/([^/]+)$/);
   if (specMatch) {
     const specId = specMatch[1];
-    if (req.method === "PUT") {
+    if (method === "PUT") {
       return handleUpdateSpec(db, specId, req);
     }
     return handleGetSpecDetail(db, specId);
@@ -1070,7 +1142,7 @@ async function route(
   // --- Blocker API routes (must be before generic runSubMatch) ---
 
   const blockerResolveMatch = path.match(/^\/api\/runs\/([^/]+)\/blockers\/([^/]+)\/resolve$/);
-  if (blockerResolveMatch && req.method === "POST") {
+  if (blockerResolveMatch && method === "POST") {
     const [, runId, blockerId] = blockerResolveMatch;
     return handleResolveBlocker(db, blockerId, req);
   }
