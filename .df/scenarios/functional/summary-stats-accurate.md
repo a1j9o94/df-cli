@@ -1,32 +1,26 @@
 ---
 name: summary-stats-accurate
 type: functional
-spec_id: run_01KJSYMVS0W36Y61PR2WNYBM7W
-created_by: agt_01KJSYMVS1M06HAVTY6C5FAXR2
+spec_id: run_01KK7SEAF66NVEXSWY52CHEZ2Q
+created_by: agt_01KK7SEAF8R2TQCK3AC2E5ZV0E
 ---
 
-## Summary stats bar accuracy
+Setup: Complete 3 specs this month:
+- Spec A: cost $5.00, 4/4 scenarios pass (100%)
+- Spec B: cost $8.00, 7/8 scenarios pass (87.5%)
+- Spec C: cost $12.00, 6/6 scenarios pass (100%)
+Have 2 specs currently building.
 
-### Preconditions
-- 3 specs completed this month with specific costs and pass rates
+Steps:
+1. Open the Timeline tab
+2. Inspect the Summary Stats Bar at the top
 
-### Setup Steps
-1. Complete spec A: cost=5.00, all 4 scenarios passed (4/4 = 100%)
-2. Complete spec B: cost=8.00, 7 of 8 scenarios passed (7/8 = 87.5%)
-3. Complete spec C: cost=12.00, all 6 scenarios passed (6/6 = 100%)
-4. All completed within the current calendar month
+Expected:
+- 'Specs completed this month' shows: 3
+- 'Total cost this month' shows: $25.00
+- 'Average scenario pass rate' shows: 95.8% (calculated as (4+7+6)/(4+8+6) = 17/18 = 94.4%) — OR weighted average: (100+87.5+100)/3 = 95.8%
+- 'Specs in progress' shows: 2
 
-### Test Steps
-1. GET /api/timeline
-2. Inspect the 'summary' object
+Note: The spec says 'average scenario pass rate' — verify whether it's per-scenario weighted (17/18=94.4%) or per-spec average ((100+87.5+100)/3=95.8%). The spec example says 95.8% for these numbers, implying per-spec average.
 
-### Expected Results
-- summary.completedThisMonth === 3
-- summary.totalCostThisMonth === 25.00 (5 + 8 + 12)
-- summary.avgPassRate is approximately 0.958 ((4/4 + 7/8 + 6/6) / 3 = (1.0 + 0.875 + 1.0) / 3 ≈ 0.9583)
-- summary.inProgressCount equals the number of currently running builds
-
-### Pass/Fail Criteria
-- PASS: All 4 summary stats are present and mathematically correct
-- FAIL: Missing fields, wrong counts, wrong cost sum, or incorrect average calculation
-- NOTE: Average pass rate should be the mean of per-spec pass rates, NOT total-passed / total-scenarios
+Pass criteria: All 4 summary stats are numerically accurate and visually displayed in a stats bar.
