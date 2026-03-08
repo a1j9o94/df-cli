@@ -115,9 +115,9 @@ describe("generateDashboardHtml - UI structure", () => {
     expect(html).toContain("Dark Factory");
   });
 
-  it("has a runs list section", () => {
+  it("has a specs list section (sidebar redesign)", () => {
     const html = generateDashboardHtml();
-    expect(html).toContain("runs-list");
+    expect(html).toContain("specs-list");
   });
 
   it("has a run detail section", () => {
