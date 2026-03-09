@@ -20,6 +20,8 @@ import { researchCommand } from "./commands/research/index.js";
 import { dashCommand } from "./commands/dash.js";
 import { blockersCommand } from "./commands/blockers.js";
 import { secretsCommand } from "./commands/secrets.js";
+import { workspaceCommand } from "./commands/workspace/index.js";
+import { projectsCommand } from "./commands/projects/index.js";
 
 program
   .name("dark")
@@ -98,5 +100,7 @@ program.addCommand(researchCommand);
 program.addCommand(dashCommand);
 program.addCommand(blockersCommand);
 program.addCommand(secretsCommand);
+program.addCommand(workspaceCommand);
+program.addCommand(projectsCommand);
 
 program.parse();

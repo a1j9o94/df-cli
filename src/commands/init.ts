@@ -5,6 +5,7 @@ import { stringify as yamlStringify } from "yaml";
 import { DEFAULT_CONFIG } from "../types/config.js";
 import { getDb, closeDb } from "../db/index.js";
 import { log } from "../utils/logger.js";
+import { registerProject } from "../utils/registry.js";
 
 const DEFAULT_PIPELINE = {
   name: "default-v2",
@@ -133,6 +134,13 @@ export const initCommand = new Command("init")
     const dbPath = join(dfDir, "state.db");
     getDb(dbPath);
     closeDb();
+
+    // Register project in global registry
+    registerProject({
+      name: projectName,
+      path: cwd,
+      type: "project",
+    });
 
     log.success(`Initialized Dark Factory project: ${projectName}`);
     log.info(`  ${dfDir}/config.yaml   — project configuration`);
