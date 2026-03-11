@@ -5,7 +5,7 @@ import type { SqliteDb } from "../db/index.js";
 import type { DfConfig } from "../types/index.js";
 import type { AgentRuntime } from "../runtime/interface.js";
 import { createEvent } from "../db/queries/events.js";
-import { getMergerPrompt } from "../agents/prompts/merger.js";
+import { getMergerPrompt, getConflictResolutionSystemPrompt } from "../agents/prompts/merger.js";
 import { findDfDir } from "../utils/config.js";
 import { acquireMergeLock, releaseMergeLock, waitForMergeLock, getMergeLockInfo } from "./merge-lock.js";
 import { mergeSingleBranch } from "./rebase-merge.js";
@@ -200,13 +200,17 @@ export async function executeMergePhase(
               await executeAgentPhaseFn(
                 runId,
                 "merger",
-                (agentId) => getMergerPrompt({
+                (agentId) => getConflictResolutionSystemPrompt({
                   runId,
                   agentId,
                   targetBranch,
-                  worktreePaths: [wtPath],
+                  headModuleName: lastMergedModule,
+                  incomingModuleName: currentModule,
+                  incomingBranch: mergeResult.branch,
+                  conflictedFileCount: conflictedFiles.length,
                 }),
                 {
+                  runId,
                   targetBranch,
                   headModuleName: lastMergedModule,
                   incomingModuleName: currentModule,
