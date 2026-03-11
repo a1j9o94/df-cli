@@ -62,7 +62,7 @@ describe("blocker end-to-end workflow", () => {
 
     // 2. User resolves via CLI
     const encKey = "test-key-32-bytes-padding-here!!";
-    const secretValue = "sk_test_4eC39HqLyjWDarjtT1zdp7dc";
+    const secretValue = "sk_test_fake_not_a_real_key_1234";
     const encrypted = encryptSecret(secretValue, encKey);
 
     resolveBlocker(db, blocker.id, encrypted, "user");
@@ -208,7 +208,7 @@ describe("blocker end-to-end workflow", () => {
   });
 
   test("maskSecret hides sensitive values", () => {
-    expect(maskSecret("sk_test_4eC39HqLyjWDarjtT1zdp7dc")).toBe("****************************p7dc");
+    expect(maskSecret("sk_test_fake_not_a_real_key_1234")).toBe("****************************1234");
     expect(maskSecret("short")).toBe("*hort");
     expect(maskSecret("abc")).toBe("***");
   });
