@@ -5,6 +5,7 @@ import { getDb } from "../../db/index.js";
 import { getAgentDetail } from "../../db/queries/agent-queries.js";
 import { formatAgentDetail } from "../../utils/format-agent-detail.js";
 import { formatJson, AGENT_DEFAULT_EXCLUDED_FIELDS } from "../../utils/format.js";
+import { getWorktreeFilesChanged } from "../../utils/worktree-files.js";
 import { log } from "../../utils/logger.js";
 
 export const agentShowCommand = new Command("show")
@@ -33,5 +34,6 @@ export const agentShowCommand = new Command("show")
       return;
     }
 
-    console.log(formatAgentDetail(detail));
+    const filesChanged = getWorktreeFilesChanged(detail.agent.worktree_path);
+    console.log(formatAgentDetail(detail, { filesChanged }));
   });

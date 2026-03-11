@@ -3,13 +3,26 @@ import { formatElapsed, formatRelativeTime } from "./time-format.js";
 import { computeElapsedMs } from "./agent-enrichment.js";
 
 /**
+ * Options for formatting agent detail output.
+ */
+export interface FormatAgentDetailOptions {
+  /** Number of files changed in the agent's worktree (from git status) */
+  filesChanged?: number;
+}
+
+/**
  * Format the full detail view for `dark agent show <id>`.
  * Shows all agent fields, recent events, and messages.
  */
-export function formatAgentDetail(detail: AgentDetailResult): string {
+export function formatAgentDetail(detail: AgentDetailResult, options: FormatAgentDetailOptions = {}): string {
   const { agent, events, messages } = detail;
 
   const elapsed = computeElapsedMs(agent.created_at, agent.status) || agent.total_active_ms;
+
+  // Format files changed: show count if provided, "-" if not available
+  const filesDisplay = options.filesChanged !== undefined
+    ? (options.filesChanged === 1 ? "1 file" : `${options.filesChanged} files`)
+    : "-";
 
   const lines: string[] = [
     `Agent: ${agent.id}`,
@@ -25,6 +38,7 @@ export function formatAgentDetail(detail: AgentDetailResult): string {
     `  Heartbeat:     ${formatRelativeTime(agent.last_heartbeat)}`,
     `  Cost:          $${agent.cost_usd.toFixed(2)}`,
     `  Tokens:        ${agent.tokens_used.toLocaleString()}`,
+    `  Files:         ${filesDisplay}`,
     `  TDD Phase:     ${agent.tdd_phase ?? "none"}`,
     `  TDD Cycles:    ${agent.tdd_cycles}`,
     `  Created:       ${agent.created_at}`,
