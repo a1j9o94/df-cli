@@ -265,6 +265,7 @@ function buildBuilderBody(agentId: string, runId: string, context: Record<string
   const moduleId = context.moduleId as string;
   const worktreePath = context.worktreePath as string;
   const contracts = context.contracts as string[] | undefined;
+  const targetProject = context.targetProject as string | undefined;
   const scope = context.scope as
     | { creates?: string[]; modifies?: string[]; test_files?: string[] }
     | undefined;
@@ -289,6 +290,7 @@ function buildBuilderBody(agentId: string, runId: string, context: Record<string
     "# Builder Instructions",
     "",
     `## Module: ${moduleId}`,
+    targetProject ? `## Target Project: ${targetProject}` : "",
     `## Worktree: ${worktreePath}`,
     scope ? `## Scope:` : "",
     scope?.creates?.length ? `- Creates: ${scope.creates.join(", ")}` : "",
@@ -352,6 +354,20 @@ function buildEvaluatorBody(agentId: string, runId: string): string {
 }
 
 function buildMergerBody(agentId: string, context: Record<string, unknown>): string {
+  // If conflict context is present, use the conflict resolution prompt instead
+  const conflictedFiles = context.conflictedFiles as ConflictedFile[] | undefined;
+  if (conflictedFiles?.length) {
+    return buildConflictResolutionPrompt({
+      agentId,
+      runId: (context.runId as string) ?? "unknown",
+      targetBranch: (context.targetBranch as string) ?? "main",
+      headModuleName: (context.headModuleName as string) ?? "unknown",
+      incomingModuleName: (context.incomingModuleName as string) ?? "unknown",
+      incomingBranch: (context.incomingBranch as string) ?? "unknown",
+      conflictedFiles,
+    });
+  }
+
   const worktreePaths = context.worktreePaths as string[] | undefined;
   return [
     "# Merger Instructions",

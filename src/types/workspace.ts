@@ -1,3 +1,10 @@
+/**
+ * Workspace types for multi-repo coordination.
+ *
+ * These types are defined by the Workspace Types Contract (ctr_01KK7SWX5ZZS886BHQDH1R4AMV).
+ * The workspace-foundation module is the implementer; this module consumes them.
+ */
+
 import type { ModuleDefinition } from "./buildplan.js";
 
 export interface WorkspaceConfig {

@@ -10,6 +10,8 @@ export interface ModuleDefinition {
   estimated_complexity: "low" | "medium" | "high";
   estimated_tokens: number;
   estimated_duration_min: number;
+  /** For workspace builds: which project this module targets. */
+  targetProject?: string;
 }
 
 export interface ContractDefinition {
