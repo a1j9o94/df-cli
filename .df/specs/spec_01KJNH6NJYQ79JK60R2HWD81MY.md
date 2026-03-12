@@ -2,7 +2,7 @@
 id: spec_01KJNH6NJYQ79JK60R2HWD81MY
 title: "Add dark pause and dark resume: graceful stop and restart of running builds with worktree preservation"
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: high
 ---

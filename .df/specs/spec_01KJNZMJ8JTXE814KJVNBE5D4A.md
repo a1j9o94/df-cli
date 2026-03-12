@@ -2,7 +2,7 @@
 id: spec_01KJNZMJ8JTXE814KJVNBE5D4A
 title: "Agent blocker requests: agents can pause runs to request resources from the user"
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: medium
 depends_on:

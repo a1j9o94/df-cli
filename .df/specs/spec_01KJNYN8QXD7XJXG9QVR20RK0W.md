@@ -3,7 +3,7 @@ id: spec_01KJNYN8QXD7XJXG9QVR20RK0W
 title: "Budget auto-pause: pause runs at budget limit instead of failing, with
   notification and easy resume"
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: high
 depends_on:

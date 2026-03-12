@@ -2,7 +2,7 @@
 id: spec_01KJNRXFRKNCFDEAK910N09EPZ
 title: "Multi-repo workspace: coordinate builds across frontend/backend repositories"
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: high
 depends_on:

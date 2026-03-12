@@ -2,7 +2,7 @@
 id: spec_01KJNXCXHZERBM2C31QW0R0ZZC
 title: "Fix JSON output: sanitize control characters in --json commands"
 type: bug
-status: draft
+status: completed
 version: 0.1.0
 priority: high
 ---

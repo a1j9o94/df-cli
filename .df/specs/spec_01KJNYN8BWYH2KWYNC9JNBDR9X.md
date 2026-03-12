@@ -2,7 +2,7 @@
 id: spec_01KJNYN8BWYH2KWYNC9JNBDR9X
 title: "Dashboard spec editor: create and edit specs directly from the dashboard UI"
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: medium
 depends_on:

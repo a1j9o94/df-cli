@@ -2,7 +2,7 @@
 id: spec_01KJNYN8MY2T9AAX77K9CF9EVM
 title: "Spec from GitHub issue: generate draft specs from issue URLs"
 type: feature
-status: draft
+status: completed
 version: 0.1.0
 priority: medium
 ---

@@ -2,7 +2,7 @@
 id: spec_01KJPFF3QAVT63HQXFXQPM1QFP
 title: "Break up engine.ts: extract build-phase, instructions, merge-phase, agent-lifecycle"
 type: refactor
-status: draft
+status: completed
 version: 0.1.0
 priority: critical
 ---

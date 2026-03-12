@@ -2,7 +2,7 @@
 id: spec_01KJP0AVEW4R46N7SWRMHVWBHH
 title: "Enrich CLI output: never need raw sqlite"
 type: bug
-status: draft
+status: completed
 version: 0.1.0
 priority: high
 depends_on:
