@@ -62,6 +62,8 @@ export interface DfConfig {
     heartbeat_interval_ms: number;
     heartbeat_timeout_ms: number;
     max_agent_lifetime_ms: number;
+    /** Consecutive stale detections before killing an agent. Default: 3 */
+    stale_agent_max_strikes: number;
   };
   thresholds: {
     satisfaction: number;
@@ -93,6 +95,7 @@ export const DEFAULT_CONFIG: DfConfig = {
     heartbeat_interval_ms: 30_000,
     heartbeat_timeout_ms: 90_000,
     max_agent_lifetime_ms: 2_700_000,
+    stale_agent_max_strikes: 3,
   },
   thresholds: {
     satisfaction: 0.8,
