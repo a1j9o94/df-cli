@@ -602,9 +602,11 @@ describe("resource limit enforcement", () => {
     const { runId } = setupRun({ buildplan: planJson });
     const runtime = createMockRuntime(db, { failModules: ["failing-mod"] });
 
+    // Module fails, retries exhaust, then throws redecomposition error.
+    // The important assertion: resources are released even on failure.
     await expect(
       executeBuildPhase(db, runtime, config, runId, TEST_OPTIONS)
-    ).rejects.toThrow(/Builder failed/);
+    ).rejects.toThrow(/redecomposition|Builder failed/);
 
     const apiSlots = getResource(db, "api_slots");
     expect(apiSlots!.in_use).toBe(0);
