@@ -6,7 +6,7 @@ export type RunStatus =
   | "failed"
   | "cancelled";
 
-export type PauseReason = "budget_exceeded" | "manual" | "blocked";
+export type PauseReason = "budget_exceeded" | "manual" | "blocked" | "plan_review";
 
 export interface RunRecord {
   id: string;

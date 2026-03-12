@@ -11,7 +11,7 @@ export const BUDGET_WARNING_THRESHOLD = 0.8;
 /** Budget pause threshold: 100% of budget */
 export const BUDGET_PAUSE_THRESHOLD = 1.0;
 
-export type PauseReason = "budget_exceeded" | "manual";
+export type PauseReason = "budget_exceeded" | "manual" | "plan_review";
 
 export interface AgentPauseState {
   agent_id: string;
