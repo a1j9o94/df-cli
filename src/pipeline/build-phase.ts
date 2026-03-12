@@ -20,7 +20,7 @@ import { getActiveBuildplan } from "../db/queries/buildplans.js";
 import { createEvent } from "../db/queries/events.js";
 import { ensureResource, acquireResource, releaseResource } from "../db/queries/resources.js";
 import { createMessage } from "../db/queries/messages.js";
-import { listContracts, createBinding, createDependency, satisfyDependency } from "../db/queries/contracts.js";
+import { listContracts, createBinding, createDependency, satisfyDependency, getUnacknowledgedBindings } from "../db/queries/contracts.js";
 import { updateAgentPid } from "../db/queries/agents.js";
 import { getReadyModules } from "./scheduler.js";
 import { checkBudget, recordCost } from "./budget.js";
@@ -37,10 +37,15 @@ import type { WorkspaceConfig, CrossRepoModule } from "../types/workspace.js";
 /** Default poll interval (5s). Can be overridden via options for testing. */
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 
+/** Default timeout for contract acknowledgment (60s). */
+const DEFAULT_CONTRACT_ACK_TIMEOUT_MS = 60_000;
+
 /** Options for build phase execution. */
 export interface BuildPhaseOptions {
   /** Override poll interval (ms). Useful for testing. */
   pollIntervalMs?: number;
+  /** Timeout (ms) for builders to acknowledge their contracts. Default 60s. */
+  contractAckTimeoutMs?: number;
   /** Workspace configuration for cross-repo builds. When set, modules with
    *  targetProject will create worktrees from the corresponding project repo. */
   workspaceConfig?: WorkspaceConfig;
@@ -214,9 +219,10 @@ export async function executeBuildPhase(
   const plan: Buildplan = JSON.parse(bp.plan);
   const completedModules = new Set<string>();
 
-  const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null; acquiredWorktree: boolean }>();
+  const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null; acquiredWorktree: boolean; spawnedAt: number }>();
   const staleStrikes = new Map<string, number>();
   const workspaceConfig = options?.workspaceConfig;
+  const contractAckTimeoutMs = options?.contractAckTimeoutMs ?? DEFAULT_CONTRACT_ACK_TIMEOUT_MS;
 
   // Resolve project root for worktree creation
   const dfDir = findDfDir();
@@ -362,7 +368,7 @@ export async function executeBuildPhase(
       });
 
       updateAgentPid(db, agent.id, handle.pid);
-      activeBuilders.set(agent.id, { moduleId, worktreePath, acquiredWorktree });
+      activeBuilders.set(agent.id, { moduleId, worktreePath, acquiredWorktree, spawnedAt: Date.now() });
       console.log(`[dark] Builder "${moduleId}" spawned (PID ${handle.pid})`);
     }
 
@@ -373,7 +379,37 @@ export async function executeBuildPhase(
       const agentRecord = getAgent(db, agentId);
       if (!agentRecord) continue;
 
+      // Check contract acknowledgment timeout
+      const unacked = getUnacknowledgedBindings(db, agentId);
+      if (unacked.length > 0 && Date.now() - info.spawnedAt > contractAckTimeoutMs) {
+        const contractNames = unacked.map((b) => b.contract_id).join(", ");
+        const errorMsg = `Contract acknowledgment timeout: builder "${info.moduleId}" did not acknowledge contracts [${contractNames}] within ${contractAckTimeoutMs}ms`;
+        updateAgentStatus(db, agentId, "failed", errorMsg);
+        activeBuilders.delete(agentId);
+        await runtime.kill(agentId);
+        createEvent(db, runId, "agent-failed", {
+          moduleId: info.moduleId,
+          error: errorMsg,
+        }, agentId);
+        log.error(errorMsg);
+        throw new Error(errorMsg);
+      }
+
       if (agentRecord.status === "completed") {
+        // Verify all contracts acknowledged before accepting completion
+        if (unacked.length > 0) {
+          const contractNames = unacked.map((b) => b.contract_id).join(", ");
+          const errorMsg = `Builder "${info.moduleId}" completed without acknowledging contracts [${contractNames}]`;
+          updateAgentStatus(db, agentId, "failed", errorMsg);
+          activeBuilders.delete(agentId);
+          createEvent(db, runId, "agent-failed", {
+            moduleId: info.moduleId,
+            error: errorMsg,
+          }, agentId);
+          log.error(errorMsg);
+          throw new Error(errorMsg);
+        }
+
         completedModules.add(info.moduleId);
         activeBuilders.delete(agentId);
         releaseResource(db, "api_slots");
@@ -610,9 +646,10 @@ export async function executeResumeBuildPhase(
   // Start with previously completed modules pre-populated
   const completedModules = new Set<string>(previouslyCompletedModules);
 
-  const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null; acquiredWorktree: boolean }>();
+  const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null; acquiredWorktree: boolean; spawnedAt: number }>();
   const staleStrikes = new Map<string, number>();
   const workspaceConfig = options?.workspaceConfig;
+  const contractAckTimeoutMs = options?.contractAckTimeoutMs ?? DEFAULT_CONTRACT_ACK_TIMEOUT_MS;
 
   log.info(`Resuming build: ${completedModules.size} modules already completed, ${plan.modules.length - completedModules.size} remaining`);
 
@@ -757,7 +794,7 @@ export async function executeResumeBuildPhase(
       });
 
       updateAgentPid(db, agent.id, handle.pid);
-      activeBuilders.set(agent.id, { moduleId, worktreePath, acquiredWorktree });
+      activeBuilders.set(agent.id, { moduleId, worktreePath, acquiredWorktree, spawnedAt: Date.now() });
       console.log(`[dark] Builder "${moduleId}" spawned (PID ${handle.pid})`);
     }
 
@@ -768,7 +805,37 @@ export async function executeResumeBuildPhase(
       const agentRecord = getAgent(db, agentId);
       if (!agentRecord) continue;
 
+      // Check contract acknowledgment timeout
+      const unacked = getUnacknowledgedBindings(db, agentId);
+      if (unacked.length > 0 && Date.now() - info.spawnedAt > contractAckTimeoutMs) {
+        const contractNames = unacked.map((b) => b.contract_id).join(", ");
+        const errorMsg = `Contract acknowledgment timeout: builder "${info.moduleId}" did not acknowledge contracts [${contractNames}] within ${contractAckTimeoutMs}ms`;
+        updateAgentStatus(db, agentId, "failed", errorMsg);
+        activeBuilders.delete(agentId);
+        await runtime.kill(agentId);
+        createEvent(db, runId, "agent-failed", {
+          moduleId: info.moduleId,
+          error: errorMsg,
+        }, agentId);
+        log.error(errorMsg);
+        throw new Error(errorMsg);
+      }
+
       if (agentRecord.status === "completed") {
+        // Verify all contracts acknowledged before accepting completion
+        if (unacked.length > 0) {
+          const contractNames = unacked.map((b) => b.contract_id).join(", ");
+          const errorMsg = `Builder "${info.moduleId}" completed without acknowledging contracts [${contractNames}]`;
+          updateAgentStatus(db, agentId, "failed", errorMsg);
+          activeBuilders.delete(agentId);
+          createEvent(db, runId, "agent-failed", {
+            moduleId: info.moduleId,
+            error: errorMsg,
+          }, agentId);
+          log.error(errorMsg);
+          throw new Error(errorMsg);
+        }
+
         completedModules.add(info.moduleId);
         activeBuilders.delete(agentId);
         releaseResource(db, "api_slots");
