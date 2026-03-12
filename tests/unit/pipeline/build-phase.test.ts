@@ -68,6 +68,59 @@ function createMockRuntime(db: SqliteDb, opts?: { failModules?: string[] }): Age
 }
 
 /**
+ * Create a mock runtime where specific modules fail N times before succeeding.
+ * failUntilAttempt: { "module-a": 2 } means module-a fails attempts 1 and 2, succeeds on attempt 3.
+ */
+function createRetryMockRuntime(db: SqliteDb, opts: { failUntilAttempt: Record<string, number> }): AgentRuntime {
+  let pidCounter = 2000;
+  const handles: AgentHandle[] = [];
+  const attemptCounts = new Map<string, number>();
+
+  return {
+    async spawn(spawnConfig: AgentSpawnConfig): Promise<AgentHandle> {
+      const pid = pidCounter++;
+      const handle: AgentHandle = {
+        id: spawnConfig.agent_id,
+        pid,
+        role: spawnConfig.role,
+        kill: async () => {},
+      };
+      handles.push(handle);
+
+      const moduleId = spawnConfig.module_id;
+      setTimeout(() => {
+        if (moduleId && opts.failUntilAttempt[moduleId] !== undefined) {
+          const count = (attemptCounts.get(moduleId) ?? 0) + 1;
+          attemptCounts.set(moduleId, count);
+          if (count <= opts.failUntilAttempt[moduleId]) {
+            updateAgentStatus(db, spawnConfig.agent_id, "failed", `Build failed for ${moduleId} (attempt ${count})`);
+          } else {
+            updateAgentStatus(db, spawnConfig.agent_id, "completed");
+          }
+        } else {
+          updateAgentStatus(db, spawnConfig.agent_id, "completed");
+        }
+      }, 20);
+
+      return handle;
+    },
+    async send() {},
+    async kill() {},
+    async status(agentId: string): Promise<"running" | "stopped" | "unknown"> {
+      const agent = db.prepare("SELECT status FROM agents WHERE id = ?").get(agentId) as { status: string } | undefined;
+      if (!agent) return "unknown";
+      return agent.status === "completed" || agent.status === "failed" ? "stopped" : "running";
+    },
+    async listActive(): Promise<AgentHandle[]> {
+      return handles.filter((h) => {
+        const agent = db.prepare("SELECT status FROM agents WHERE id = ?").get(h.id) as { status: string } | undefined;
+        return agent?.status === "running" || agent?.status === "pending" || agent?.status === "spawning";
+      });
+    },
+  };
+}
+
+/**
  * Create a minimal buildplan JSON with the given modules and dependencies.
  */
 function makeBuildplanJson(modules: { id: string; title?: string }[], dependencies: { from: string; to: string }[] = []): string {
@@ -231,14 +284,109 @@ describe("executeBuildPhase", () => {
     expect(messages[0].from_agent_id).toBe("orchestrator");
   });
 
-  test("throws on builder failure", async () => {
+  test("retries failed module then throws redecompose after exhausting retries", async () => {
     const planJson = makeBuildplanJson([{ id: "failing-mod" }]);
     const { runId } = setupRun({ buildplan: planJson });
     const runtime = createMockRuntime(db, { failModules: ["failing-mod"] });
 
     await expect(
       executeBuildPhase(db, runtime, config, runId, TEST_OPTIONS)
-    ).rejects.toThrow(/Builder failed for module "failing-mod"/);
+    ).rejects.toThrow(/Module "failing-mod" needs redecomposition after 2 failed attempts/);
+
+    // Should have spawned 2 builders (1 original + 1 retry) before giving up
+    const agents = db.prepare(
+      "SELECT * FROM agents WHERE run_id = ? AND role = 'builder' AND module_id = 'failing-mod'"
+    ).all(runId) as { id: string; status: string }[];
+    expect(agents.length).toBe(2);
+    expect(agents.every((a) => a.status === "failed")).toBe(true);
+
+    // Should have created module-retry and module-redecompose-needed events
+    const retryEvents = db.prepare(
+      "SELECT * FROM events WHERE run_id = ? AND type = 'module-retry'"
+    ).all(runId) as { data: string }[];
+    expect(retryEvents.length).toBe(1);
+
+    const redecomposeEvents = db.prepare(
+      "SELECT * FROM events WHERE run_id = ? AND type = 'module-redecompose-needed'"
+    ).all(runId) as { data: string }[];
+    expect(redecomposeEvents.length).toBe(1);
+    const redecomposeData = JSON.parse(redecomposeEvents[0].data);
+    expect(redecomposeData.moduleId).toBe("failing-mod");
+    expect(redecomposeData.attempts).toBe(2);
+  });
+
+  test("succeeds when module fails once then succeeds on retry", async () => {
+    const planJson = makeBuildplanJson([{ id: "flaky-mod" }]);
+    const { runId } = setupRun({ buildplan: planJson });
+    // Fail once, then succeed
+    const runtime = createRetryMockRuntime(db, { failUntilAttempt: { "flaky-mod": 1 } });
+
+    await executeBuildPhase(db, runtime, config, runId, TEST_OPTIONS);
+
+    const agents = db.prepare(
+      "SELECT * FROM agents WHERE run_id = ? AND role = 'builder' AND module_id = 'flaky-mod' ORDER BY created_at"
+    ).all(runId) as { id: string; status: string }[];
+
+    // First attempt failed, second succeeded
+    expect(agents.length).toBe(2);
+    expect(agents[0].status).toBe("failed");
+    expect(agents[1].status).toBe("completed");
+
+    // module-retry event should exist
+    const retryEvents = db.prepare(
+      "SELECT * FROM events WHERE run_id = ? AND type = 'module-retry'"
+    ).all(runId) as { data: string }[];
+    expect(retryEvents.length).toBe(1);
+  });
+
+  test("throws immediately on failure when max_module_retries is 0", async () => {
+    config = { ...DEFAULT_CONFIG, build: { ...DEFAULT_CONFIG.build, max_module_retries: 0 } };
+    const planJson = makeBuildplanJson([{ id: "no-retry-mod" }]);
+    const { runId } = setupRun({ buildplan: planJson });
+    const runtime = createMockRuntime(db, { failModules: ["no-retry-mod"] });
+
+    // With 0 retries, first failure triggers redecompose immediately
+    await expect(
+      executeBuildPhase(db, runtime, config, runId, TEST_OPTIONS)
+    ).rejects.toThrow(/Module "no-retry-mod" needs redecomposition after 1 failed attempt/);
+
+    // Only one builder should have been spawned
+    const agents = db.prepare(
+      "SELECT * FROM agents WHERE run_id = ? AND role = 'builder'"
+    ).all(runId) as { id: string }[];
+    expect(agents.length).toBe(1);
+
+    // No retry events, just redecompose
+    const retryEvents = db.prepare(
+      "SELECT * FROM events WHERE run_id = ? AND type = 'module-retry'"
+    ).all(runId) as { data: string }[];
+    expect(retryEvents.length).toBe(0);
+  });
+
+  test("other modules continue building while one module retries", async () => {
+    const planJson = makeBuildplanJson([
+      { id: "good-mod" },
+      { id: "flaky-mod" },
+    ]);
+    const { runId } = setupRun({ buildplan: planJson });
+    // flaky-mod fails once then succeeds; good-mod always succeeds
+    const runtime = createRetryMockRuntime(db, { failUntilAttempt: { "flaky-mod": 1 } });
+
+    await executeBuildPhase(db, runtime, config, runId, TEST_OPTIONS);
+
+    const agents = db.prepare(
+      "SELECT * FROM agents WHERE run_id = ? AND role = 'builder' ORDER BY created_at"
+    ).all(runId) as { id: string; status: string; module_id: string | null }[];
+
+    // good-mod: 1 successful builder. flaky-mod: 1 failed + 1 successful
+    const goodAgents = agents.filter((a) => a.module_id === "good-mod");
+    const flakyAgents = agents.filter((a) => a.module_id === "flaky-mod");
+
+    expect(goodAgents.length).toBe(1);
+    expect(goodAgents[0].status).toBe("completed");
+    expect(flakyAgents.length).toBe(2);
+    expect(flakyAgents.filter((a) => a.status === "completed").length).toBe(1);
+    expect(flakyAgents.filter((a) => a.status === "failed").length).toBe(1);
   });
 });
 
@@ -328,6 +476,22 @@ describe("executeResumeBuildPhase", () => {
     const moduleIds = agents.map((a) => a.module_id);
     expect(moduleIds).toEqual(["module-b", "module-c"]);
   }, 15_000);
+
+  test("retries failed module in resume mode", async () => {
+    const planJson = makeBuildplanJson([{ id: "resume-flaky" }]);
+    const { runId } = setupRun({ buildplan: planJson });
+    const runtime = createRetryMockRuntime(db, { failUntilAttempt: { "resume-flaky": 1 } });
+
+    await executeResumeBuildPhase(db, runtime, config, runId, new Set(), TEST_OPTIONS);
+
+    const agents = db.prepare(
+      "SELECT * FROM agents WHERE run_id = ? AND role = 'builder' AND module_id = 'resume-flaky' ORDER BY created_at"
+    ).all(runId) as { id: string; status: string }[];
+
+    expect(agents.length).toBe(2);
+    expect(agents[0].status).toBe("failed");
+    expect(agents[1].status).toBe("completed");
+  });
 });
 
 // ---------------------------------------------------------------------------
