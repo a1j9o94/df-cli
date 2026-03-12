@@ -58,12 +58,14 @@ const DEFAULT_PIPELINE = {
           "all quality commands passing on composed code",
         ],
       },
+      on_fail: { action: "retry", next: "build" },
     },
     {
       id: "evaluate-functional",
       agent: "evaluator",
       description: "Run functional holdout scenarios against integrated code.",
       gate: { type: "threshold", metric: "satisfaction", threshold: "config.thresholds.satisfaction" },
+      on_fail: { action: "retry", next: "build" },
     },
     {
       id: "evaluate-change",
@@ -71,6 +73,7 @@ const DEFAULT_PIPELINE = {
       description: "Run change holdout scenarios.",
       skip_when: "run.skip_change_eval == true",
       gate: { type: "threshold", metric: "changeability", threshold: "config.thresholds.changeability" },
+      on_fail: { action: "retry", next: "build" },
     },
     {
       id: "merge",
