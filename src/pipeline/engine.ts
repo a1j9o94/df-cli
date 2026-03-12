@@ -6,8 +6,8 @@ import { getSpec, updateSpecStatus, updateSpecHash } from "../db/queries/specs.j
 import { getActiveAgents } from "../db/queries/agents.js";
 import { getActiveBuildplan } from "../db/queries/buildplans.js";
 import { createEvent, listEvents } from "../db/queries/events.js";
-import { getNextPhase, shouldSkipPhase, PHASE_ORDER } from "./phases.js";
-import type { PhaseName } from "./phases.js";
+import { getNextPhase, shouldSkipPhase, PHASE_ORDER, getPhaseDefinitions, getPhaseDefinition } from "./phases.js";
+import type { PhaseName, PhaseDefinition } from "./phases.js";
 import { getResumePoint, getCompletedModules } from "./resume.js";
 import type { ResumeOptions } from "./resume.js";
 import { checkBudget } from "./budget.js";
@@ -25,9 +25,6 @@ import { sendInstructions as sendInstructionsFn } from "./instructions.js";
 import { executeBuildPhase, executeResumeBuildPhase } from "./build-phase.js";
 import { executeMergePhase } from "./merge-phase.js";
 import { preBuildValidation, updateSpecStatusChecked, computeContentHash } from "./build-guards.js";
-
-/** Phases whose failures trigger retry-from-build (respecting max_iterations). */
-const RETRYABLE_PHASES: ReadonlySet<string> = new Set(["build", "integrate"]);
 
 export class PipelineEngine {
   constructor(
@@ -85,6 +82,9 @@ export class PipelineEngine {
     log.info(`Pipeline started: ${run.id} for spec ${specId}`);
     console.log(`[dark] Pipeline orchestrating agents for spec ${specId}. Do NOT write code yourself — agents handle implementation.`);
 
+    // Load declarative phase definitions from pipeline.yaml
+    const phaseDefinitions = getPhaseDefinitions() ?? undefined;
+
     const context: Record<string, unknown> = {
       skip_architect: options?.skipArchitect ?? false,
       skip_change_eval: skipChangeEval,
@@ -92,11 +92,9 @@ export class PipelineEngine {
     };
 
     try {
-      // Walk through phases (use index so we can jump back on retry)
-      const buildIdx = PHASE_ORDER.indexOf("build");
-      for (let i = 0; i < PHASE_ORDER.length; i++) {
-        const phaseName = PHASE_ORDER[i];
-        if (shouldSkipPhase(phaseName, context)) {
+      // Walk through phases
+      for (const phaseName of PHASE_ORDER) {
+        if (shouldSkipPhase(phaseName, context, phaseDefinitions)) {
           log.info(`Skipping phase: ${phaseName}`);
           continue;
         }
@@ -105,21 +103,29 @@ export class PipelineEngine {
         createEvent(this.db, run.id, "phase-started", { phase: phaseName });
         log.info(`Phase: ${phaseName}`);
 
-        if (RETRYABLE_PHASES.has(phaseName)) {
-          try {
-            await this.executePhase(run.id, phaseName, context);
-          } catch (phaseErr) {
-            const phaseError = phaseErr instanceof Error ? phaseErr.message : String(phaseErr);
-            const retrying = await this.handlePhaseFailure(run.id, phaseName, phaseError);
-            if (retrying) {
-              i = buildIdx - 1; // loop will increment to buildIdx
-              continue;
+        const phaseDef = phaseDefinitions ? getPhaseDefinition(phaseName, phaseDefinitions) : undefined;
+
+        try {
+          await this.executePhaseWithTimeout(run.id, phaseName, context, phaseDef);
+        } catch (phaseErr) {
+          // Check on_fail from phase definition
+          if (phaseDef?.on_fail?.action === "retry") {
+            const retryTarget = (phaseDef.on_fail.next ?? "build") as PhaseName;
+            await this.handlePhaseFailure(run.id, phaseName, phaseErr instanceof Error ? phaseErr.message : String(phaseErr));
+            // If handlePhaseFailure didn't throw (i.e. iteration limit not reached), re-enter from retry target
+            const retryRun = getRun(this.db, run.id);
+            if (retryRun && retryRun.status === "running") {
+              createEvent(this.db, run.id, "phase-retry", { phase: phaseName, retryFrom: retryTarget });
+              // Restart the phase loop from the retry target
+              await this.executeFromPhase(run.id, retryTarget, context, specId, phaseDefinitions);
+              // executeFromPhase handles completion — return immediately
+              return run.id;
             }
-            // Max iterations reached — handlePhaseFailure already marked run failed
+            // If run is no longer running (failed due to max iterations), fall through to outer catch
             return run.id;
           }
-        } else {
-          await this.executePhase(run.id, phaseName, context);
+          // No on_fail retry → propagate to outer catch (fail the run)
+          throw phaseErr;
         }
 
         createEvent(this.db, run.id, "phase-completed", { phase: phaseName });
@@ -259,6 +265,9 @@ export class PipelineEngine {
     // Get completed modules from previous attempts (for build phase optimization)
     const previouslyCompletedModules = getCompletedModules(this.db, runId);
 
+    // Load declarative phase definitions from pipeline.yaml
+    const phaseDefinitions = getPhaseDefinitions() ?? undefined;
+
     const context: Record<string, unknown> = {
       skip_architect: false,
       skip_change_eval: run.skip_change_eval,
@@ -282,14 +291,12 @@ export class PipelineEngine {
       throw new Error(`Invalid resume phase: ${resumePhase}`);
     }
 
-    const buildIdx = PHASE_ORDER.indexOf("build");
-
     try {
       // Walk through phases starting from resume point
       for (let i = startIdx; i < PHASE_ORDER.length; i++) {
         const phaseName = PHASE_ORDER[i];
 
-        if (shouldSkipPhase(phaseName, context)) {
+        if (shouldSkipPhase(phaseName, context, phaseDefinitions)) {
           log.info(`Skipping phase: ${phaseName}`);
           continue;
         }
@@ -298,24 +305,31 @@ export class PipelineEngine {
         createEvent(this.db, runId, "phase-started", { phase: phaseName });
         log.info(`Phase: ${phaseName}`);
 
-        if (RETRYABLE_PHASES.has(phaseName)) {
-          try {
-            if (phaseName === "build" && previouslyCompletedModules.size > 0) {
-              await executeResumeBuildPhase(this.db, this.runtime, this.config, runId, previouslyCompletedModules);
-            } else {
-              await this.executePhase(runId, phaseName, context);
-            }
-          } catch (phaseErr) {
-            const phaseError = phaseErr instanceof Error ? phaseErr.message : String(phaseErr);
-            const retrying = await this.handlePhaseFailure(runId, phaseName, phaseError);
-            if (retrying) {
-              i = buildIdx - 1; // loop will increment to buildIdx
-              continue;
+        const phaseDef = phaseDefinitions ? getPhaseDefinition(phaseName, phaseDefinitions) : undefined;
+
+        try {
+          if (phaseName === "build" && previouslyCompletedModules.size > 0) {
+            await this.executeWithTimeout(
+              () => executeResumeBuildPhase(this.db, this.runtime, this.config, runId, previouslyCompletedModules),
+              phaseDef?.timeout_min,
+              phaseName,
+            );
+          } else {
+            await this.executePhaseWithTimeout(runId, phaseName, context, phaseDef);
+          }
+        } catch (phaseErr) {
+          if (phaseDef?.on_fail?.action === "retry") {
+            await this.handlePhaseFailure(runId, phaseName, phaseErr instanceof Error ? phaseErr.message : String(phaseErr));
+            const retryRun = getRun(this.db, runId);
+            if (retryRun && retryRun.status === "running") {
+              const retryTarget = (phaseDef.on_fail.next ?? "build") as PhaseName;
+              createEvent(this.db, runId, "phase-retry", { phase: phaseName, retryFrom: retryTarget });
+              await this.executeFromPhase(runId, retryTarget, context, run.spec_id, phaseDefinitions);
+              return runId;
             }
             return runId;
           }
-        } else {
-          await this.executePhase(runId, phaseName, context);
+          throw phaseErr;
         }
 
         createEvent(this.db, runId, "phase-completed", { phase: phaseName });
@@ -453,6 +467,136 @@ export class PipelineEngine {
         break;
       }
     }
+  }
+
+  /**
+   * Execute a phase with an optional timeout from the phase definition.
+   */
+  private async executePhaseWithTimeout(
+    runId: string,
+    phase: PhaseName,
+    context: Record<string, unknown>,
+    phaseDef?: PhaseDefinition,
+  ): Promise<void> {
+    await this.executeWithTimeout(
+      () => this.executePhase(runId, phase, context),
+      phaseDef?.timeout_min,
+      phase,
+    );
+  }
+
+  /**
+   * Wrap an async operation with a timeout (in minutes).
+   * If timeout_min is undefined, runs without a timeout.
+   */
+  private async executeWithTimeout(
+    fn: () => Promise<void>,
+    timeoutMin: number | undefined,
+    phaseName: string,
+  ): Promise<void> {
+    if (!timeoutMin) {
+      return fn();
+    }
+
+    const timeoutMs = timeoutMin * 60_000;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`Phase '${phaseName}' timed out after ${timeoutMin} minutes`)), timeoutMs);
+    });
+
+    await Promise.race([fn(), timeoutPromise]);
+  }
+
+  /**
+   * Execute the pipeline from a specific phase to the end (used for retry loops).
+   */
+  private async executeFromPhase(
+    runId: string,
+    fromPhase: PhaseName,
+    context: Record<string, unknown>,
+    specId: string,
+    phaseDefinitions?: PhaseDefinition[],
+  ): Promise<void> {
+    const startIdx = PHASE_ORDER.indexOf(fromPhase);
+    if (startIdx === -1) throw new Error(`Invalid phase: ${fromPhase}`);
+
+    for (let i = startIdx; i < PHASE_ORDER.length; i++) {
+      const phaseName = PHASE_ORDER[i];
+
+      if (shouldSkipPhase(phaseName, context, phaseDefinitions)) {
+        log.info(`Skipping phase: ${phaseName}`);
+        continue;
+      }
+
+      updateRunPhase(this.db, runId, phaseName);
+      createEvent(this.db, runId, "phase-started", { phase: phaseName });
+      log.info(`Phase: ${phaseName}`);
+
+      const phaseDef = phaseDefinitions ? getPhaseDefinition(phaseName, phaseDefinitions) : undefined;
+
+      try {
+        await this.executePhaseWithTimeout(runId, phaseName, context, phaseDef);
+      } catch (phaseErr) {
+        if (phaseDef?.on_fail?.action === "retry") {
+          const retryTarget = (phaseDef.on_fail.next ?? "build") as PhaseName;
+          await this.handlePhaseFailure(runId, phaseName, phaseErr instanceof Error ? phaseErr.message : String(phaseErr));
+          const retryRun = getRun(this.db, runId);
+          if (retryRun && retryRun.status === "running") {
+            createEvent(this.db, runId, "phase-retry", { phase: phaseName, retryFrom: retryTarget });
+            await this.executeFromPhase(runId, retryTarget, context, specId, phaseDefinitions);
+            return;
+          }
+          return;
+        }
+        throw phaseErr;
+      }
+
+      createEvent(this.db, runId, "phase-completed", { phase: phaseName });
+
+      // Update context after architect phase
+      if (phaseName === "architect" || phaseName === "plan-review") {
+        const bp = getActiveBuildplan(this.db, specId);
+        if (bp) {
+          const plan: Buildplan = JSON.parse(bp.plan);
+          context.module_count = plan.modules.length;
+        }
+      }
+
+      // Budget threshold check
+      const budgetResult = checkBudgetThresholds(this.db, runId);
+      if (budgetResult.action === "pause") {
+        await pauseRun(this.db, this.runtime, runId, "budget_exceeded");
+        return;
+      }
+      if (budgetResult.action === "warning") {
+        createEvent(this.db, runId, "budget-warning", {
+          threshold: BUDGET_WARNING_THRESHOLD,
+          spent_usd: budgetResult.spentUsd,
+          budget_usd: budgetResult.budgetUsd,
+          percent_used: budgetResult.percentUsed,
+        });
+        log.warn(
+          `Budget warning: $${budgetResult.spentUsd.toFixed(2)} of $${budgetResult.budgetUsd.toFixed(2)} spent (${Math.round(budgetResult.percentUsed)}%). Build will pause at $${budgetResult.budgetUsd.toFixed(2)}.`
+        );
+      }
+    }
+
+    // Mark run completed after all phases
+    const completedCount = this.db.prepare(
+      "SELECT COUNT(*) as cnt FROM agents WHERE run_id = ? AND status = 'completed'"
+    ).get(runId) as { cnt: number };
+
+    updateRunStatus(this.db, runId, "completed");
+
+    // Transition spec to completed
+    try {
+      updateSpecStatusChecked(this.db, specId, "completed");
+    } catch {
+      // Non-fatal
+    }
+
+    createEvent(this.db, runId, "run-completed");
+    log.success(`Pipeline completed: ${runId}`);
+    console.log(`[dark] Pipeline complete. ${completedCount.cnt} agents finished. Review with: git diff`);
   }
 
   /**
