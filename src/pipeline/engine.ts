@@ -5,7 +5,7 @@ import { createRun, getRun, updateRunStatus, updateRunPhase, incrementRunIterati
 import { getSpec, updateSpecStatus, updateSpecHash } from "../db/queries/specs.js";
 import { getActiveAgents } from "../db/queries/agents.js";
 import { getActiveBuildplan } from "../db/queries/buildplans.js";
-import { createEvent } from "../db/queries/events.js";
+import { createEvent, listEvents } from "../db/queries/events.js";
 import { getNextPhase, shouldSkipPhase, PHASE_ORDER } from "./phases.js";
 import type { PhaseName } from "./phases.js";
 import { getResumePoint, getCompletedModules } from "./resume.js";
@@ -379,6 +379,9 @@ export class PipelineEngine {
           undefined,
           projectRoot,
         );
+
+        // Gate: check integration test results before advancing
+        this.checkIntegrationGate(runId);
         break;
       }
 
@@ -456,6 +459,24 @@ export class PipelineEngine {
     } else {
       updateRunStatus(this.db, runId, "failed", `Max iterations reached. Last error: ${error}`);
       createEvent(this.db, runId, "run-failed", { error, iterations: run.iteration });
+    }
+  }
+
+  /**
+   * Check that integration tests passed before advancing to evaluation.
+   * Throws if the integration-tester reported failure or no result.
+   */
+  private checkIntegrationGate(runId: string): void {
+    const events = listEvents(this.db, runId);
+    const integrationFailed = events.some((e) => e.type === "integration-failed");
+    const integrationPassed = events.some((e) => e.type === "integration-passed");
+
+    if (integrationFailed) {
+      throw new Error("Integration gate failed: integration tests reported failure. Pipeline will not advance to evaluation.");
+    }
+
+    if (!integrationPassed) {
+      throw new Error("Integration gate failed: no integration test results reported. Pipeline will not advance to evaluation.");
     }
   }
 
