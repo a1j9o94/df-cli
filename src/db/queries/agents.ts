@@ -117,3 +117,17 @@ export function getStaleAgents(db: SqliteDb, timeoutMs: number): AgentRecord[] {
      ORDER BY last_heartbeat`
   ).all(cutoff) as AgentRecord[];
 }
+
+/**
+ * Returns running agents whose created_at exceeds the given lifetime.
+ * Used by the build phase to enforce max_agent_lifetime_ms.
+ */
+export function getOverdueAgents(db: SqliteDb, maxLifetimeMs: number): AgentRecord[] {
+  const cutoff = new Date(Date.now() - maxLifetimeMs).toISOString().replace(/\.\d{3}Z$/, "Z");
+  return db.prepare(
+    `SELECT * FROM agents
+     WHERE status = 'running'
+       AND created_at < ?
+     ORDER BY created_at`
+  ).all(cutoff) as AgentRecord[];
+}
