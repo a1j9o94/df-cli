@@ -98,6 +98,13 @@ export function getBindingsForAgent(db: SqliteDb, agentId: string): ContractBind
   return rows.map((r) => ({ ...r, acknowledged: r.acknowledged === 1 }) as unknown as ContractBindingRecord);
 }
 
+export function getUnacknowledgedBindings(db: SqliteDb, agentId: string): ContractBindingRecord[] {
+  const rows = db.prepare(
+    "SELECT * FROM contract_bindings WHERE agent_id = ? AND acknowledged = 0 ORDER BY created_at"
+  ).all(agentId) as Record<string, unknown>[];
+  return rows.map((r) => ({ ...r, acknowledged: false }) as unknown as ContractBindingRecord);
+}
+
 export function getBindingsForContract(db: SqliteDb, contractId: string): ContractBindingRecord[] {
   const rows = db.prepare(
     "SELECT * FROM contract_bindings WHERE contract_id = ? ORDER BY created_at"
