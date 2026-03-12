@@ -29,6 +29,17 @@ import { preBuildValidation, updateSpecStatusChecked, computeContentHash } from 
 /** Phases whose failures trigger retry-from-build (respecting max_iterations). */
 const RETRYABLE_PHASES: ReadonlySet<string> = new Set(["build", "integrate"]);
 
+/**
+ * Thrown when plan-review pauses the run for human approval.
+ * Caught by the engine loop to exit cleanly (not as a failure).
+ */
+class PlanReviewPauseError extends Error {
+  constructor(public readonly runId: string) {
+    super("Plan review: paused for human approval");
+    this.name = "PlanReviewPauseError";
+  }
+}
+
 export class PipelineEngine {
   constructor(
     private db: SqliteDb,
@@ -174,6 +185,11 @@ export class PipelineEngine {
       log.success(`Pipeline completed: ${run.id}`);
       console.log(`[dark] Pipeline complete. ${completedCount.cnt} agents finished. Review with: git diff`);
     } catch (err) {
+      // Plan-review pause: run is already paused, exit cleanly
+      if (err instanceof PlanReviewPauseError) {
+        return run.id;
+      }
+
       const error = err instanceof Error ? err.message : String(err);
       updateRunStatus(this.db, run.id, "failed", error);
 
@@ -361,6 +377,11 @@ export class PipelineEngine {
       log.success(`Pipeline resumed and completed: ${runId}`);
       console.log(`[dark] Pipeline complete. ${completedCount.cnt} agents finished. Review with: git diff`);
     } catch (err) {
+      // Plan-review pause: run is already paused, exit cleanly
+      if (err instanceof PlanReviewPauseError) {
+        return runId;
+      }
+
       const error = err instanceof Error ? err.message : String(err);
       updateRunStatus(this.db, runId, "failed", error);
       createEvent(this.db, runId, "run-failed", { error });
@@ -397,9 +418,24 @@ export class PipelineEngine {
         break;
       }
 
-      case "plan-review":
-        log.info("Plan review: auto-approved");
+      case "plan-review": {
+        const spec = getSpec(this.db, run.spec_id);
+        const bp = spec ? getActiveBuildplan(this.db, run.spec_id) : null;
+        const moduleCount = bp ? (JSON.parse(bp.plan) as Buildplan).modules.length : 0;
+
+        if (moduleCount <= 4) {
+          log.info(`Plan review: auto-approved (${moduleCount} modules <= 4)`);
+        } else {
+          log.info(`Plan review: ${moduleCount} modules > 4, pausing for human approval`);
+          createEvent(this.db, runId, "plan-review-requested", {
+            module_count: moduleCount,
+            buildplan_id: bp?.id,
+          });
+          await pauseRun(this.db, this.runtime, runId, "plan_review");
+          throw new PlanReviewPauseError(runId);
+        }
         break;
+      }
 
       case "build":
         await executeBuildPhase(this.db, this.runtime, this.config, runId);
