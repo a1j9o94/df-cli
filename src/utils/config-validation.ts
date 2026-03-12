@@ -96,6 +96,15 @@ const RULES: ValidationRule[] = [
     },
   },
   {
+    field: "runtime.stale_agent_max_strikes",
+    validate: (v) => {
+      if (typeof v !== "number") return null;
+      if (v < 1) return "Stale agent max strikes must be at least 1";
+      if (v > 20) return "Stale agent max strikes must be at most 20";
+      return null;
+    },
+  },
+  {
     field: "resources.max_worktrees",
     validate: (v) => {
       if (typeof v !== "number") return null;

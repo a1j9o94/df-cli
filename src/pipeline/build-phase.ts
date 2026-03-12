@@ -212,7 +212,9 @@ export async function executeBuildPhase(
 
   const plan: Buildplan = JSON.parse(bp.plan);
   const completedModules = new Set<string>();
+
   const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null; acquiredWorktree: boolean }>();
+  const staleStrikes = new Map<string, number>();
   const workspaceConfig = options?.workspaceConfig;
 
   // Resolve project root for worktree creation
@@ -420,12 +422,51 @@ export async function executeBuildPhase(
       }
     }
 
-    // Log stale agents as warnings but don't kill them
+    // Detect stale agents and kill after grace period (consecutive strikes)
+    const maxStrikes = config.runtime.stale_agent_max_strikes;
     const stale = getStaleAgents(db, config.runtime.heartbeat_timeout_ms);
-    for (const agent of stale) {
-      if (activeBuilders.has(agent.id)) {
-        log.warn(`Builder ${agent.name} has not sent a heartbeat recently (may be mid-turn)`);
+    const staleIds = new Set(stale.map((a) => a.id));
+
+    // Reset strikes for agents that are no longer stale
+    for (const agentId of staleStrikes.keys()) {
+      if (!staleIds.has(agentId)) {
+        staleStrikes.delete(agentId);
       }
+    }
+
+    for (const agent of stale) {
+      if (!activeBuilders.has(agent.id)) continue;
+
+      const strikes = (staleStrikes.get(agent.id) ?? 0) + 1;
+      staleStrikes.set(agent.id, strikes);
+
+      if (strikes < maxStrikes) {
+        log.warn(`Builder ${agent.name} stale (strike ${strikes}/${maxStrikes})`);
+        continue;
+      }
+
+      // Grace period exhausted — kill the zombie agent
+      log.error(`Builder ${agent.name} stale for ${strikes} consecutive checks — killing`);
+      try {
+        await runtime.kill(agent.id);
+      } catch (err) {
+        log.warn(`Failed to kill stale agent ${agent.id}: ${err}`);
+      }
+
+      const info = activeBuilders.get(agent.id)!;
+      updateAgentStatus(db, agent.id, "failed", "Killed: agent stopped heartbeating");
+      activeBuilders.delete(agent.id);
+      staleStrikes.delete(agent.id);
+      createEvent(db, runId, "agent-failed", {
+        moduleId: info.moduleId,
+        error: "Killed: agent stopped heartbeating",
+      }, agent.id);
+
+      if (info.worktreePath && info.worktreePath !== projectRoot) {
+        log.info(`Preserving worktree for ${info.moduleId}: ${info.worktreePath}`);
+      }
+
+      throw new Error(`Builder killed for module "${info.moduleId}": agent stopped heartbeating`);
     }
 
     // Budget check
@@ -496,7 +537,9 @@ export async function executeResumeBuildPhase(
   const plan: Buildplan = JSON.parse(bp.plan);
   // Start with previously completed modules pre-populated
   const completedModules = new Set<string>(previouslyCompletedModules);
+
   const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null; acquiredWorktree: boolean }>();
+  const staleStrikes = new Map<string, number>();
   const workspaceConfig = options?.workspaceConfig;
 
   log.info(`Resuming build: ${completedModules.size} modules already completed, ${plan.modules.length - completedModules.size} remaining`);
@@ -706,6 +749,53 @@ export async function executeResumeBuildPhase(
 
         throw new Error(`Builder crashed for module "${info.moduleId}": process exited without completing`);
       }
+    }
+
+    // Detect stale agents and kill after grace period (consecutive strikes)
+    const maxStrikes = config.runtime.stale_agent_max_strikes;
+    const stale = getStaleAgents(db, config.runtime.heartbeat_timeout_ms);
+    const staleIds = new Set(stale.map((a) => a.id));
+
+    // Reset strikes for agents that are no longer stale
+    for (const agentId of staleStrikes.keys()) {
+      if (!staleIds.has(agentId)) {
+        staleStrikes.delete(agentId);
+      }
+    }
+
+    for (const agent of stale) {
+      if (!activeBuilders.has(agent.id)) continue;
+
+      const strikes = (staleStrikes.get(agent.id) ?? 0) + 1;
+      staleStrikes.set(agent.id, strikes);
+
+      if (strikes < maxStrikes) {
+        log.warn(`Builder ${agent.name} stale (strike ${strikes}/${maxStrikes})`);
+        continue;
+      }
+
+      // Grace period exhausted — kill the zombie agent
+      log.error(`Builder ${agent.name} stale for ${strikes} consecutive checks — killing`);
+      try {
+        await runtime.kill(agent.id);
+      } catch (err) {
+        log.warn(`Failed to kill stale agent ${agent.id}: ${err}`);
+      }
+
+      const info = activeBuilders.get(agent.id)!;
+      updateAgentStatus(db, agent.id, "failed", "Killed: agent stopped heartbeating");
+      activeBuilders.delete(agent.id);
+      staleStrikes.delete(agent.id);
+      createEvent(db, runId, "agent-failed", {
+        moduleId: info.moduleId,
+        error: "Killed: agent stopped heartbeating",
+      }, agent.id);
+
+      if (info.worktreePath && info.worktreePath !== projectRoot) {
+        log.info(`Preserving worktree for ${info.moduleId}: ${info.worktreePath}`);
+      }
+
+      throw new Error(`Builder killed for module "${info.moduleId}": agent stopped heartbeating`);
     }
 
     // Budget check

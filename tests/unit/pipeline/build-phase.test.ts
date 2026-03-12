@@ -3,7 +3,7 @@ import { describe, test, expect, beforeEach } from "bun:test";
 import { getDbForTest } from "../../../src/db/index.js";
 import type { SqliteDb } from "../../../src/db/index.js";
 import { createRun } from "../../../src/db/queries/runs.js";
-import { createAgent, getAgent, updateAgentStatus } from "../../../src/db/queries/agents.js";
+import { createAgent, getAgent, updateAgentStatus, updateAgentHeartbeat } from "../../../src/db/queries/agents.js";
 import { createSpec } from "../../../src/db/queries/specs.js";
 import { createBuildplan, updateBuildplanStatus } from "../../../src/db/queries/buildplans.js";
 import { DEFAULT_CONFIG } from "../../../src/types/config.js";
@@ -474,4 +474,198 @@ describe("resource limit enforcement", () => {
     expect(worktrees).not.toBeNull();
     expect(worktrees!.capacity).toBe(config.resources.max_worktrees);
   });
+// Stale agent detection and killing
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a mock runtime where agents stay "running" forever (never auto-complete)
+ * so we can simulate stale heartbeat detection.
+ */
+function createStaleRuntime(db: SqliteDb): AgentRuntime & { killCalls: string[] } {
+  let pidCounter = 2000;
+  const handles: AgentHandle[] = [];
+  const killCalls: string[] = [];
+
+  return {
+    killCalls,
+    async spawn(spawnConfig: AgentSpawnConfig): Promise<AgentHandle> {
+      const pid = pidCounter++;
+      const handle: AgentHandle = {
+        id: spawnConfig.agent_id,
+        pid,
+        role: spawnConfig.role,
+        kill: async () => {},
+      };
+      handles.push(handle);
+
+      // Set a heartbeat in the past so the agent appears stale immediately.
+      // heartbeat_timeout_ms is 90_000 by default; backdate by 100s.
+      const pastDate = new Date(Date.now() - 100_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+      db.prepare("UPDATE agents SET last_heartbeat = ? WHERE id = ?").run(pastDate, spawnConfig.agent_id);
+
+      return handle;
+    },
+    async send() {},
+    async kill(agentId: string) {
+      killCalls.push(agentId);
+    },
+    async status(): Promise<"running" | "stopped" | "unknown"> {
+      // Agent process is still "running" — it's a zombie
+      return "running";
+    },
+    async listActive(): Promise<AgentHandle[]> {
+      return handles.filter((h) => {
+        const agent = db.prepare("SELECT status FROM agents WHERE id = ?").get(h.id) as { status: string } | undefined;
+        return agent?.status === "running" || agent?.status === "pending" || agent?.status === "spawning";
+      });
+    },
+  };
+}
+
+describe("stale agent killing", () => {
+  test("kills stale agent after max_strikes consecutive detections", async () => {
+    const planJson = makeBuildplanJson([{ id: "zombie-mod" }]);
+    const { runId } = setupRun({ buildplan: planJson });
+    const runtime = createStaleRuntime(db);
+
+    // Use 2 strikes so the test is fast
+    const testConfig = {
+      ...config,
+      runtime: { ...config.runtime, stale_agent_max_strikes: 2 },
+    };
+
+    await expect(
+      executeBuildPhase(db, runtime, testConfig, runId, TEST_OPTIONS)
+    ).rejects.toThrow(/Builder killed for module "zombie-mod": agent stopped heartbeating/);
+
+    // Verify runtime.kill() was called
+    expect(runtime.killCalls.length).toBe(1);
+
+    // Verify the agent was marked as failed in DB
+    const agents = db.prepare(
+      "SELECT * FROM agents WHERE run_id = ? AND role = 'builder'"
+    ).all(runId) as { id: string; status: string; error: string | null }[];
+
+    expect(agents.length).toBe(1);
+    expect(agents[0].status).toBe("failed");
+    expect(agents[0].error).toBe("Killed: agent stopped heartbeating");
+  });
+
+  test("creates agent-failed event when killing stale agent", async () => {
+    const planJson = makeBuildplanJson([{ id: "stale-mod" }]);
+    const { runId } = setupRun({ buildplan: planJson });
+    const runtime = createStaleRuntime(db);
+
+    const testConfig = {
+      ...config,
+      runtime: { ...config.runtime, stale_agent_max_strikes: 1 },
+    };
+
+    await expect(
+      executeBuildPhase(db, runtime, testConfig, runId, TEST_OPTIONS)
+    ).rejects.toThrow(/agent stopped heartbeating/);
+
+    const events = db.prepare(
+      "SELECT * FROM events WHERE run_id = ? AND type = 'agent-failed'"
+    ).all(runId) as { data: string }[];
+
+    expect(events.length).toBe(1);
+    const data = JSON.parse(events[0].data);
+    expect(data.moduleId).toBe("stale-mod");
+    expect(data.error).toBe("Killed: agent stopped heartbeating");
+  });
+
+  test("does not kill agent before max_strikes is reached", async () => {
+    const planJson = makeBuildplanJson([{ id: "slow-mod" }]);
+    const { runId } = setupRun({ buildplan: planJson });
+
+    let pidCounter = 3000;
+    const handles: AgentHandle[] = [];
+    let pollCount = 0;
+
+    // Agent becomes stale but "recovers" (completes) after 2 polls,
+    // before reaching 3 strikes. The agent completes in the DB and
+    // runtime still reports "running" until DB status is checked.
+    const runtime: AgentRuntime = {
+      async spawn(spawnConfig: AgentSpawnConfig): Promise<AgentHandle> {
+        const pid = pidCounter++;
+        const handle: AgentHandle = {
+          id: spawnConfig.agent_id,
+          pid,
+          role: spawnConfig.role,
+          kill: async () => {},
+        };
+        handles.push(handle);
+
+        // Set a stale heartbeat
+        const pastDate = new Date(Date.now() - 100_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+        db.prepare("UPDATE agents SET last_heartbeat = ? WHERE id = ?").run(pastDate, spawnConfig.agent_id);
+
+        // Agent completes itself after 250ms (after 2 poll cycles at 100ms)
+        setTimeout(() => {
+          updateAgentStatus(db, spawnConfig.agent_id, "completed");
+        }, 250);
+
+        return handle;
+      },
+      async send() {},
+      async kill() { throw new Error("Should not be called"); },
+      async status(agentId: string): Promise<"running" | "stopped" | "unknown"> {
+        const agent = db.prepare("SELECT status FROM agents WHERE id = ?").get(agentId) as { status: string } | undefined;
+        if (agent?.status === "completed" || agent?.status === "failed") return "stopped";
+        return "running";
+      },
+      async listActive(): Promise<AgentHandle[]> {
+        return handles.filter((h) => {
+          const agent = db.prepare("SELECT status FROM agents WHERE id = ?").get(h.id) as { status: string } | undefined;
+          return agent?.status === "running" || agent?.status === "pending" || agent?.status === "spawning";
+        });
+      },
+    };
+
+    // max_strikes=5 (agent completes after ~2 polls, well before 5 strikes)
+    const testConfig = {
+      ...config,
+      runtime: { ...config.runtime, stale_agent_max_strikes: 5 },
+    };
+
+    await executeBuildPhase(db, runtime, testConfig, runId, TEST_OPTIONS);
+
+    const agents = db.prepare(
+      "SELECT * FROM agents WHERE run_id = ? AND role = 'builder'"
+    ).all(runId) as { id: string; status: string }[];
+
+    expect(agents[0].status).toBe("completed");
+  });
+
+  test("kills stale agent in resume build phase", async () => {
+    const planJson = makeBuildplanJson([
+      { id: "done-mod" },
+      { id: "zombie-mod" },
+    ]);
+    const { runId } = setupRun({ buildplan: planJson });
+    const runtime = createStaleRuntime(db);
+
+    const testConfig = {
+      ...config,
+      runtime: { ...config.runtime, stale_agent_max_strikes: 1 },
+    };
+
+    // done-mod already completed, zombie-mod will become stale
+    await expect(
+      executeResumeBuildPhase(db, runtime, testConfig, runId, new Set(["done-mod"]), TEST_OPTIONS)
+    ).rejects.toThrow(/Builder killed for module "zombie-mod": agent stopped heartbeating/);
+
+    expect(runtime.killCalls.length).toBe(1);
+
+    const agents = db.prepare(
+      "SELECT * FROM agents WHERE run_id = ? AND role = 'builder'"
+    ).all(runId) as { id: string; status: string; error: string | null; module_id: string | null }[];
+
+    expect(agents.length).toBe(1);
+    expect(agents[0].module_id).toBe("zombie-mod");
+    expect(agents[0].status).toBe("failed");
+    expect(agents[0].error).toBe("Killed: agent stopped heartbeating");
+  });
+});
 });
