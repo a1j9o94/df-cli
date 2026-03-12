@@ -12,6 +12,7 @@ import type { AgentRuntime } from "../../../src/runtime/interface.js";
 import type { AgentHandle, AgentSpawnConfig, Buildplan } from "../../../src/types/index.js";
 
 import { executeBuildPhase, executeResumeBuildPhase, type BuildPhaseOptions } from "../../../src/pipeline/build-phase.js";
+import { getResource } from "../../../src/db/queries/resources.js";
 
 /** Use a short poll interval for tests to avoid timeouts. */
 const TEST_OPTIONS: BuildPhaseOptions = { pollIntervalMs: 100 };
@@ -327,4 +328,150 @@ describe("executeResumeBuildPhase", () => {
     const moduleIds = agents.map((a) => a.module_id);
     expect(moduleIds).toEqual(["module-b", "module-c"]);
   }, 15_000);
+});
+
+// ---------------------------------------------------------------------------
+// Resource limit enforcement (Finding #3)
+// ---------------------------------------------------------------------------
+
+describe("resource limit enforcement", () => {
+  test("initializes resource records during build", async () => {
+    const planJson = makeBuildplanJson([{ id: "mod-a" }]);
+    const { runId } = setupRun({ buildplan: planJson });
+    const runtime = createMockRuntime(db);
+
+    await executeBuildPhase(db, runtime, config, runId, TEST_OPTIONS);
+
+    const worktrees = getResource(db, "worktrees");
+    const apiSlots = getResource(db, "api_slots");
+
+    expect(worktrees).not.toBeNull();
+    expect(worktrees!.capacity).toBe(config.resources.max_worktrees);
+    expect(apiSlots).not.toBeNull();
+    expect(apiSlots!.capacity).toBe(config.resources.max_api_slots);
+  });
+
+  test("releases all resources after successful build", async () => {
+    const planJson = makeBuildplanJson([
+      { id: "mod-a" },
+      { id: "mod-b" },
+    ]);
+    const { runId } = setupRun({ buildplan: planJson });
+    const runtime = createMockRuntime(db);
+
+    await executeBuildPhase(db, runtime, config, runId, TEST_OPTIONS);
+
+    const apiSlots = getResource(db, "api_slots");
+    expect(apiSlots!.in_use).toBe(0);
+  });
+
+  test("api_slots limit enforced: max_api_slots=1 serializes agents", async () => {
+    config.resources.max_api_slots = 1;
+    const planJson = makeBuildplanJson([
+      { id: "mod-a" },
+      { id: "mod-b" },
+      { id: "mod-c" },
+    ]);
+    const { runId } = setupRun({ buildplan: planJson });
+
+    // Track max concurrent spawned agents
+    let maxConcurrent = 0;
+    let currentConcurrent = 0;
+    let pidCounter = 1000;
+    const handles: AgentHandle[] = [];
+
+    const runtime: AgentRuntime = {
+      async spawn(spawnConfig: AgentSpawnConfig): Promise<AgentHandle> {
+        currentConcurrent++;
+        if (currentConcurrent > maxConcurrent) maxConcurrent = currentConcurrent;
+
+        const pid = pidCounter++;
+        const handle: AgentHandle = {
+          id: spawnConfig.agent_id,
+          pid,
+          role: spawnConfig.role,
+          kill: async () => {},
+        };
+        handles.push(handle);
+
+        setTimeout(() => {
+          currentConcurrent--;
+          updateAgentStatus(db, spawnConfig.agent_id, "completed");
+        }, 30);
+
+        return handle;
+      },
+      async send() {},
+      async kill() {},
+      async status(agentId: string) {
+        const agent = db.prepare("SELECT status FROM agents WHERE id = ?").get(agentId) as { status: string } | undefined;
+        if (!agent) return "unknown" as const;
+        return agent.status === "completed" || agent.status === "failed" ? "stopped" as const : "running" as const;
+      },
+      async listActive() {
+        return handles.filter((h) => {
+          const agent = db.prepare("SELECT status FROM agents WHERE id = ?").get(h.id) as { status: string } | undefined;
+          return agent?.status === "running" || agent?.status === "pending" || agent?.status === "spawning";
+        });
+      },
+    };
+
+    await executeBuildPhase(db, runtime, config, runId, TEST_OPTIONS);
+
+    // With max_api_slots=1, at most 1 agent should run concurrently
+    expect(maxConcurrent).toBe(1);
+
+    // All 3 modules should still complete
+    const agents = db.prepare(
+      "SELECT * FROM agents WHERE run_id = ? AND role = 'builder'"
+    ).all(runId) as { status: string }[];
+    expect(agents.length).toBe(3);
+    expect(agents.every((a) => a.status === "completed")).toBe(true);
+
+    // Resources should be fully released
+    const apiSlots = getResource(db, "api_slots");
+    expect(apiSlots!.in_use).toBe(0);
+  }, 10_000);
+
+  test("releases resources on builder failure", async () => {
+    const planJson = makeBuildplanJson([{ id: "failing-mod" }]);
+    const { runId } = setupRun({ buildplan: planJson });
+    const runtime = createMockRuntime(db, { failModules: ["failing-mod"] });
+
+    await expect(
+      executeBuildPhase(db, runtime, config, runId, TEST_OPTIONS)
+    ).rejects.toThrow(/Builder failed/);
+
+    const apiSlots = getResource(db, "api_slots");
+    expect(apiSlots!.in_use).toBe(0);
+  });
+
+  test("single-builder path acquires and releases api_slots", async () => {
+    const { runId } = setupRun(); // no buildplan
+    const runtime = createMockRuntime(db);
+
+    await executeBuildPhase(db, runtime, config, runId, TEST_OPTIONS);
+
+    const apiSlots = getResource(db, "api_slots");
+    expect(apiSlots).not.toBeNull();
+    expect(apiSlots!.in_use).toBe(0);
+  });
+
+  test("resume path initializes and releases resources", async () => {
+    const planJson = makeBuildplanJson([
+      { id: "mod-a" },
+      { id: "mod-b" },
+    ]);
+    const { runId } = setupRun({ buildplan: planJson });
+    const runtime = createMockRuntime(db);
+
+    await executeResumeBuildPhase(db, runtime, config, runId, new Set(["mod-a"]), TEST_OPTIONS);
+
+    const apiSlots = getResource(db, "api_slots");
+    const worktrees = getResource(db, "worktrees");
+    expect(apiSlots).not.toBeNull();
+    expect(apiSlots!.in_use).toBe(0);
+    expect(worktrees).not.toBeNull();
+    expect(worktrees!.capacity).toBe(config.resources.max_worktrees);
+  });
 });
