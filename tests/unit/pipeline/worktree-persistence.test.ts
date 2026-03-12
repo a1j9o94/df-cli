@@ -262,18 +262,20 @@ describe("executeBuildPhase — worktree preservation", () => {
     try {
       await executeBuildPhase(db, runtime, config, runId, TEST_OPTIONS);
     } catch {
-      // Expected to throw
+      // Expected to throw after retries exhausted
     }
 
-    // The failed builder should still have its worktree_path recorded
+    // With max_module_retries: 2, there will be 2 failed builders (1 original + 1 retry)
     const agents = db.prepare(
       "SELECT * FROM agents WHERE run_id = ? AND role = 'builder' AND module_id = 'failing-mod'"
     ).all(runId) as { id: string; status: string; worktree_path: string | null }[];
 
-    expect(agents.length).toBe(1);
-    expect(agents[0].status).toBe("failed");
-    // Key assertion: worktree_path should still be set (not cleaned up)
-    expect(agents[0].worktree_path).toBeTruthy();
+    expect(agents.length).toBe(2);
+    // All failed builders should still have worktree_path recorded (preserved for retry)
+    for (const agent of agents) {
+      expect(agent.status).toBe("failed");
+      expect(agent.worktree_path).toBeTruthy();
+    }
   });
 });
 

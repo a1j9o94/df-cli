@@ -27,7 +27,8 @@ import { checkBudget, recordCost } from "./budget.js";
 import { log } from "../utils/logger.js";
 import { getBuilderPrompt } from "../agents/prompts/builder.js";
 import { createWorktree, removeWorktree, getWorktreeCommits, worktreeHasCommits } from "../runtime/worktree.js";
-import { getFailedBuilderWorktree } from "./resume.js";
+import { getFailedBuilderWorktree, getRetryableBuilderWorktree } from "./resume.js";
+import { getModuleAttemptCount, shouldRedecompose } from "../db/queries/failure-tracking.js";
 import { findDfDir } from "../utils/config.js";
 import { existsSync } from "node:fs";
 import { resolveModuleProject, createProjectWorktree } from "./workspace-build.js";
@@ -253,8 +254,19 @@ export async function executeBuildPhase(
       const runShort = runId.slice(0, 8);
       const suffix = Date.now().toString(36);
       let worktreePath: string | null = null;
+      let previousCommits: { hash: string; message: string }[] = [];
 
-      if (mod.targetProject && workspaceConfig) {
+      // Check for worktree from a previous failed attempt (for retries within this run)
+      const previousWorktree = getRetryableBuilderWorktree(db, runId, moduleId);
+      if (previousWorktree && existsSync(previousWorktree)) {
+        worktreePath = previousWorktree;
+        previousCommits = getWorktreeCommits(previousWorktree);
+        if (previousCommits.length > 0) {
+          log.info(`Reusing worktree for ${moduleId} retry with ${previousCommits.length} previous commits`);
+        } else {
+          log.info(`Reusing worktree for ${moduleId} retry (no previous commits)`);
+        }
+      } else if (mod.targetProject && workspaceConfig) {
         // Cross-repo: create worktree from the target project's repo
         try {
           const projectRef = resolveModuleProject(mod as CrossRepoModule, workspaceConfig);
@@ -332,9 +344,10 @@ export async function executeBuildPhase(
         worktreePath: worktreePath ?? ".",
         contracts: contractNames,
         scope: mod.scope,
+        previousCommits,
       });
 
-      createEvent(db, runId, "builder-started", { moduleId }, agent.id);
+      createEvent(db, runId, "builder-started", { moduleId, retry: previousCommits.length > 0 }, agent.id);
       console.log(`[dark] Build phase: spawning builder for module "${moduleId}" (PID pending...)`);
 
       const handle = await runtime.spawn({
@@ -392,12 +405,33 @@ export async function executeBuildPhase(
 
         // Preserve worktree for retry — do NOT remove it.
         // The worktree may contain partial commits from this attempt.
-        // On resume, the next builder will inherit this worktree.
+        // On retry, the next builder will inherit this worktree.
         if (info.worktreePath && info.worktreePath !== projectRoot) {
           log.info(`Preserving worktree for ${info.moduleId}: ${info.worktreePath}`);
         }
 
-        throw new Error(`Builder failed for module "${info.moduleId}": ${agentRecord.error ?? "unknown error"}`);
+        // Per-module retry: check if retries exhausted → redecomposition
+        if (shouldRedecompose(db, config, runId, info.moduleId)) {
+          const attempts = getModuleAttemptCount(db, runId, info.moduleId);
+          createEvent(db, runId, "module-redecompose-needed", {
+            moduleId: info.moduleId,
+            attempts,
+            threshold: config.build.max_module_retries ?? 2,
+          });
+          throw new Error(
+            `Module "${info.moduleId}" needs redecomposition after ${attempts} failed attempts`,
+          );
+        }
+
+        // Under retry threshold — module will be re-picked up on next loop iteration
+        const attempts = getModuleAttemptCount(db, runId, info.moduleId);
+        log.info(`Retrying module "${info.moduleId}" (attempt ${attempts}/${config.build.max_module_retries ?? 2})`);
+        createEvent(db, runId, "module-retry", {
+          moduleId: info.moduleId,
+          attempt: attempts,
+          maxRetries: config.build.max_module_retries ?? 2,
+        });
+        continue;
       }
 
       // DB status is still running — check if PID is alive
@@ -413,12 +447,33 @@ export async function executeBuildPhase(
         }, agentId);
         log.error(`Builder crashed for ${info.moduleId}: process exited without completing`);
 
-        // Preserve worktree for retry — do NOT remove it.
+        // Preserve worktree for retry
         if (info.worktreePath && info.worktreePath !== projectRoot) {
           log.info(`Preserving worktree for ${info.moduleId}: ${info.worktreePath}`);
         }
 
-        throw new Error(`Builder crashed for module "${info.moduleId}": process exited without completing`);
+        // Per-module retry: check if retries exhausted → redecomposition
+        if (shouldRedecompose(db, config, runId, info.moduleId)) {
+          const attempts = getModuleAttemptCount(db, runId, info.moduleId);
+          createEvent(db, runId, "module-redecompose-needed", {
+            moduleId: info.moduleId,
+            attempts,
+            threshold: config.build.max_module_retries ?? 2,
+          });
+          throw new Error(
+            `Module "${info.moduleId}" needs redecomposition after ${attempts} failed attempts`,
+          );
+        }
+
+        // Under retry threshold — module will be re-picked up on next loop iteration
+        const attempts = getModuleAttemptCount(db, runId, info.moduleId);
+        log.info(`Retrying module "${info.moduleId}" (attempt ${attempts}/${config.build.max_module_retries ?? 2})`);
+        createEvent(db, runId, "module-retry", {
+          moduleId: info.moduleId,
+          attempt: attempts,
+          maxRetries: config.build.max_module_retries ?? 2,
+        });
+        continue;
       }
     }
 
@@ -728,7 +783,28 @@ export async function executeResumeBuildPhase(
           log.info(`Preserving worktree for ${info.moduleId}: ${info.worktreePath}`);
         }
 
-        throw new Error(`Builder failed for module "${info.moduleId}": ${agentRecord.error ?? "unknown error"}`);
+        // Per-module retry: check if retries exhausted → redecomposition
+        if (shouldRedecompose(db, config, runId, info.moduleId)) {
+          const attempts = getModuleAttemptCount(db, runId, info.moduleId);
+          createEvent(db, runId, "module-redecompose-needed", {
+            moduleId: info.moduleId,
+            attempts,
+            threshold: config.build.max_module_retries ?? 2,
+          });
+          throw new Error(
+            `Module "${info.moduleId}" needs redecomposition after ${attempts} failed attempts`,
+          );
+        }
+
+        // Under retry threshold — module will be re-picked up on next loop iteration
+        const attempts = getModuleAttemptCount(db, runId, info.moduleId);
+        log.info(`Retrying module "${info.moduleId}" (attempt ${attempts}/${config.build.max_module_retries ?? 2})`);
+        createEvent(db, runId, "module-retry", {
+          moduleId: info.moduleId,
+          attempt: attempts,
+          maxRetries: config.build.max_module_retries ?? 2,
+        });
+        continue;
       }
 
       const runtimeStatus = await runtime.status(agentId);
@@ -747,7 +823,28 @@ export async function executeResumeBuildPhase(
           log.info(`Preserving worktree for ${info.moduleId}: ${info.worktreePath}`);
         }
 
-        throw new Error(`Builder crashed for module "${info.moduleId}": process exited without completing`);
+        // Per-module retry: check if retries exhausted → redecomposition
+        if (shouldRedecompose(db, config, runId, info.moduleId)) {
+          const attempts = getModuleAttemptCount(db, runId, info.moduleId);
+          createEvent(db, runId, "module-redecompose-needed", {
+            moduleId: info.moduleId,
+            attempts,
+            threshold: config.build.max_module_retries ?? 2,
+          });
+          throw new Error(
+            `Module "${info.moduleId}" needs redecomposition after ${attempts} failed attempts`,
+          );
+        }
+
+        // Under retry threshold — module will be re-picked up on next loop iteration
+        const attempts = getModuleAttemptCount(db, runId, info.moduleId);
+        log.info(`Retrying module "${info.moduleId}" (attempt ${attempts}/${config.build.max_module_retries ?? 2})`);
+        createEvent(db, runId, "module-retry", {
+          moduleId: info.moduleId,
+          attempt: attempts,
+          maxRetries: config.build.max_module_retries ?? 2,
+        });
+        continue;
       }
     }
 
