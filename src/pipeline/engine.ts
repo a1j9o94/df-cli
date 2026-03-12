@@ -26,6 +26,9 @@ import { executeBuildPhase, executeResumeBuildPhase } from "./build-phase.js";
 import { executeMergePhase } from "./merge-phase.js";
 import { preBuildValidation, updateSpecStatusChecked, computeContentHash } from "./build-guards.js";
 
+/** Phases whose failures trigger retry-from-build (respecting max_iterations). */
+const RETRYABLE_PHASES: ReadonlySet<string> = new Set(["build", "integrate"]);
+
 export class PipelineEngine {
   constructor(
     private db: SqliteDb,
@@ -89,8 +92,10 @@ export class PipelineEngine {
     };
 
     try {
-      // Walk through phases
-      for (const phaseName of PHASE_ORDER) {
+      // Walk through phases (use index so we can jump back on retry)
+      const buildIdx = PHASE_ORDER.indexOf("build");
+      for (let i = 0; i < PHASE_ORDER.length; i++) {
+        const phaseName = PHASE_ORDER[i];
         if (shouldSkipPhase(phaseName, context)) {
           log.info(`Skipping phase: ${phaseName}`);
           continue;
@@ -100,7 +105,22 @@ export class PipelineEngine {
         createEvent(this.db, run.id, "phase-started", { phase: phaseName });
         log.info(`Phase: ${phaseName}`);
 
-        await this.executePhase(run.id, phaseName, context);
+        if (RETRYABLE_PHASES.has(phaseName)) {
+          try {
+            await this.executePhase(run.id, phaseName, context);
+          } catch (phaseErr) {
+            const phaseError = phaseErr instanceof Error ? phaseErr.message : String(phaseErr);
+            const retrying = await this.handlePhaseFailure(run.id, phaseName, phaseError);
+            if (retrying) {
+              i = buildIdx - 1; // loop will increment to buildIdx
+              continue;
+            }
+            // Max iterations reached — handlePhaseFailure already marked run failed
+            return run.id;
+          }
+        } else {
+          await this.executePhase(run.id, phaseName, context);
+        }
 
         createEvent(this.db, run.id, "phase-completed", { phase: phaseName });
 
@@ -262,6 +282,8 @@ export class PipelineEngine {
       throw new Error(`Invalid resume phase: ${resumePhase}`);
     }
 
+    const buildIdx = PHASE_ORDER.indexOf("build");
+
     try {
       // Walk through phases starting from resume point
       for (let i = startIdx; i < PHASE_ORDER.length; i++) {
@@ -276,9 +298,22 @@ export class PipelineEngine {
         createEvent(this.db, runId, "phase-started", { phase: phaseName });
         log.info(`Phase: ${phaseName}`);
 
-        if (phaseName === "build" && previouslyCompletedModules.size > 0) {
-          // Use the resume-aware build phase that skips completed modules
-          await executeResumeBuildPhase(this.db, this.runtime, this.config, runId, previouslyCompletedModules);
+        if (RETRYABLE_PHASES.has(phaseName)) {
+          try {
+            if (phaseName === "build" && previouslyCompletedModules.size > 0) {
+              await executeResumeBuildPhase(this.db, this.runtime, this.config, runId, previouslyCompletedModules);
+            } else {
+              await this.executePhase(runId, phaseName, context);
+            }
+          } catch (phaseErr) {
+            const phaseError = phaseErr instanceof Error ? phaseErr.message : String(phaseErr);
+            const retrying = await this.handlePhaseFailure(runId, phaseName, phaseError);
+            if (retrying) {
+              i = buildIdx - 1; // loop will increment to buildIdx
+              continue;
+            }
+            return runId;
+          }
         } else {
           await this.executePhase(runId, phaseName, context);
         }
@@ -445,7 +480,7 @@ export class PipelineEngine {
     createEvent(this.db, runId, "phase-started", { phase: next });
   }
 
-  async handlePhaseFailure(runId: string, phase: string, error: string): Promise<void> {
+  async handlePhaseFailure(runId: string, phase: string, error: string): Promise<boolean> {
     const run = getRun(this.db, runId);
     if (!run) throw new Error(`Run not found: ${runId}`);
 
@@ -456,9 +491,11 @@ export class PipelineEngine {
       updateRunPhase(this.db, runId, "build");
       createEvent(this.db, runId, "phase-started", { phase: "build", iteration: run.iteration + 1 });
       log.info(`Iteration ${run.iteration + 1}: retrying from build phase`);
+      return true;
     } else {
       updateRunStatus(this.db, runId, "failed", `Max iterations reached. Last error: ${error}`);
       createEvent(this.db, runId, "run-failed", { error, iterations: run.iteration });
+      return false;
     }
   }
 
