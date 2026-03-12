@@ -84,6 +84,15 @@ export function getLatestAgentPerModule(db: SqliteDb, runId: string): AgentRecor
   return db.prepare(sql).all(runId, runId) as AgentRecord[];
 }
 
+/**
+ * Get the ID of the most recently created run.
+ * Returns null if no runs exist.
+ */
+export function getMostRecentRunId(db: SqliteDb): string | null {
+  const row = db.prepare("SELECT id FROM runs ORDER BY rowid DESC LIMIT 1").get() as { id: string } | null;
+  return row?.id ?? null;
+}
+
 function toMessageRecord(row: Record<string, unknown>): MessageRecord {
   return { ...row, read: row.read === 1 } as unknown as MessageRecord;
 }

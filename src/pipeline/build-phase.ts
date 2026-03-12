@@ -18,6 +18,7 @@ import { getRun } from "../db/queries/runs.js";
 import { createAgent, getAgent, updateAgentStatus, getStaleAgents } from "../db/queries/agents.js";
 import { getActiveBuildplan } from "../db/queries/buildplans.js";
 import { createEvent } from "../db/queries/events.js";
+import { ensureResource, acquireResource, releaseResource } from "../db/queries/resources.js";
 import { createMessage } from "../db/queries/messages.js";
 import { listContracts, createBinding, createDependency, satisfyDependency } from "../db/queries/contracts.js";
 import { updateAgentPid } from "../db/queries/agents.js";
@@ -172,6 +173,11 @@ export async function executeBuildPhase(
   if (!bp) {
     // No buildplan — spawn a single builder
     log.info("No buildplan found, spawning single builder");
+    ensureResource(db, "api_slots", config.resources.max_api_slots);
+    while (!acquireResource(db, "api_slots")) {
+      log.info("Waiting for API slot to become available...");
+      await sleep(pollMs);
+    }
     const agent = createAgent(db, {
       agent_id: "",
       run_id: runId,
@@ -200,17 +206,22 @@ export async function executeBuildPhase(
 
     updateAgentPid(db, agent.id, handle.pid);
     await waitForAgent(db, runtime, agent.id, handle.pid, pollMs);
+    releaseResource(db, "api_slots");
     return;
   }
 
   const plan: Buildplan = JSON.parse(bp.plan);
   const completedModules = new Set<string>();
-  const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null }>();
+  const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null; acquiredWorktree: boolean }>();
   const workspaceConfig = options?.workspaceConfig;
 
   // Resolve project root for worktree creation
   const dfDir = findDfDir();
   const projectRoot = dfDir ? dirname(dfDir) : process.cwd();
+
+  // Initialize resource tracking
+  ensureResource(db, "worktrees", config.resources.max_worktrees);
+  ensureResource(db, "api_slots", config.resources.max_api_slots);
 
   while (completedModules.size < plan.modules.length) {
     // Find modules ready to build
@@ -222,6 +233,18 @@ export async function executeBuildPhase(
     const slotsAvailable = config.build.max_parallel - activeCount;
 
     for (const moduleId of ready.slice(0, slotsAvailable)) {
+      // Acquire resource slots before spawning
+      if (!acquireResource(db, "api_slots")) {
+        log.info("No API slots available, waiting for next cycle");
+        break;
+      }
+      if (!acquireResource(db, "worktrees")) {
+        releaseResource(db, "api_slots");
+        log.info("No worktree slots available, waiting for next cycle");
+        break;
+      }
+      let acquiredWorktree = true;
+
       const mod = plan.modules.find((m) => m.id === moduleId)!;
 
       // Create worktree — workspace-aware if module has targetProject
@@ -239,6 +262,8 @@ export async function executeBuildPhase(
         } catch (err) {
           log.warn(`Failed to create workspace worktree for ${moduleId}, falling back to project root: ${err}`);
           worktreePath = projectRoot;
+          releaseResource(db, "worktrees");
+          acquiredWorktree = false;
         }
       } else {
         // Standard: create worktree from the current repo
@@ -252,6 +277,8 @@ export async function executeBuildPhase(
         } catch (err) {
           log.warn(`Failed to create worktree for ${moduleId}, using project root: ${err}`);
           worktreePath = projectRoot;
+          releaseResource(db, "worktrees");
+          acquiredWorktree = false;
         }
       }
 
@@ -320,7 +347,7 @@ export async function executeBuildPhase(
       });
 
       updateAgentPid(db, agent.id, handle.pid);
-      activeBuilders.set(agent.id, { moduleId, worktreePath });
+      activeBuilders.set(agent.id, { moduleId, worktreePath, acquiredWorktree });
       console.log(`[dark] Builder "${moduleId}" spawned (PID ${handle.pid})`);
     }
 
@@ -334,6 +361,8 @@ export async function executeBuildPhase(
       if (agentRecord.status === "completed") {
         completedModules.add(info.moduleId);
         activeBuilders.delete(agentId);
+        releaseResource(db, "api_slots");
+        if (info.acquiredWorktree) releaseResource(db, "worktrees");
         createEvent(db, runId, "agent-completed", { moduleId: info.moduleId }, agentId);
         // Cost tracking is now handled at the command layer (estimateAndRecordCost)
         // No engine-side estimation needed — every agent command records cost automatically
@@ -351,6 +380,8 @@ export async function executeBuildPhase(
 
       if (agentRecord.status === "failed") {
         activeBuilders.delete(agentId);
+        releaseResource(db, "api_slots");
+        if (info.acquiredWorktree) releaseResource(db, "worktrees");
         createEvent(db, runId, "agent-failed", {
           moduleId: info.moduleId,
           error: agentRecord.error,
@@ -372,6 +403,8 @@ export async function executeBuildPhase(
       if (runtimeStatus === "stopped" || runtimeStatus === "unknown") {
         updateAgentStatus(db, agentId, "failed", "Process exited without completing");
         activeBuilders.delete(agentId);
+        releaseResource(db, "api_slots");
+        if (info.acquiredWorktree) releaseResource(db, "worktrees");
         createEvent(db, runId, "agent-failed", {
           moduleId: info.moduleId,
           error: "Process exited without completing",
@@ -424,6 +457,11 @@ export async function executeResumeBuildPhase(
   if (!bp) {
     // No buildplan — fall through to normal single-builder
     log.info("No buildplan found, spawning single builder (resume)");
+    ensureResource(db, "api_slots", config.resources.max_api_slots);
+    while (!acquireResource(db, "api_slots")) {
+      log.info("Waiting for API slot to become available...");
+      await sleep(pollMs);
+    }
     const agent = createAgent(db, {
       agent_id: "",
       run_id: runId,
@@ -451,13 +489,14 @@ export async function executeResumeBuildPhase(
 
     updateAgentPid(db, agent.id, handle.pid);
     await waitForAgent(db, runtime, agent.id, handle.pid, pollMs);
+    releaseResource(db, "api_slots");
     return;
   }
 
   const plan: Buildplan = JSON.parse(bp.plan);
   // Start with previously completed modules pre-populated
   const completedModules = new Set<string>(previouslyCompletedModules);
-  const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null }>();
+  const activeBuilders = new Map<string, { moduleId: string; worktreePath: string | null; acquiredWorktree: boolean }>();
   const workspaceConfig = options?.workspaceConfig;
 
   log.info(`Resuming build: ${completedModules.size} modules already completed, ${plan.modules.length - completedModules.size} remaining`);
@@ -465,6 +504,10 @@ export async function executeResumeBuildPhase(
   // Resolve project root for worktree creation
   const dfDir = findDfDir();
   const projectRoot = dfDir ? dirname(dfDir) : process.cwd();
+
+  // Initialize resource tracking
+  ensureResource(db, "worktrees", config.resources.max_worktrees);
+  ensureResource(db, "api_slots", config.resources.max_api_slots);
 
   while (completedModules.size < plan.modules.length) {
     // Find modules ready to build (excluding already-completed and active)
@@ -476,6 +519,18 @@ export async function executeResumeBuildPhase(
     const slotsAvailable = config.build.max_parallel - activeCount;
 
     for (const moduleId of ready.slice(0, slotsAvailable)) {
+      // Acquire resource slots before spawning
+      if (!acquireResource(db, "api_slots")) {
+        log.info("No API slots available, waiting for next cycle");
+        break;
+      }
+      if (!acquireResource(db, "worktrees")) {
+        releaseResource(db, "api_slots");
+        log.info("No worktree slots available, waiting for next cycle");
+        break;
+      }
+      let acquiredWorktree = true;
+
       const mod = plan.modules.find((m) => m.id === moduleId)!;
 
       // Try to reuse worktree from a previous failed builder for this module
@@ -503,6 +558,8 @@ export async function executeResumeBuildPhase(
         } catch (err) {
           log.warn(`Failed to create workspace worktree for ${moduleId}, falling back to project root: ${err}`);
           worktreePath = projectRoot;
+          releaseResource(db, "worktrees");
+          acquiredWorktree = false;
         }
       } else {
         // Create a fresh worktree
@@ -518,6 +575,8 @@ export async function executeResumeBuildPhase(
         } catch (err) {
           log.warn(`Failed to create worktree for ${moduleId}, using project root: ${err}`);
           worktreePath = projectRoot;
+          releaseResource(db, "worktrees");
+          acquiredWorktree = false;
         }
       }
 
@@ -583,7 +642,7 @@ export async function executeResumeBuildPhase(
       });
 
       updateAgentPid(db, agent.id, handle.pid);
-      activeBuilders.set(agent.id, { moduleId, worktreePath });
+      activeBuilders.set(agent.id, { moduleId, worktreePath, acquiredWorktree });
       console.log(`[dark] Builder "${moduleId}" spawned (PID ${handle.pid})`);
     }
 
@@ -597,6 +656,8 @@ export async function executeResumeBuildPhase(
       if (agentRecord.status === "completed") {
         completedModules.add(info.moduleId);
         activeBuilders.delete(agentId);
+        releaseResource(db, "api_slots");
+        if (info.acquiredWorktree) releaseResource(db, "worktrees");
         createEvent(db, runId, "agent-completed", { moduleId: info.moduleId }, agentId);
         log.info(`Builder completed: ${info.moduleId}`);
 
@@ -611,6 +672,8 @@ export async function executeResumeBuildPhase(
 
       if (agentRecord.status === "failed") {
         activeBuilders.delete(agentId);
+        releaseResource(db, "api_slots");
+        if (info.acquiredWorktree) releaseResource(db, "worktrees");
         createEvent(db, runId, "agent-failed", {
           moduleId: info.moduleId,
           error: agentRecord.error,
@@ -629,6 +692,8 @@ export async function executeResumeBuildPhase(
       if (runtimeStatus === "stopped" || runtimeStatus === "unknown") {
         updateAgentStatus(db, agentId, "failed", "Process exited without completing");
         activeBuilders.delete(agentId);
+        releaseResource(db, "api_slots");
+        if (info.acquiredWorktree) releaseResource(db, "worktrees");
         createEvent(db, runId, "agent-failed", {
           moduleId: info.moduleId,
           error: "Process exited without completing",

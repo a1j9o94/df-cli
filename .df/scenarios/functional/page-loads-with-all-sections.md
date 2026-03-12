@@ -1,8 +1,8 @@
 ---
 name: page-loads-with-all-sections
 type: functional
-spec_id: run_01KK7R4Y51M8MH0WWAW1TXH2YX
-created_by: agt_01KK7R4Y52TA1JSRYDJ5N5VTJ2
+spec_id: run_01KKFJRNK1Y5XQRX2D5VYE1MV0
+created_by: agt_01KKFJRNK3CS7T3RATQ1A69NZZ
 ---
 
-Navigate to the landing page index.html (or equivalent entry point). Verify ALL of the following sections exist and contain meaningful content: (1) Hero section with text 'Dark Factory' and 'AI agents that build software' or similar tagline, plus a CTA link/button pointing to the GitHub repo (https://github.com/ URL). (2) How-it-works section showing the pipeline phases: scout, architect, build, evaluate, merge (at minimum these 5 words must appear). (3) Screenshots section with at least 2 img tags that reference image files. (4) Key features section mentioning: parallel builders, holdout scenarios, contract-driven decomposition, budget control. (5) CLI examples section showing at least dark build, dark status, dark dash commands. (6) Get started section with git clone, bun install, dark init commands. (7) Footer with GitHub link. Pass criteria: All 7 sections present with the specified content.
+Precondition: The site/ directory contains a valid index.html and styles.css. Steps: 1) Open site/index.html in a browser (or serve it via site/server.ts on localhost:3000). 2) Verify the page loads without JavaScript errors in the console. 3) Verify the following sections exist by their HTML id attributes: #hero, #how-it-works, #screenshots, #features, #cli, #get-started. 4) Verify the hero section contains the text 'Dark Factory' and 'AI agents that build software'. 5) Verify the how-it-works section has 8 phase cards (scout, architect, plan-review, build, integrate, evaluate, iterate, merge). 6) Verify the screenshots section contains exactly 4 screenshot cards with image references to pipeline-view, module-grid, agent-timeline, and roadmap. 7) Verify the get-started section shows git clone, bun install, and dark init commands. 8) Verify a footer exists with a GitHub link to https://github.com/a1j9o94/df-cli. Pass criteria: All 8 checks pass. Fail criteria: Any section is missing, empty, or contains only placeholder text without meaningful content.

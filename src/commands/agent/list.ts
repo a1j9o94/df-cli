@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { join } from "node:path";
 import { findDfDir } from "../../utils/config.js";
 import { getDb } from "../../db/index.js";
-import { listAgentsFiltered } from "../../db/queries/agent-queries.js";
+import { listAgentsFiltered, getLatestAgentPerModule, getMostRecentRunId } from "../../db/queries/agent-queries.js";
 import { formatAgentListEntry } from "../../utils/format-agent-list.js";
 import { formatJson, AGENT_DEFAULT_EXCLUDED_FIELDS } from "../../utils/format.js";
 import { summarizeAgentCounts } from "../../utils/agent-enrichment.js";
@@ -34,12 +34,28 @@ export const agentListCommand = new Command("list")
 
     const db = getDb(join(dfDir, "state.db"));
 
-    let agents = listAgentsFiltered(db, {
-      runId: options.runId,
-      role: options.role,
-      active: options.active,
-      moduleId: options.module,
-    });
+    // Default behavior: when no --run-id is specified, auto-detect the most
+    // recent run and show latest agent per module (deduplicating retries).
+    // When --run-id is explicit, show all agents for that run.
+    const hasExplicitRunId = !!options.runId;
+    let runId = options.runId;
+    if (!runId) {
+      runId = getMostRecentRunId(db) ?? undefined;
+    }
+
+    let agents: ReturnType<typeof listAgentsFiltered>;
+
+    if (!hasExplicitRunId && runId && !options.active && !options.role && !options.module) {
+      // Default: latest agent per module from most recent run
+      agents = getLatestAgentPerModule(db, runId);
+    } else {
+      agents = listAgentsFiltered(db, {
+        runId,
+        role: options.role,
+        active: options.active,
+        moduleId: options.module,
+      });
+    }
 
     // If --active is set, additionally filter by live PID
     if (options.active) {

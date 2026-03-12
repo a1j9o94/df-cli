@@ -1,27 +1,28 @@
 ---
 name: agent-list-elapsed-and-cost
 type: functional
-spec_id: run_01KJSXZQ1WDY0A0JVRTZPNB3AW
-created_by: agt_01KJSXZQ1X0E7M9WZA7R77WKY6
+spec_id: run_01KKFJP2B248H395WES5SRNHWM
+created_by: agt_01KKFJP2B477G0FJ56QPN8P0HA
 ---
 
-SCENARIO: Agent list shows elapsed time and estimated cost for running agents.
+Test that dark agent list shows elapsed time and estimated cost for running agents.
 
-PRECONDITIONS:
-- A run exists with at least one agent in 'running' status that was created >30 seconds ago.
-- At least one agent has cost_usd > 0.
+SETUP:
+1. Create an in-memory test DB using getDbForTest()
+2. Create a run: createRun(db, { spec_id: 'spec_test' })
+3. Create a running builder agent with known created_at ~12m 34s ago (Date.now() - 754000):
+   createAgent(db, { agent_id: '', run_id: runId, role: 'builder', name: 'builder-foo', module_id: 'foo', worktree_path: '/tmp/foo', system_prompt: 'p' })
+4. Set agent cost: updateAgentCost(db, agent.id, 0.62, 5000)
+5. Set agent PID: updateAgentPid(db, agent.id, 12345)
 
-STEPS:
-1. Run: dark agent list --run-id <run_id>
-2. Capture the text output.
-
-EXPECTED OUTPUT:
-- Each running agent line contains an elapsed time in format like '12m 34s' or '5s' (matches pattern /\d+[hms]/).
-- Each agent with cost_usd > 0 shows cost prefixed with '~$' (matches pattern /~?\$\d+\.\d{2}/).
-- The elapsed time for a running agent is greater than 0s.
-- Completed agents show their final elapsed time (from total_active_ms) rather than live-computed.
+VERIFICATION:
+- Call formatAgentListEntry(agent) from src/utils/format-agent-list.ts
+- Output MUST contain '12m 34s' (elapsed time in human-readable format)
+- Output MUST contain '$0.62' (estimated cost with dollar sign)
+- Output MUST contain 'running' (agent status)
+- Both values must appear on the FIRST line of output (the main info line)
 
 PASS CRITERIA:
-- Running agent output matches: /<agent_id>\s+\S+\s+\(\w+\)\s+running\s+\d+[hms].*~?\$\d+\.\d{2}/
-- No running agent shows '0s' elapsed.
-- Elapsed is shown BEFORE cost on the same line.
+- Elapsed time appears in 'Xm Ys' format for a running agent
+- Cost appears as '~$X.XX' format
+- For a completed agent with total_active_ms=300000, elapsed shows '5m 0s' (uses total_active_ms, not created_at)
