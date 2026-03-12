@@ -15,7 +15,7 @@ import type { SqliteDb } from "../db/index.js";
 import type { DfConfig, Buildplan } from "../types/index.js";
 import type { AgentRuntime } from "../runtime/interface.js";
 import { getRun } from "../db/queries/runs.js";
-import { createAgent, getAgent, updateAgentStatus, getStaleAgents } from "../db/queries/agents.js";
+import { createAgent, getAgent, updateAgentStatus, getStaleAgents, getOverdueAgents } from "../db/queries/agents.js";
 import { getActiveBuildplan } from "../db/queries/buildplans.js";
 import { createEvent } from "../db/queries/events.js";
 import { ensureResource, acquireResource, releaseResource } from "../db/queries/resources.js";
@@ -469,6 +469,23 @@ export async function executeBuildPhase(
       throw new Error(`Builder killed for module "${info.moduleId}": agent stopped heartbeating`);
     }
 
+    // Kill agents that exceed max_agent_lifetime_ms
+    const overdue = getOverdueAgents(db, config.runtime.max_agent_lifetime_ms);
+    for (const agent of overdue) {
+      if (activeBuilders.has(agent.id)) {
+        const info = activeBuilders.get(agent.id)!;
+        log.error(`Builder ${agent.name} exceeded max lifetime (${config.runtime.max_agent_lifetime_ms}ms), killing`);
+        await runtime.kill(agent.id);
+        updateAgentStatus(db, agent.id, "failed", `Exceeded max agent lifetime (${config.runtime.max_agent_lifetime_ms}ms)`);
+        activeBuilders.delete(agent.id);
+        createEvent(db, runId, "agent-failed", {
+          moduleId: info.moduleId,
+          error: `Exceeded max agent lifetime (${config.runtime.max_agent_lifetime_ms}ms)`,
+        }, agent.id);
+        throw new Error(`Builder for module "${info.moduleId}" exceeded max agent lifetime (${config.runtime.max_agent_lifetime_ms}ms)`);
+      }
+    }
+
     // Budget check
     const budgetStatus = checkBudget(db, runId);
     if (budgetStatus.overBudget) {
@@ -796,6 +813,23 @@ export async function executeResumeBuildPhase(
       }
 
       throw new Error(`Builder killed for module "${info.moduleId}": agent stopped heartbeating`);
+    }
+
+    // Kill agents that exceed max_agent_lifetime_ms
+    const overdue = getOverdueAgents(db, config.runtime.max_agent_lifetime_ms);
+    for (const agent of overdue) {
+      if (activeBuilders.has(agent.id)) {
+        const info = activeBuilders.get(agent.id)!;
+        log.error(`Builder ${agent.name} exceeded max lifetime (${config.runtime.max_agent_lifetime_ms}ms), killing`);
+        await runtime.kill(agent.id);
+        updateAgentStatus(db, agent.id, "failed", `Exceeded max agent lifetime (${config.runtime.max_agent_lifetime_ms}ms)`);
+        activeBuilders.delete(agent.id);
+        createEvent(db, runId, "agent-failed", {
+          moduleId: info.moduleId,
+          error: `Exceeded max agent lifetime (${config.runtime.max_agent_lifetime_ms}ms)`,
+        }, agent.id);
+        throw new Error(`Builder for module "${info.moduleId}" exceeded max agent lifetime (${config.runtime.max_agent_lifetime_ms}ms)`);
+      }
     }
 
     // Budget check
