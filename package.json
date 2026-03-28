@@ -4,11 +4,11 @@
   "description": "Dark Factory CLI — AI agent orchestration pipeline",
   "type": "module",
   "bin": {
-    "dark": "./dist/index.js"
+    "dark": "./dist/dark"
   },
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target node",
+    "build": "bun build --compile src/index.ts --outfile dist/dark",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
